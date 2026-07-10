@@ -1,0 +1,17 @@
+{
+  "name": "Season Travels Flight Management System",
+  "short_name": "ST Flights",
+  "description": "Premium regional flight scheduling, DST-aware timezone converter and departures manager.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#030712",
+  "theme_color": "#1e40af",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

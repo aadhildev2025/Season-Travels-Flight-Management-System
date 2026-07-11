@@ -169,3 +169,24 @@ textarea:focus {
   animation: blink-ring 1.3s ease-out infinite;
   transition: none !important;
 }
+
+/* ── Mobile Utilities ── */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Prevent text selection on interactive mobile elements */
+@media (max-width: 768px) {
+  button, [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Smoother scroll for mobile lists */
+  .overflow-y-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+}

@@ -112,7 +112,7 @@ export default function StaffSettings() {
      ${err ? 'border-error ring-1 ring-error/30' : 'border-[var(--input-border)] focus:border-accent focus:ring-1 focus:ring-accent/30'}`;
 
   return (
-    <div className="flex flex-col gap-6 pb-24 md:pb-6">
+    <div className="flex flex-col gap-5 md:gap-6 pb-24 md:pb-6">
 
       {/* ── Page header ── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -234,7 +234,9 @@ export default function StaffSettings() {
 
           {/* Staff table */}
           <div className="glass rounded-2xl overflow-hidden border border-[var(--card-border)] shadow-sm">
-            <div className="overflow-x-auto">
+            
+            {/* DESKTOP TABLE */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
                   <tr className="border-b border-[var(--card-border)] text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider">
@@ -298,6 +300,58 @@ export default function StaffSettings() {
                 </tbody>
               </table>
             </div>
+
+            {/* MOBILE CARD VIEW */}
+            <div className="md:hidden flex flex-col divide-y divide-[var(--card-border)]">
+              {users.map(user => (
+                <div key={user.id} className="p-4 flex flex-col gap-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div className="w-8 h-8 rounded-full bg-gradient-premium text-white flex items-center justify-center font-bold text-xs uppercase shadow-sm flex-shrink-0">
+                        {user.name.charAt(0)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-semibold text-xs text-[var(--foreground)] truncate">{user.name}</span>
+                          {user.id === currentUser?.id && (
+                            <span className="text-[9px] px-1.5 py-0.5 bg-accent/10 text-accent rounded font-bold border border-accent/20 flex-shrink-0">You</span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-[var(--muted)] flex items-center gap-1 mt-0.5">
+                          <Mail className="w-2.5 h-2.5 flex-shrink-0" />
+                          <span className="truncate">{user.email}</span>
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <button onClick={() => handleEditSelect(user)}
+                        className="p-2 rounded-lg bg-[var(--surface)] hover:bg-[var(--surface-hover)] text-[var(--muted)] hover:text-[var(--foreground)] transition-colors" title="Edit">
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => handleDelete(user.id)} disabled={user.id === currentUser?.id}
+                        className={`p-2 rounded-lg bg-[var(--surface)] hover:bg-rose-50 dark:hover:bg-rose-950/20 text-[var(--muted)] hover:text-rose-600 transition-colors ${user.id === currentUser?.id ? 'opacity-30 cursor-not-allowed' : ''}`} title="Delete">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 text-[10px]">
+                    <span className="flex items-center gap-1 text-[var(--muted)]">
+                      <Globe className="w-3 h-3 text-accent flex-shrink-0" />
+                      {user.timezone.split('/')[1]}
+                    </span>
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border ${
+                      user.role === 'Admin'
+                        ? 'bg-primary/10 text-primary border-primary/20 dark:bg-accent/15 dark:text-accent dark:border-accent/30'
+                        : 'bg-[var(--surface)] text-[var(--muted)] border-[var(--card-border)]'
+                    }`}>
+                      {user.role === 'Admin' && <ShieldCheck className="w-2.5 h-2.5" />}
+                      {user.role}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
           </div>
 
 

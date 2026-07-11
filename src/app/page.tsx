@@ -113,7 +113,7 @@ export default function Home() {
         />
 
         {/* Dynamic page sub-views container */}
-        <main className="flex-1 overflow-y-auto px-4 py-6 md:px-8 max-w-7xl w-full mx-auto">
+        <main className="flex-1 overflow-y-auto px-3 py-4 md:px-8 md:py-6 max-w-7xl w-full mx-auto">
           {renderContent()}
         </main>
       </div>

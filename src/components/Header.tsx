@@ -83,7 +83,7 @@ export default function Header({ viewTimezone, setViewTimezone }: HeaderProps) {
 
   return (
     <header
-      className="sticky top-0 z-40 w-full glass border-b border-[var(--card-border)] px-4 py-3 flex items-center justify-between shadow-sm"
+      className="sticky top-0 z-40 w-full glass border-b border-[var(--card-border)] px-3 py-2.5 md:px-4 md:py-3 flex items-center justify-between shadow-sm"
       onClick={(e) => e.stopPropagation()}
     >
       {/* ── Left: brand / role label ── */}
@@ -106,11 +106,11 @@ export default function Header({ viewTimezone, setViewTimezone }: HeaderProps) {
       <div className="flex items-center gap-2 md:gap-3">
 
         {/* Timezone selector */}
-        <div className="flex items-center bg-[var(--surface)] border border-[var(--card-border)] rounded-lg px-2.5 py-1.5">
+        <div className="flex items-center bg-[var(--surface)] border border-[var(--card-border)] rounded-lg px-2 py-1.5 md:px-2.5">
           <select
             value={viewTimezone}
             onChange={(e) => setViewTimezone(e.target.value)}
-            className="bg-transparent text-xs font-medium outline-none text-[var(--foreground)] cursor-pointer"
+            className="bg-transparent text-[11px] md:text-xs font-medium outline-none text-[var(--foreground)] cursor-pointer"
             title="Switch display timezone"
           >
             <option value="Asia/Colombo">Colombo</option>
@@ -122,7 +122,7 @@ export default function Header({ viewTimezone, setViewTimezone }: HeaderProps) {
         {/* Sign out */}
         <button
           onClick={() => setShowLogoutConfirm(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 dark:border-rose-500/30 text-xs font-bold transition-all active:scale-95"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 md:px-3 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 dark:border-rose-500/30 text-xs font-bold transition-all active:scale-95"
           title="Sign Out"
         >
           <LogOut className="w-3.5 h-3.5" />
@@ -146,7 +146,7 @@ export default function Header({ viewTimezone, setViewTimezone }: HeaderProps) {
           {showNotifications && (
             <div
               onClick={(e) => e.stopPropagation()}
-              className="absolute right-0 mt-2 w-80 bg-[var(--surface)] border border-[var(--card-border)] rounded-xl shadow-xl p-4 z-50"
+              className="absolute right-0 mt-2 w-72 md:w-80 bg-[var(--surface)] border border-[var(--card-border)] rounded-xl shadow-xl p-4 z-50"
             >
               <div className="flex items-center justify-between pb-2 border-b border-[var(--card-border)] mb-2">
                 <span className="text-xs font-semibold text-[var(--foreground)] uppercase tracking-wider">Notifications</span>

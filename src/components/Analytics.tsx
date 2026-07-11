@@ -19,10 +19,10 @@ export default function Analytics() {
   // 1. Calculations for KPI cards
   const totalTickets = tickets.length;
   
-  // Date comparisons based on system date: 2026-06-28
-  const sysDateStr = '2026-06-28';
-  const todayStart = new Date(`${sysDateStr}T00:00:00Z`);
-  const todayEnd = new Date(`${sysDateStr}T23:59:59Z`);
+  // Dynamic date based on actual system date
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
   const todayFlights = tickets.filter(t => {
     const dep = new Date(t.departure_time_utc);
@@ -72,20 +72,30 @@ export default function Analytics() {
     '#8b5cf6'  // Purple
   ];
 
-  // 4. Data for Departure Trends (Area/Line Chart)
-  // Let's plot departure count over a 7-day window (June 24 to June 30, 2026)
-  const trendDays = ['Wed 24', 'Thu 25', 'Fri 26', 'Sat 27', 'Sun 28', 'Mon 29', 'Tue 30'];
-  const trendCounts = [1, 2, 0, 1, 3, 2, 1]; // Mock points indicating departures activity
-  // Make sure it incorporates some real ticket dates if any fall in this window
+  // 4. Data for Departure Trends (Area/Line Chart) - Dynamic last 7 days
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const trendDays: string[] = [];
+  const trendDates: string[] = [];
+  const trendCounts: number[] = [];
+
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+    trendDays.push(`${dayNames[d.getDay()]} ${d.getDate()}`);
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    trendDates.push(dateStr);
+    trendCounts.push(0);
+  }
+
+  // Count actual ticket departures for each day in the window
   tickets.forEach(t => {
-    const dateStr = t.departure_time_utc.substring(0, 10); // YYYY-MM-DD
-    if (dateStr === '2026-06-25') trendCounts[1]++;
-    if (dateStr === '2026-06-27') trendCounts[3]++;
-    if (dateStr === '2026-06-28') trendCounts[4]++;
-    if (dateStr === '2026-06-29') trendCounts[5]++;
+    const dateStr = t.departure_time_utc.substring(0, 10);
+    const idx = trendDates.indexOf(dateStr);
+    if (idx !== -1) {
+      trendCounts[idx]++;
+    }
   });
 
-  const maxTrendCount = Math.max(...trendCounts, 4);
+  const maxTrendCount = Math.max(...trendCounts, 1);
 
   // SVG Area points generator helper
   const generateSvgAreaPoints = (data: number[], width: number, height: number) => {
@@ -103,7 +113,7 @@ export default function Analytics() {
   const trendClosedPoints = `0,150 ${trendPoints} 500,150`;
 
   return (
-    <div className="flex flex-col gap-6 pb-24 md:pb-6 animate-in fade-in duration-200">
+    <div className="flex flex-col gap-5 md:gap-6 pb-24 md:pb-6 animate-in fade-in duration-200">
       
       {/* Analytics Top */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
@@ -148,7 +158,7 @@ export default function Analytics() {
             <span className="text-2xl font-bold text-slate-900 dark:text-white font-mono leading-none mt-1">
               {todayFlights}
             </span>
-            <span className="text-[9px] text-slate-400 mt-1">Scheduled for Jun 28</span>
+            <span className="text-[9px] text-slate-400 mt-1">Scheduled for {dayNames[now.getDay()]} {now.getDate()}</span>
           </div>
           <div className="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center flex-shrink-0">
             <Plane className="w-5 h-5" />

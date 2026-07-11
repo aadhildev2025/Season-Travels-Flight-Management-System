@@ -49,7 +49,7 @@ export default function AuditLogs() {
   };
 
   return (
-    <div className="flex flex-col gap-6 pb-24 md:pb-6 animate-in fade-in duration-200">
+    <div className="flex flex-col gap-5 md:gap-6 pb-24 md:pb-6 animate-in fade-in duration-200">
       
       {/* Top Details */}
       <div className="flex flex-col gap-1">
@@ -91,6 +91,7 @@ export default function AuditLogs() {
           </select>
         </div>
 
+
       </div>
 
       {/* AUDIT LOG LISTING */}
@@ -101,7 +102,9 @@ export default function AuditLogs() {
         </div>
       ) : (
         <div className="glass rounded-2xl overflow-hidden shadow-sm border border-[var(--card-border)]">
-          <div className="overflow-x-auto">
+          
+          {/* DESKTOP TABLE */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50/50 dark:bg-slate-900/30 border-b border-[var(--card-border)] text-[10px] font-bold text-slate-400 uppercase tracking-wider">
@@ -140,6 +143,38 @@ export default function AuditLogs() {
               </tbody>
             </table>
           </div>
+
+          {/* MOBILE CARD VIEW */}
+          <div className="md:hidden flex flex-col divide-y divide-[var(--card-border)]">
+            {filteredLogs.map(log => (
+              <div key={log.id} className="p-4 flex flex-col gap-2">
+                <div className="flex items-start justify-between gap-2">
+                  <span className={`px-2 py-0.5 rounded text-[9px] border font-bold flex-shrink-0 ${getActionBadge(log.action)}`}>
+                    {log.action}
+                  </span>
+                  <span className="font-mono text-[9px] text-slate-400">
+                    {new Date(log.created_at).toLocaleDateString()} {new Date(log.created_at).toLocaleTimeString()}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 rounded-full bg-gradient-premium text-white flex items-center justify-center text-[8px] font-bold flex-shrink-0">
+                    {log.user_name.charAt(0)}
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-xs font-semibold text-slate-900 dark:text-slate-200 block truncate">{log.user_name}</span>
+                    <span className="text-[9px] text-slate-400 font-bold uppercase">{log.user_role}</span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                  {log.details}
+                </p>
+                <span className="font-mono text-[9px] text-slate-400">
+                  IP: {log.ip_address}
+                </span>
+              </div>
+            ))}
+          </div>
+
         </div>
       )}
 

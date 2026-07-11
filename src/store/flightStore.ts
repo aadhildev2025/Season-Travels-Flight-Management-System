@@ -125,6 +125,7 @@ interface FlightState {
   
   // Log Actions
   addAuditLog: (action: string, details: string) => void;
+  clearAuditLogs: () => void;
 }
 
 // Initial Mock Users
@@ -383,6 +384,24 @@ export const useFlightStore = create<FlightState>()(
         set((state) => ({
           auditLogs: [newLog, ...state.auditLogs].slice(0, 150) // Limit log buffer
         }));
+      },
+
+      clearAuditLogs: () => {
+        const user = get().currentUser;
+        set({ auditLogs: [] });
+        // Log the clear action itself after clearing
+        const id = `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        const clearLog: AuditLog = {
+          id,
+          action: 'Logs Cleared',
+          user_id: user ? user.id : 'system',
+          user_name: user ? user.name : 'System',
+          user_role: user ? user.role : 'Admin',
+          created_at: new Date().toISOString(),
+          ip_address: '192.168.' + Math.floor(Math.random() * 255) + '.' + Math.floor(Math.random() * 255),
+          details: `All audit logs cleared by ${user?.name || 'System'}`
+        };
+        set({ auditLogs: [clearLog] });
       }
     }),
     {

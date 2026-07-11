@@ -299,7 +299,7 @@ export default function FlightWizard({ editingTicketId, setEditingTicketId, setA
   const calculatedStockholm = utcToLocalTime(calculatedDepUtc, 'Europe/Stockholm');
 
   return (
-    <div className="max-w-3xl mx-auto flex flex-col gap-6 pb-24 md:pb-6 animate-in fade-in duration-200">
+    <div className="max-w-3xl mx-auto flex flex-col gap-5 md:gap-6 pb-24 md:pb-6 px-1 md:px-0 animate-in fade-in duration-200">
       
       {/* Wizard Header */}
       <div className="flex flex-col gap-2">
@@ -344,7 +344,7 @@ export default function FlightWizard({ editingTicketId, setEditingTicketId, setA
       </div>
 
       {/* WIZARD CONTAINER */}
-      <div className="glass rounded-3xl p-6 md:p-8 flex flex-col gap-6 shadow-md border border-[var(--card-border)] min-h-[400px]">
+      <div className="glass rounded-3xl p-4 md:p-8 flex flex-col gap-5 md:gap-6 shadow-md border border-[var(--card-border)] min-h-[350px] md:min-h-[400px]">
         
         {/* STEP 1: PASSENGER INFORMATION */}
         {step === 1 && (
@@ -856,31 +856,31 @@ export default function FlightWizard({ editingTicketId, setEditingTicketId, setA
       </div>
 
       {/* FOOTER ACTIONS */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col-reverse md:flex-row items-stretch md:items-center justify-between gap-3">
         {step > 1 ? (
           <button 
             onClick={handleBack}
-            className="flex items-center gap-2 bg-slate-150 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 px-4 py-2.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-350 transition-colors"
+            className="flex items-center justify-center gap-2 bg-slate-150 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 px-4 py-2.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-350 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             Back
           </button>
         ) : (
-          <div className="w-10"></div>
+          <div className="hidden md:block w-10"></div>
         )}
 
-        <div className="flex gap-2">
+        <div className="flex items-center justify-between md:justify-end gap-2">
           <button 
             onClick={() => setShowExitConfirm(true)}
             className="px-4 py-2.5 text-xs font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
           >
-            Cancel & Exit
+            Cancel
           </button>
           
           {step < 5 ? (
             <button 
               onClick={handleNext}
-              className="flex items-center gap-2 bg-gradient-premium hover:opacity-95 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-md shadow-primary/10 transition-all"
+              className="flex items-center justify-center gap-2 bg-gradient-premium hover:opacity-95 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-md shadow-primary/10 transition-all flex-1 md:flex-none"
             >
               Next Step
               <ArrowRight className="w-4 h-4" />
@@ -888,7 +888,7 @@ export default function FlightWizard({ editingTicketId, setEditingTicketId, setA
           ) : (
             <button 
               onClick={handleSubmit}
-              className="flex items-center gap-2 bg-success hover:opacity-95 text-white px-6 py-2.5 rounded-xl text-xs font-bold shadow-md shadow-success/15 transition-all"
+              className="flex items-center justify-center gap-2 bg-success hover:opacity-95 text-white px-5 md:px-6 py-2.5 rounded-xl text-xs font-bold shadow-md shadow-success/15 transition-all flex-1 md:flex-none"
             >
               <Check className="w-4 h-4" />
               {editingTicketId ? 'Update Record' : 'Confirm & Save'}

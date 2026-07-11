@@ -35,7 +35,7 @@ export default function MobileNav({ activeTab, setActiveTab }: MobileNavProps) {
   };
 
   return (
-    <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-950/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 shadow-xl px-2 pt-2 pb-6 flex items-center justify-around">
+    <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[var(--sidebar-bg)]/95 backdrop-blur-xl border-t border-[var(--card-border)] shadow-[0_-4px_20px_-4px_rgba(0,0,0,0.4)] px-3 pt-2 pb-[env(safe-area-inset-bottom,8px)] flex items-center justify-around">
       
       {btn('dashboard', 'Dashboard', LayoutDashboard)}
       {btn('analytics', 'Analytics', BarChart3)}
@@ -43,14 +43,14 @@ export default function MobileNav({ activeTab, setActiveTab }: MobileNavProps) {
       {/* Centered ADD button */}
       <button
         onClick={() => setActiveTab('wizard')}
-        className="w-12 h-12 rounded-full bg-gradient-premium text-white flex items-center justify-center -translate-y-4 shadow-lg shadow-primary/30 border-4 border-white dark:border-slate-950 active:scale-95 transition-all"
+        className="w-11 h-11 rounded-full bg-gradient-premium text-white flex items-center justify-center -translate-y-3 shadow-lg shadow-primary/25 active:scale-95 transition-all"
         title="New Ticket"
       >
-        <Plus className="w-6 h-6" />
+        <Plus className="w-5 h-5" />
       </button>
 
       {/* Audit Logs (admin only, else spare slot) */}
-      {isAdmin ? btn('logs', 'Audit Logs', History) : <div className="w-12" />}
+      {isAdmin ? btn('logs', 'Logs', History) : <div className="w-11" />}
 
     </div>
   );

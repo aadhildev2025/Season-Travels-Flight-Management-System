@@ -3,7 +3,10 @@ import type { User, Ticket } from '../types';
 
 // In production (Vercel), VITE_API_URL points to the backend.
 // In development, it is empty so Vite's proxy forwards /api → localhost:5000.
-const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+// Automatically strips trailing slash and /api if accidentally included in Vercel settings.
+const API_BASE = (import.meta.env.VITE_API_URL || '')
+  .replace(/\/$/, '')
+  .replace(/\/api$/, '');
 
 export async function apiFetch(url: string, options?: RequestInit) {
   const res  = await fetch(`${API_BASE}${url}`, { ...options, headers: { 'Content-Type': 'application/json', ...options?.headers }, credentials: 'include' });

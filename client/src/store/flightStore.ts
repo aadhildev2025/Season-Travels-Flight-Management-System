@@ -1,9 +1,9 @@
 import { create } from 'zustand';
 import type { User, Ticket } from '../types';
 
-// In production (Vercel), VITE_API_URL points to the Railway backend.
+// In production (Vercel), VITE_API_URL points to the backend.
 // In development, it is empty so Vite's proxy forwards /api → localhost:5000.
-const API_BASE = import.meta.env.VITE_API_URL || '';
+const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
 export async function apiFetch(url: string, options?: RequestInit) {
   const res  = await fetch(`${API_BASE}${url}`, { ...options, headers: { 'Content-Type': 'application/json', ...options?.headers }, credentials: 'include' });

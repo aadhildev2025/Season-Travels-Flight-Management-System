@@ -35,11 +35,15 @@ app.use(cookieParser());
 // Connect to MongoDB on demand for serverless, or on startup for local dev
 let isConnected = false;
 app.use(async (_req, _res, next) => {
-  if (!isConnected && process.env.MONGODB_URI) {
-    await connectDB();
-    isConnected = true;
+  try {
+    if (!isConnected && process.env.MONGODB_URI) {
+      await connectDB();
+      isConnected = true;
+    }
+    next();
+  } catch (err) {
+    next(err);
   }
-  next();
 });
 
 app.use('/api/auth',       authRoutes);
@@ -48,6 +52,16 @@ app.use('/api/staff',      staffRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
+
+// Global JSON Error Handler with CORS headers support
+app.use((err, req, res, _next) => {
+  console.error('API Error:', err);
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal Server Error'
+  });
+});
 
 // For local running
 if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {

@@ -22,6 +22,16 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
+// Connect to MongoDB on demand for serverless, or on startup for local dev
+let isConnected = false;
+app.use(async (_req, _res, next) => {
+  if (!isConnected && process.env.MONGODB_URI) {
+    await connectDB();
+    isConnected = true;
+  }
+  next();
+});
+
 app.use('/api/auth',       authRoutes);
 app.use('/api/tickets',    ticketRoutes);
 app.use('/api/staff',      staffRoutes);
@@ -29,14 +39,13 @@ app.use('/api/audit-logs', auditLogRoutes);
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
-async function start() {
-  try {
-    await connectDB();
+// For local running
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+  connectDB().then(() => {
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-  } catch (err) {
+  }).catch(err => {
     console.error('Failed to start server:', err);
-    process.exit(1);
-  }
+  });
 }
 
-start();
+export default app;

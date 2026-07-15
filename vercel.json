@@ -4,11 +4,6 @@
   "outputDirectory": "client/dist",
   "installCommand": "npm install && cd server && npm install",
   "framework": null,
-  "functions": {
-    "api/index.js": {
-      "runtime": "@vercel/node@3"
-    }
-  },
   "routes": [
     {
       "src": "/api/(.*)",

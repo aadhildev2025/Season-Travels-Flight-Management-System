@@ -46,12 +46,17 @@ app.use(async (_req, _res, next) => {
   }
 });
 
-app.use('/api/auth',       authRoutes);
-app.use('/api/tickets',    ticketRoutes);
-app.use('/api/staff',      staffRoutes);
-app.use('/api/audit-logs', auditLogRoutes);
+// Group all routes under a single API router
+const apiRouter = express.Router();
+apiRouter.use('/auth',       authRoutes);
+apiRouter.use('/tickets',    ticketRoutes);
+apiRouter.use('/staff',      staffRoutes);
+apiRouter.use('/audit-logs', auditLogRoutes);
+apiRouter.get('/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
-app.get('/api/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
+// Mount the router under both /api (for local dev) and / (for Vercel serverless stripping)
+app.use('/api', apiRouter);
+app.use('/', apiRouter);
 
 // Global JSON Error Handler with CORS headers support
 app.use((err, req, res, _next) => {

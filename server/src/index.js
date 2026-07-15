@@ -11,12 +11,22 @@ import auditLogRoutes from './routes/auditLogs.js';
 const app  = express();
 const PORT = process.env.PORT || 5000;
 
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:3002',
+].filter(Boolean);
+
 app.use(cors({
-  origin: [
-    process.env.CLIENT_URL || 'http://localhost:3000',
-    'http://localhost:3001',
-    'http://localhost:3002',
-  ],
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    // Allow any Vercel domain or manually configured client URL
+    if (origin.endsWith('.vercel.app') || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
 }));
 app.use(express.json());

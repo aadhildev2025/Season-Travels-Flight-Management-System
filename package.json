@@ -12,6 +12,15 @@
     "build": "cd client && npm run build",
     "start": "cd server && npm start"
   },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.8.0"
+  },
   "devDependencies": {
     "concurrently": "^9.1.0"
   }

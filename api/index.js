@@ -51,5 +51,15 @@ app.use('/api/audit-logs', auditLogRoutes);
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
+// Global error handler — always send CORS headers so preflight never fails
+app.use((err, _req, res, _next) => {
+  console.error('API Error:', err);
+  res.header('Access-Control-Allow-Origin', _req.headers.origin || '*');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.status(err.status || 500).json({ error: err.message || 'Internal Server Error' });
+});
+
 // Export for Vercel Serverless
 export default app;

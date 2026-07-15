@@ -43,7 +43,7 @@ export default function Login() {
   }, [isLocalTime]);
 
   useEffect(() => {
-    fetch('/api/auth/quick-access')
+    fetch(`${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '').replace(/\/api$/, '')}/api/auth/quick-access`)
       .then(res => res.json())
       .then(data => {
         if (data.users) {

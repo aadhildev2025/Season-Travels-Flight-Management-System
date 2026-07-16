@@ -4,7 +4,7 @@ import { useFlightStore } from '../store/flightStore';
 import { utcToLocalTime, formatCETTime } from '../utils/timezone';
 import ConfirmDialog from './ConfirmDialog';
 import ClockSection from './ClockSection';
-import { Plane, Mail, MessageCircle, X } from 'lucide-react';
+import { Plane, Mail, MessageCircle, X, Search, Plus, RefreshCw, Download } from 'lucide-react';
 import type { Ticket } from '../types';
 import type { TZ } from '../App';
 
@@ -12,11 +12,15 @@ interface DashboardProps {
   onEdit: (ticket: Ticket) => void;
   tz:     TZ;
   search: string;
+  setSearch?: (s: string) => void;
   clockTime: string;
   clockDate: string;
+  onAddNew?: () => void;
+  onRefresh?: () => void;
+  onPDF?: () => void;
 }
 
-export default function Dashboard({ onEdit, tz, search, clockTime, clockDate }: DashboardProps) {
+export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, clockDate, onAddNew, onRefresh, onPDF }: DashboardProps) {
   const { tickets, currentUser, deleteTicket, updateTicket } = useFlightStore();
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [todayStr, setTodayStr]               = useState('');
@@ -93,12 +97,45 @@ export default function Dashboard({ onEdit, tz, search, clockTime, clockDate }: 
     <div className="fade-up" style={{ display:'flex', flexDirection:'column', gap:14 }}>
 
       {/* Count row & clock */}
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: 4 }}>
-        <span style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.08em' }}>
+      <div className="page-header" style={{ marginBottom: 4 }}>
+        <span style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.08em', display:'inline-block', alignSelf:'center' }}>
           {filtered.length} Departure{filtered.length !== 1 ? 's' : ''}
           {search && <span style={{ marginLeft:8, color:'var(--text3)', fontWeight:500 }}>· filtered</span>}
         </span>
         <ClockSection tz={tz} clockTime={clockTime} clockDate={clockDate} />
+      </div>
+
+      {/* Mobile controls section */}
+      <div className="mobile-only-controls" style={{ display: 'none', flexDirection: 'column', gap: 10, marginBottom: 4 }}>
+        {/* Search */}
+        <div style={{ position: 'relative', width: '100%' }}>
+          <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)', pointerEvents: 'none' }} />
+          <input
+            type="text"
+            placeholder="Search passengers or PNR..."
+            value={search}
+            onChange={e => setSearch?.(e.target.value)}
+            style={{
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              borderRadius: 8, padding: '9px 12px 9px 30px',
+              fontSize: 12, color: 'var(--text)', outline: 'none',
+              width: '100%',
+            }}
+          />
+        </div>
+        
+        {/* Action buttons */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={onAddNew} className="btn btn-primary btn-sm" style={{ flex: 1, gap: 4, padding: '10px' }}>
+            <Plus size={12} /> Add Ticket
+          </button>
+          <button onClick={onRefresh} className="btn btn-ghost btn-icon" style={{ padding: '10px' }} title="Refresh">
+            <RefreshCw size={13} />
+          </button>
+          <button onClick={onPDF} className="btn btn-ghost btn-sm" style={{ gap: 4, padding: '10px' }}>
+            <Download size={12} /> PDF
+          </button>
+        </div>
       </div>
 
       {/* Table */}

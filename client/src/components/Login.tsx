@@ -179,7 +179,7 @@ export default function Login() {
           {/* Quick fill */}
           <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border2)' }}>
             <p style={{ fontSize: 9, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 10 }}>Quick access</p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+            <div className="quick-access-grid">
               {quickAccessUsers.length === 0 ? (
                 <div style={{ gridColumn: 'span 2', fontSize: 10, color: 'var(--text3)', fontStyle: 'italic', padding: '4px 0', textAlign: 'center' }}>Loading users...</div>
               ) : (

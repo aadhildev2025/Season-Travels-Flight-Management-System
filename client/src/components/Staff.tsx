@@ -84,7 +84,7 @@ export default function Staff({ tz, clockTime, clockDate }: StaffProps) {
     <div className="fade-up" style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 860, margin: '0 auto' }}>
 
       {/* Page header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+      <div className="page-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(99,102,241,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Users size={18} style={{ color: 'var(--indigo2)' }} />
@@ -109,7 +109,7 @@ export default function Staff({ tz, clockTime, clockDate }: StaffProps) {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: 18, alignItems: 'start' }}>
+      <div className="responsive-grid-staff">
 
         {/* ── Add staff form ─────────────────── */}
         <div className="card" style={{ padding: 20 }}>

@@ -74,8 +74,15 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
   fetchSession: async () => {
     try {
       const data = await apiFetch('/api/auth/me');
-      if (data.user) { set({ currentUser: data.user, isAuthenticated: true }); await get().fetchTickets(); }
-    } catch { set({ currentUser: null, isAuthenticated: false }); }
+      if (data.user) {
+        set({ currentUser: data.user, isAuthenticated: true });
+        await get().fetchTickets();
+      } else {
+        set({ currentUser: null, isAuthenticated: false });
+      }
+    } catch {
+      set({ currentUser: null, isAuthenticated: false });
+    }
   },
 
   login: async (email, password) => {

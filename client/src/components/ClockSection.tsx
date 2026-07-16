@@ -11,7 +11,7 @@ export default function ClockSection({ tz, clockTime, clockDate }: ClockSectionP
   const tzLabel = tz === 'CET' ? 'CET Time' : 'SL Time';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', textAlign: 'right', flexShrink: 0 }}>
+    <div className="clock-container">
       <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
         Showing: {tzLabel}
       </span>

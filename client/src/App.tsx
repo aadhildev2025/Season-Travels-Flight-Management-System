@@ -23,7 +23,9 @@ import {
   Search,
   Clock,
   Plane,
-  ChevronDown
+  ChevronDown,
+  Menu,
+  X
 } from 'lucide-react';
 
 export type View = 'dashboard' | 'ticket-form' | 'analytics' | 'audit-logs' | 'profile' | 'staff';
@@ -38,6 +40,7 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Live ticking clock state
@@ -163,22 +166,40 @@ export default function App() {
       {/* Ambient background glow effects */}
       <div className="ambient-glow" />
 
+      {/* Sidebar Toggle Backdrop overlay */}
+      {sidebarOpen && (
+        <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />
+      )}
+
       {/* ════════════════════ SIDEBAR ════════════════════ */}
-      <aside className="sidebar">
+      <aside className={`sidebar${sidebarOpen ? ' mobile-open' : ''}`}>
         {/* Brand/Logo Section */}
-        <div className="sidebar-brand">
-          <div style={{
-            width: 32, height: 32, borderRadius: 8,
-            background: 'linear-gradient(135deg, #6366f1, #818cf8)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 0 16px rgba(99,102,241,0.3)', flexShrink: 0
-          }}>
-            <BrandLogo size={16} style={{ color: 'white' }} />
+        <div className="sidebar-brand" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: 8,
+              background: 'linear-gradient(135deg, #6366f1, #818cf8)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 0 16px rgba(99,102,241,0.3)', flexShrink: 0
+            }}>
+              <BrandLogo size={16} style={{ color: 'white' }} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <span style={{ fontSize: 12, fontWeight: 900, letterSpacing: '0.04em', color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>SEASON TRAVELS</span>
+              <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--indigo2)', letterSpacing: '0.08em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>FLIGHT CONSOLE</span>
+            </div>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-            <span style={{ fontSize: 12, fontWeight: 900, letterSpacing: '0.04em', color: 'var(--text)' }}>SEASON TRAVELS</span>
-            <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--indigo2)', letterSpacing: '0.08em' }}>FLIGHT CONSOLE</span>
-          </div>
+          <button 
+            className="mobile-close-btn"
+            onClick={() => setSidebarOpen(false)}
+            style={{ 
+              background: 'none', border: 'none', color: 'var(--text2)', 
+              cursor: 'pointer', display: 'none', padding: 4, borderRadius: 6,
+              alignItems: 'center', justifyContent: 'center'
+            }}
+          >
+            <X size={18} />
+          </button>
         </div>
 
         {/* Sidebar Nav links */}
@@ -190,7 +211,7 @@ export default function App() {
             return (
               <button
                 key={item.id}
-                onClick={() => setView(item.id as View)}
+                onClick={() => { setView(item.id as View); setSidebarOpen(false); }}
                 className={`sidebar-link${isActive ? ' active' : ''}`}
               >
                 <span className="link-icon">{item.icon}</span>
@@ -247,7 +268,7 @@ export default function App() {
                 boxShadow: '0 -8px 24px rgba(0,0,0,0.5)'
               }}>
                 <button
-                  onClick={() => { setUserDropdownOpen(false); setView('profile'); }}
+                  onClick={() => { setUserDropdownOpen(false); setView('profile'); setSidebarOpen(false); }}
                   style={{
                     width: '100%', display: 'flex', alignItems: 'center', gap: 8,
                     padding: '8px 10px', borderRadius: 7, border: 'none', background: 'none',
@@ -260,7 +281,7 @@ export default function App() {
                   <UserCircle size={14} /> My Profile
                 </button>
                 <button
-                  onClick={() => { setUserDropdownOpen(false); setLogoutOpen(true); }}
+                  onClick={() => { setUserDropdownOpen(false); setLogoutOpen(true); setSidebarOpen(false); }}
                   style={{
                     width: '100%', display: 'flex', alignItems: 'center', gap: 8,
                     padding: '8px 10px', borderRadius: 7, border: 'none', background: 'none',
@@ -279,16 +300,24 @@ export default function App() {
       </aside>
 
       {/* ════════════════════ MAIN CONTENT WRAPPER ════════════════════ */}
-      <div style={{ flex: 1, marginLeft: 'var(--sidebar-w)', display: 'flex', flexDirection: 'column', minWidth: 0, zIndex: 10 }}>
+      <div className="main-content">
 
         {/* ════════════════════ TOPBAR ════════════════════ */}
         <header className="topbar">
-          <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.01em' }}>
+          <button 
+            className="mobile-menu-btn" 
+            onClick={() => setSidebarOpen(true)}
+            style={{ marginRight: 4 }}
+          >
+            <Menu size={18} />
+          </button>
+
+          <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginRight: 'auto' }}>
             {pageTitle}
           </div>
 
           {/* Timezone Switcher */}
-          <div style={{ marginLeft: 'auto' }}>
+          <div className="topbar-tz" style={{ marginLeft: 'auto' }}>
             <div className="tz-toggle">
               <button
                 onClick={() => setTz('CET')}
@@ -307,7 +336,7 @@ export default function App() {
 
           {/* Search bar inside topbar (Only on dashboard) */}
           {view === 'dashboard' && (
-            <div style={{ position: 'relative', width: 220 }}>
+            <div className="topbar-search" style={{ position: 'relative', width: 220 }}>
               <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)', pointerEvents: 'none' }} />
               <input
                 type="text"
@@ -327,7 +356,7 @@ export default function App() {
           )}
 
           {/* Quick action controls */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div className="topbar-actions" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {view === 'dashboard' && (
               <>
                 <button onClick={handleAddNew} className="btn btn-primary btn-sm" style={{ gap: 4 }}>
@@ -350,8 +379,20 @@ export default function App() {
         </header>
 
         {/* ════════════════════ MAIN CONTENT AREA ════════════════════ */}
-        <main style={{ flex: 1, padding: '24px', position: 'relative' }}>
-          {view === 'dashboard' && <Dashboard onEdit={handleEdit} tz={tz} search={search} clockTime={clockTime} clockDate={clockDate} />}
+        <main className="main-content-area" style={{ flex: 1, position: 'relative' }}>
+          {view === 'dashboard' && (
+            <Dashboard 
+              onEdit={handleEdit} 
+              tz={tz} 
+              search={search} 
+              setSearch={setSearch}
+              clockTime={clockTime} 
+              clockDate={clockDate} 
+              onAddNew={handleAddNew}
+              onRefresh={handleRefresh}
+              onPDF={handlePDF}
+            />
+          )}
           {view === 'ticket-form' && <TicketForm editingTicket={editingTicket} onBack={handleBack} />}
           {view === 'analytics' && isAdmin && <Analytics tz={tz} clockTime={clockTime} clockDate={clockDate} />}
           {view === 'audit-logs' && isAdmin && <AuditLogs tz={tz} clockTime={clockTime} clockDate={clockDate} />}

@@ -176,7 +176,7 @@ export default function TicketForm({ editingTicket, onBack }: TicketFormProps) {
                 1. Customer Information
               </h3>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.5fr 1.5fr', gap: 14 }}>
+            <div className="form-grid-3">
               <div>
                 <label style={label}>Customer Name *</label>
                 <input className="field" style={err('passengerName')} value={passengerName} placeholder="Full name"
@@ -205,7 +205,7 @@ export default function TicketForm({ editingTicket, onBack }: TicketFormProps) {
             </div>
 
             {/* Row 1: From + To + PNR */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
+            <div className="form-grid-equal-3">
               <div ref={depRef} style={{ position: 'relative' }}>
                 <label style={label}>From *</label>
                 <input className="field" style={err('dep')} value={departureAirport} placeholder="e.g. CMB"
@@ -262,7 +262,7 @@ export default function TicketForm({ editingTicket, onBack }: TicketFormProps) {
             </div>
 
             {/* Row 2: Departure Date + Departure Time + CET Time */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: 14 }}>
+            <div className="form-grid-date-time">
               <div>
                 <label style={label}>Departure Date *</label>
                 <input className="field" style={err('dipDate')} type="date" value={dipDate}
@@ -284,7 +284,7 @@ export default function TicketForm({ editingTicket, onBack }: TicketFormProps) {
             </div>
 
             {/* Row 3: Status + Remarks */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 14 }}>
+            <div className="form-grid-status-remarks">
               <div>
                 <label style={label}>Status</label>
                 <select className="field" value={status} onChange={e => setStatus(e.target.value)}>

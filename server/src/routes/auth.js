@@ -87,16 +87,16 @@ router.post('/logout', (req, res) => {
 // GET /api/auth/me
 router.get('/me', async (req, res) => {
   const token = req.cookies?.['st-session'] || req.headers.authorization?.replace('Bearer ', '');
-  if (!token) return res.status(401).json({ error: 'No session' });
+  if (!token) return res.status(200).json({ user: null });
 
   try {
     const { verifyToken } = await import('../middleware/auth.js');
     const decoded = verifyToken(token);
     const user = await User.findById(decoded.userId).select('-passwordHash');
-    if (!user) return res.status(401).json({ error: 'User not found' });
+    if (!user) return res.status(200).json({ user: null });
     return res.json({ user: { id: user._id.toString(), name: user.name, email: user.email, role: user.role, timezone: user.timezone } });
   } catch {
-    return res.status(401).json({ error: 'Invalid session' });
+    return res.status(200).json({ user: null });
   }
 });
 

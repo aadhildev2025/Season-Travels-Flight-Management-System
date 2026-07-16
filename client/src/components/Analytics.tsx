@@ -48,7 +48,7 @@ export default function Analytics({ tz, clockTime, clockDate }: AnalyticsProps) 
 
   return (
     <div className="fade-up" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div className="page-header">
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em' }}>Analytics</h2>
           <p style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2 }}>Flight statistics and departure overview</p>
@@ -69,7 +69,7 @@ export default function Analytics({ tz, clockTime, clockDate }: AnalyticsProps) 
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+      <div className="responsive-grid-2">
 
         {/* Status breakdown */}
         <div className="card" style={{ padding: 20 }}>

@@ -57,7 +57,7 @@ export default function Profile({ tz, clockTime, clockDate }: ProfileProps) {
 
   return (
     <div className="fade-up" style={{ maxWidth: 520, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div className="page-header">
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em' }}>Profile Settings</h2>
           <p style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2 }}>Update your name, email and password</p>
@@ -106,7 +106,7 @@ export default function Profile({ tz, clockTime, clockDate }: ProfileProps) {
           )}
 
           {/* Name + Email */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div className="responsive-grid-2">
             <div>
               <label style={label}>
                 <User size={10} style={{ display: 'inline', marginRight: 4 }} />Full Name
@@ -131,7 +131,7 @@ export default function Profile({ tz, clockTime, clockDate }: ProfileProps) {
                 <label style={label}>Current Password</label>
                 <input className="field" type="password" value={currentPwd} onChange={e => setCurrentPwd(e.target.value)} placeholder="Leave blank to keep current" />
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div className="responsive-grid-2">
                 <div>
                   <label style={label}>New Password</label>
                   <input className="field" type="password" value={newPwd} onChange={e => setNewPwd(e.target.value)} placeholder="Min. 6 characters" />

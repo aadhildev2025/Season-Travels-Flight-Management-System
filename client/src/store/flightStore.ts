@@ -54,6 +54,7 @@ interface FlightState {
 
   fetchStaff:  () => Promise<{ id: string; name: string; email: string; role: string }[]>;
   createStaff: (data: { name: string; email: string; password: string; role: string }) => Promise<void>;
+  updateStaff: (id: string, data: { name?: string; email?: string; password?: string; role?: string }) => Promise<void>;
   deleteStaff: (id: string) => Promise<void>;
 
   fetchTickets:  () => Promise<void>;
@@ -107,6 +108,8 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
   fetchStaff: async () => { const d = await apiFetch('/api/staff'); return d.users; },
 
   createStaff: async (staffData) => { await apiFetch('/api/staff', { method: 'POST', body: JSON.stringify(staffData) }); },
+
+  updateStaff: async (id, staffData) => { await apiFetch(`/api/staff/${id}`, { method: 'PUT', body: JSON.stringify(staffData) }); },
 
   deleteStaff: async (id) => { await apiFetch(`/api/staff/${id}`, { method: 'DELETE' }); },
 

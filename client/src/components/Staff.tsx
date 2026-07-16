@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useFlightStore } from '../store/flightStore';
-import { Plus, Trash2, Users } from 'lucide-react';
+import { Plus, Trash2, Users, Eye, EyeOff, Edit2 } from 'lucide-react';
 import ClockSection from './ClockSection';
 import type { TZ } from '../App';
 
@@ -20,7 +20,7 @@ interface StaffProps {
 }
 
 export default function Staff({ tz, clockTime, clockDate }: StaffProps) {
-  const { fetchStaff, createStaff, deleteStaff, currentUser } = useFlightStore();
+  const { fetchStaff, createStaff, updateStaff, deleteStaff, currentUser } = useFlightStore();
 
   const [list, setList]         = useState<StaffUser[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -33,6 +33,9 @@ export default function Staff({ tz, clockTime, clockDate }: StaffProps) {
   const [password, setPassword] = useState('');
   const [role, setRole]         = useState('Staff');
   const [adding, setAdding]     = useState(false);
+  
+  const [editingUser, setEditingUser] = useState<StaffUser | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -48,17 +51,52 @@ export default function Staff({ tz, clockTime, clockDate }: StaffProps) {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleAdd = async (e: React.FormEvent) => {
+  const handleSelectUser = (user: StaffUser) => {
+    setEditingUser(user);
+    setName(user.name);
+    setEmail(user.email);
+    setRole(user.role);
+    setPassword('');
+    setShowPassword(false);
+    setError('');
+    setSuccess('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingUser(null);
+    setName('');
+    setEmail('');
+    setRole('Staff');
+    setPassword('');
+    setShowPassword(false);
+    setError('');
+    setSuccess('');
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !email.trim()) { setError('Name and email are required'); return; }
     setAdding(true); setError(''); setSuccess('');
     try {
-      await createStaff({ name: name.trim(), email: email.trim(), password: password || 'staff123', role });
-      setName(''); setEmail(''); setPassword(''); setRole('Staff');
-      setSuccess(`User "${name.trim()}" added successfully.`);
+      if (editingUser) {
+        const uid = editingUser._id || editingUser.id || '';
+        await updateStaff(uid, {
+          name: name.trim() !== editingUser.name ? name.trim() : undefined,
+          email: email.trim().toLowerCase() !== editingUser.email ? email.trim() : undefined,
+          role: role !== editingUser.role ? role : undefined,
+          password: password ? password : undefined,
+        });
+        setSuccess(`User "${name.trim()}" updated successfully.`);
+        setEditingUser(null);
+        setName(''); setEmail(''); setPassword(''); setRole('Staff');
+      } else {
+        await createStaff({ name: name.trim(), email: email.trim(), password: password || 'staff123', role });
+        setName(''); setEmail(''); setPassword(''); setRole('Staff');
+        setSuccess(`User "${name.trim()}" added successfully.`);
+      }
       await load();
     } catch (e: any) {
-      setError(e.message || 'Failed to add user');
+      setError(e.message || `Failed to ${editingUser ? 'update' : 'add'} user`);
     } finally {
       setAdding(false);
     }
@@ -72,6 +110,9 @@ export default function Staff({ tz, clockTime, clockDate }: StaffProps) {
     try {
       await deleteStaff(uid);
       setSuccess(`"${user.name}" removed.`);
+      if (editingUser && (editingUser._id === uid || editingUser.id === uid)) {
+        handleCancelEdit();
+      }
       await load();
     } catch (e: any) {
       setError(e.message || 'Failed to delete user');
@@ -111,12 +152,20 @@ export default function Staff({ tz, clockTime, clockDate }: StaffProps) {
 
       <div className="responsive-grid-staff">
 
-        {/* ── Add staff form ─────────────────── */}
+        {/* ── Add/Edit staff form ─────────────────── */}
         <div className="card" style={{ padding: 20 }}>
           <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 7 }}>
-            <Plus size={14} style={{ color: 'var(--indigo2)' }} /> Add New User
+            {editingUser ? (
+              <>
+                <Edit2 size={14} style={{ color: 'var(--indigo2)' }} /> Edit User: {editingUser.name}
+              </>
+            ) : (
+              <>
+                <Plus size={14} style={{ color: 'var(--indigo2)' }} /> Add New User
+              </>
+            )}
           </p>
-          <form onSubmit={handleAdd} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
               <label style={label}>Full Name *</label>
               <input className="field" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Anura Perera" required />
@@ -127,7 +176,27 @@ export default function Staff({ tz, clockTime, clockDate }: StaffProps) {
             </div>
             <div>
               <label style={label}>Password</label>
-              <input className="field" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Default: staff123" />
+              <div style={{ position: 'relative' }}>
+                <input
+                  className="field"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder={editingUser ? 'Leave blank to keep current' : 'Default: staff123'}
+                  style={{ paddingRight: 40 }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{
+                    position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', color: 'var(--text2)', cursor: 'pointer',
+                    display: 'flex', padding: 0
+                  }}
+                >
+                  {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
             </div>
             <div>
               <label style={label}>Role</label>
@@ -136,11 +205,26 @@ export default function Staff({ tz, clockTime, clockDate }: StaffProps) {
                 <option value="Admin">Admin</option>
               </select>
             </div>
-            <button type="submit" disabled={adding} className="btn btn-primary" style={{ width: '100%', marginTop: 4 }}>
-              {adding
-                ? <><span style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} /> Adding…</>
-                : <><Plus size={13} /> Add User</>}
-            </button>
+            
+            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+              {editingUser && (
+                <button type="button" onClick={handleCancelEdit} className="btn btn-ghost" style={{ flex: 1 }}>
+                  Cancel
+                </button>
+              )}
+              <button type="submit" disabled={adding} className="btn btn-primary" style={{ flex: 2 }}>
+                {adding ? (
+                  <>
+                    <span style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />{' '}
+                    {editingUser ? 'Saving…' : 'Adding…'}
+                  </>
+                ) : (
+                  <>
+                    {editingUser ? <Edit2 size={13} /> : <Plus size={13} />} {editingUser ? 'Save Changes' : 'Add User'}
+                  </>
+                )}
+              </button>
+            </div>
           </form>
         </div>
 
@@ -165,15 +249,29 @@ export default function Staff({ tz, clockTime, clockDate }: StaffProps) {
               {list.map((u, i) => {
                 const uid = u._id || u.id || '';
                 const isSelf = uid === currentUser?.id;
+                const isSelected = editingUser?.email === u.email;
                 return (
                   <div key={uid || i} style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     padding: '13px 18px',
                     borderBottom: i < list.length - 1 ? '1px solid var(--border2)' : 'none',
-                    transition: 'background 0.12s',
+                    transition: 'background 0.12s, border-color 0.12s',
+                    cursor: 'pointer',
+                    background: isSelected ? 'rgba(99, 102, 241, 0.08)' : 'transparent',
+                    borderLeft: isSelected ? '3px solid var(--indigo2)' : '3px solid transparent',
+                    paddingLeft: isSelected ? '15px' : '18px',
                   }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.02)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    onClick={() => handleSelectUser(u)}
+                    onMouseEnter={e => {
+                      if (!isSelected) {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (!isSelected) {
+                        e.currentTarget.style.background = 'transparent';
+                      }
+                    }}
                   >
                     {/* Avatar + info */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -199,7 +297,7 @@ export default function Staff({ tz, clockTime, clockDate }: StaffProps) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <span className={u.role === 'Admin' ? 'role-admin' : 'role-staff'}>{u.role}</span>
                       {!isSelf && (
-                        <button onClick={() => handleDelete(u)} className="btn btn-icon btn-ghost"
+                        <button onClick={(e) => { e.stopPropagation(); handleDelete(u); }} className="btn btn-icon btn-ghost"
                           style={{ color: '#f87171', border: '1px solid rgba(239,68,68,0.15)' }}
                           title={`Remove ${u.name}`}>
                           <Trash2 size={13} />

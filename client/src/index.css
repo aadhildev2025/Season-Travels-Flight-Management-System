@@ -40,6 +40,7 @@
 
   /* ── Sidebar ── */
   --sidebar-w: 220px;
+  --sidebar-collapsed-w: 0px;
 }
 
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; cursor: default; }
@@ -64,6 +65,11 @@ input, textarea {
 /* Keep pointer cursor on interactive elements */
 button, a, select, label[for], [role="button"] {
   cursor: pointer;
+}
+
+/* Allow copy cursor on elements that explicitly set it */
+[style*="cursor: copy"] {
+  cursor: copy !important;
 }
 
 input[type="submit"], input[type="button"], input[type="reset"] {
@@ -130,6 +136,17 @@ input, select, textarea, button { font-family: inherit; }
   }
 }
 
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg)
@@ -168,6 +185,43 @@ input, select, textarea, button { font-family: inherit; }
   50% {
     opacity: 1
   }
+}
+
+@keyframes remarkBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+@keyframes greenSweep {
+  0% {
+    background: rgba(52, 211, 153, 0.55);
+    box-shadow: 0 0 12px rgba(52,211,153,0.5);
+  }
+  60% {
+    background: rgba(52, 211, 153, 0.2);
+  }
+  100% {
+    background: transparent;
+    box-shadow: none;
+  }
+}
+
+@keyframes pulseGreenLoading {
+  0%, 100% {
+    color: var(--green);
+    text-shadow: 0 0 4px rgba(52, 211, 153, 0.2);
+    opacity: 0.7;
+  }
+  50% {
+    color: var(--green2);
+    text-shadow: 0 0 12px rgba(110, 231, 183, 0.8), 0 0 20px rgba(52, 211, 153, 0.4);
+    opacity: 1;
+  }
+}
+
+.date-loading-green {
+  animation: pulseGreenLoading 1.5s infinite ease-in-out;
+  font-weight: 800 !important;
 }
 
 .fade-in {
@@ -392,6 +446,135 @@ input, select, textarea, button { font-family: inherit; }
   border-color: #ff5a79;
 }
 
+/* Outline border-style badges for Checkin */
+.badge-outline-yes {
+  background: rgba(52, 211, 153, 0.12);
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 900;
+  padding: 2px 10px;
+  border-radius: 6px;
+  letter-spacing: 0;
+  border: 1.5px solid var(--green);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.badge-outline-yes:hover {
+  background: rgba(52, 211, 153, 0.22);
+  border-color: var(--green2);
+  color: var(--green2);
+  box-shadow: 0 0 8px rgba(52,211,153,0.3);
+}
+
+.badge-outline-no {
+  background: transparent;
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 900;
+  padding: 2px 10px;
+  border-radius: 6px;
+  letter-spacing: 0;
+  border: 1.5px solid var(--text3);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.badge-outline-no:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--text2);
+  color: var(--text);
+  box-shadow: 0 0 8px rgba(255,255,255,0.05);
+}
+
+/* Remind button - shows "?" with outline style */
+.badge-outline-remind-yes {
+  background: transparent;
+  color: var(--red);
+  font-size: 13px;
+  font-weight: 900;
+  padding: 2px 9px;
+  border-radius: 6px;
+  letter-spacing: 0;
+  border: 1.5px solid var(--red);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.badge-outline-remind-yes:hover {
+  background: rgba(244, 63, 94, 0.1);
+  border-color: #ff5a79;
+  color: #ff5a79;
+  box-shadow: 0 0 8px rgba(244, 63, 94, 0.25);
+}
+
+.badge-outline-remind-no {
+  background: transparent;
+  color: var(--text3);
+  font-size: 13px;
+  font-weight: 900;
+  padding: 2px 9px;
+  border-radius: 6px;
+  letter-spacing: 0;
+  border: 1.5px solid var(--border);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.badge-outline-remind-no:hover {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.15);
+  color: var(--text2);
+}
+
+/* Date column: remark indicator */
+.date-remark {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #f87171;
+  background: rgba(244, 63, 94, 0.12);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  border-radius: 5px;
+  padding: 2px 7px;
+  animation: remarkBlink 1.6s ease-in-out infinite;
+  cursor: help;
+}
+
+/* Date column: newly entered ticket green flash */
+.date-new {
+  display: inline-block;
+  border-radius: 6px;
+  padding: 2px 7px;
+  animation: greenSweep 3.5s ease-out forwards;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* Date column: newly entered ticket with remark (green sweep on red remark) */
+.date-new-remark {
+  display: inline-block;
+  border-radius: 5px;
+  padding: 2px 7px;
+  animation: greenSweep 3.5s ease-out forwards, remarkBlink 1.6s ease-in-out 3.5s infinite;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #f87171;
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  cursor: help;
+}
+
+/* Newly entered row highlight */
+.data-table tbody tr.is-new-ticket {
+  background: rgba(52, 211, 153, 0.07) !important;
+  transition: background 2s ease-out;
+}
+
 .role-admin {
   background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(129, 140, 248, 0.1));
   color: var(--indigo2);
@@ -436,6 +619,11 @@ input, select, textarea, button { font-family: inherit; }
   color: var(--text2);
   white-space: nowrap;
   text-align: left;
+  /* Sticky header needs explicit background to cover rows beneath */
+  background: var(--surface);
+  position: sticky;
+  top: 60px;
+  z-index: 50;
 }
 
 .data-table tbody tr {
@@ -461,6 +649,22 @@ input, select, textarea, button { font-family: inherit; }
   border-left: 3px solid var(--green);
 }
 
+/* ═══ TABLE CONTAINERS (Sticky & Responsive) ═══ */
+.table-card {
+  overflow: visible !important;
+}
+
+.table-scroll-container {
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+@media (min-width: 769px) {
+  .table-scroll-container {
+    overflow-x: visible;
+  }
+}
+
 /* ═══ SIDEBAR ═══ */
 .sidebar {
   width: var(--sidebar-w);
@@ -474,6 +678,23 @@ input, select, textarea, button { font-family: inherit; }
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  overflow-x: hidden;
+  transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Collapsed sidebar: hidden on desktop */
+.sidebar.collapsed {
+  width: 0;
+  border-right-color: transparent;
+  overflow: hidden;
+}
+
+/* When collapsed, hide inner content */
+.sidebar.collapsed > * {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
 }
 
 .sidebar-brand {
@@ -741,6 +962,23 @@ input, select, textarea, button { font-family: inherit; }
   flex-direction: column;
   min-width: 0;
   z-index: 10;
+  transition: margin-left 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* When sidebar is collapsed, expand main to full width */
+.main-content.sidebar-collapsed {
+  margin-left: 0;
+}
+
+/* Desktop-only: hide on mobile */
+.desktop-only {
+  display: flex !important;
+}
+
+@media (max-width: 768px) {
+  .desktop-only {
+    display: none !important;
+  }
 }
 
 .main-content-area {

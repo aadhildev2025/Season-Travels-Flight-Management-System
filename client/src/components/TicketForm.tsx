@@ -3,14 +3,19 @@ import { useFlightStore } from '../store/flightStore';
 import { localTimeToUTC, utcToLocalTime, getTimezoneDiff } from '../utils/timezone';
 import { AIRPORTS } from '../types';
 import type { Ticket } from '../types';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, CheckCircle } from 'lucide-react';
+import ClockSection from './ClockSection';
 
 interface TicketFormProps {
   editingTicket: Ticket | null;
   onBack: () => void;
+  clockTime: string;
+  clockDate: string;
+  slClockTime?: string;
+  slClockDate?: string;
 }
 
-export default function TicketForm({ editingTicket, onBack }: TicketFormProps) {
+export default function TicketForm({ editingTicket, onBack, clockTime, clockDate, slClockTime, slClockDate }: TicketFormProps) {
   const { addTicket, updateTicket } = useFlightStore();
 
   const [passengerName, setPassengerName] = useState('');
@@ -26,6 +31,8 @@ export default function TicketForm({ editingTicket, onBack }: TicketFormProps) {
   const [remarks, setRemarks]             = useState('');
   const [returnTicket, setReturnTicket]   = useState(false);
   const [autoTime, setAutoTime]           = useState(true);
+  const [successMsg, setSuccessMsg]       = useState(false);
+  const [successType, setSuccessType]     = useState<'add' | 'update'>('add');
 
   const [showDepList, setShowDepList]     = useState(false);
   const [showArrList, setShowArrList]     = useState(false);
@@ -119,9 +126,24 @@ export default function TicketForm({ editingTicket, onBack }: TicketFormProps) {
     const tz   = AIRPORTS.find(a => a.code === departureAirport)?.timezone || 'Asia/Colombo';
     const dtu  = localTimeToUTC(dipDate, dipTime, tz);
     const payload = { passengerName, email, phone, airline: '', flightNumber: '', pnr, departureAirport, arrivalAirport, departureTimeUTC: dtu, originalTimezone: tz, returnTicket, remarks, status };
-    if (editingTicket) await updateTicket(editingTicket._id, payload);
-    else await addTicket(payload);
-    onBack();
+    if (editingTicket) {
+      await updateTicket(editingTicket._id, payload);
+      setSuccessType('update');
+      setSuccessMsg(true);
+      setTimeout(() => {
+        setSuccessMsg(false);
+        onBack();
+      }, 1500);
+      return;
+    } else {
+      await addTicket(payload);
+      setSuccessType('add');
+      setSuccessMsg(true);
+      setTimeout(() => setSuccessMsg(false), 2000);
+      // Clear form after add
+      clearAll();
+      return;
+    }
   };
 
   const clearAll = () => {
@@ -153,17 +175,51 @@ export default function TicketForm({ editingTicket, onBack }: TicketFormProps) {
   return (
     <div className="fade-up" style={{ maxWidth: 700, margin: '0 auto' }}>
 
-      {/* Page header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-        <button onClick={onBack} className="btn btn-ghost btn-icon">
-          <ArrowLeft size={16} />
-        </button>
-        <div>
-          <h1 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em' }}>
-            {editingTicket ? 'Edit Ticket' : 'Add New Ticket'}
-          </h1>
-          <p style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2 }}>Fill in the passenger and departure details</p>
+      {/* Success Toast */}
+      {successMsg && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)',
+          animation: 'fadeIn 0.2s ease-out',
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, #059669, #10b981)',
+            color: '#fff', borderRadius: 16, padding: '20px 32px',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
+            boxShadow: '0 20px 50px rgba(16,185,129,0.3)',
+            animation: 'scaleIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
+            fontSize: 15, fontWeight: 700,
+            textAlign: 'center',
+            maxWidth: 320,
+          }}>
+            <div style={{
+              width: 50, height: 50, borderRadius: '50%',
+              background: 'rgba(255,255,255,0.2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              marginBottom: 4,
+            }}>
+              <CheckCircle size={30} />
+            </div>
+            {successType === 'add' ? 'Ticket Entered Successfully!' : 'Ticket Updated Successfully!'}
+          </div>
         </div>
+      )}
+
+      {/* Page header */}
+      <div className="page-header" style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={onBack} className="btn btn-ghost btn-icon">
+            <ArrowLeft size={16} />
+          </button>
+          <div>
+            <h1 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em' }}>
+              {editingTicket ? 'Edit Ticket' : 'Add New Ticket'}
+            </h1>
+            <p style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2 }}>Fill in the passenger and departure details</p>
+          </div>
+        </div>
+        <ClockSection clockTime={clockTime} clockDate={clockDate} slClockTime={slClockTime} slClockDate={slClockDate} />
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -297,9 +353,9 @@ export default function TicketForm({ editingTicket, onBack }: TicketFormProps) {
               </div>
               <div>
                 <label style={label}>Remarks</label>
-                <textarea className="field" rows={1} value={remarks} placeholder="Any additional notes…"
+                <textarea className="field" rows={3} value={remarks} placeholder="Any additional notes…"
                   onChange={e => setRemarks(e.target.value)}
-                  style={{ resize: 'none' }} />
+                  style={{ resize: 'vertical', minHeight: 72 }} />
               </div>
             </div>
           </div>

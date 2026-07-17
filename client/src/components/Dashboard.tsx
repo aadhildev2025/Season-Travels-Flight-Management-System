@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useFlightStore } from '../store/flightStore';
 import { utcToLocalTime, formatCETTime } from '../utils/timezone';
@@ -15,16 +15,22 @@ interface DashboardProps {
   setSearch?: (s: string) => void;
   clockTime: string;
   clockDate: string;
+  slClockTime?: string;
+  slClockDate?: string;
   onAddNew?: () => void;
   onRefresh?: () => void;
   onPDF?: () => void;
 }
 
-export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, clockDate, onAddNew, onRefresh, onPDF }: DashboardProps) {
+export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, clockDate, slClockTime, slClockDate, onAddNew, onRefresh, onPDF }: DashboardProps) {
   const { tickets, currentUser, deleteTicket, updateTicket } = useFlightStore();
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [todayStr, setTodayStr]               = useState('');
   const [reminderTicket, setReminderTicket]   = useState<Ticket | null>(null);
+  const [copiedPnr, setCopiedPnr]             = useState<string | null>(null);
+  // Track newly entered ticket ID for green flash animation
+  const [newTicketId, setNewTicketId]         = useState<string | null>(null);
+  const prevTicketIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const tick = () => setTodayStr(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' }));
@@ -33,10 +39,46 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
     return () => clearInterval(id);
   }, []);
 
+  // Detect newly added ticket
+  useEffect(() => {
+    const currentIds = new Set(tickets.map(t => t._id));
+    const added = tickets.find(t => !prevTicketIds.current.has(t._id));
+    if (added && prevTicketIds.current.size > 0) {
+      setNewTicketId(added._id);
+      setTimeout(() => setNewTicketId(null), 4000);
+    }
+    prevTicketIds.current = currentIds;
+  }, [tickets]);
+
   const filtered = tickets.filter(t => {
+    // Hide departure today tickets after 1 minute has elapsed from the departure time
+    if (t.departureTimeUTC) {
+      const isDepToday = getDateStr(t.departureTimeUTC) === todayStr;
+      if (isDepToday) {
+        const depTime = new Date(t.departureTimeUTC);
+        const now = new Date();
+        if (now.getTime() > depTime.getTime() + 60 * 1000) {
+          return false;
+        }
+      }
+    }
+
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return t.passengerName.toLowerCase().includes(q) || t.pnr.toLowerCase().includes(q);
+  });
+
+  // Sort: today's tickets first (newest added at top), then by departure time
+  const sorted = [...filtered].sort((a, b) => {
+    const aToday = getDateStr(a.departureTimeUTC) === todayStr;
+    const bToday = getDateStr(b.departureTimeUTC) === todayStr;
+    if (aToday && !bToday) return -1;
+    if (!aToday && bToday) return 1;
+    // Within today, most recently created first
+    if (aToday && bToday) {
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    }
+    return new Date(a.departureTimeUTC).getTime() - new Date(b.departureTimeUTC).getTime();
   });
 
   const formatDate = (utcStr: string) => {
@@ -46,14 +88,18 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
     return `${String(d.getUTCDate()).padStart(2,'0')}-${m[d.getUTCMonth()]}-${String(d.getUTCFullYear()).slice(2)}`;
   };
 
-  const getDateStr = (utcStr: string) =>
-    utcStr ? new Date(utcStr).toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' }) : '';
+  function getDateStr(utcStr: string) {
+    return utcStr ? new Date(utcStr).toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' }) : '';
+  }
 
-  const getDisplayTime = (utcStr: string) => {
+  const getCETTime = (utcStr: string) => {
     if (!utcStr) return '—';
-    return tz === 'CET'
-      ? formatCETTime(utcStr)
-      : utcToLocalTime(utcStr, 'Asia/Colombo').time;
+    return formatCETTime(utcStr);
+  };
+
+  const getSLTime = (utcStr: string) => {
+    if (!utcStr) return '—';
+    return utcToLocalTime(utcStr, 'Asia/Colombo').time;
   };
 
   const maskName = (name: string) => {
@@ -88,10 +134,35 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
     setReminderTicket(null);
   };
 
-  const tzColor = tz === 'CET' ? 'var(--indigo2)' : 'var(--cyan)';
-  const tzLabel = tz === 'CET' ? 'CET Time' : 'SL Time';
-  const th: React.CSSProperties = { padding:'6px 13px', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.10em', color:'var(--text2)', whiteSpace:'nowrap', textAlign:'left' };
-  const td: React.CSSProperties = { padding:'6px 13px', fontSize:13 };
+  // Staff can only delete tickets created today
+  const canDelete = (ticket: Ticket) => {
+    const isAdmin = currentUser?.role === 'Admin';
+    if (isAdmin) return true;
+    const createdDate = ticket.createdAt
+      ? new Date(ticket.createdAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' })
+      : '';
+    return createdDate === todayStr;
+  };
+
+  const handleCopyPnr = (pnr: string) => {
+    navigator.clipboard.writeText(pnr).then(() => {
+      setCopiedPnr(pnr);
+      setTimeout(() => setCopiedPnr(null), 1800);
+    }).catch(() => {
+      // Fallback for older browsers
+      const el = document.createElement('textarea');
+      el.value = pnr;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+      setCopiedPnr(pnr);
+      setTimeout(() => setCopiedPnr(null), 1800);
+    });
+  };
+
+  const th: React.CSSProperties = { padding:'6px 12px', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.10em', color:'var(--text2)', whiteSpace:'nowrap', textAlign:'left' };
+  const td: React.CSSProperties = { padding:'6px 12px', fontSize:13 };
 
   return (
     <div className="fade-up" style={{ display:'flex', flexDirection:'column', gap:14 }}>
@@ -99,10 +170,10 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
       {/* Count row & clock */}
       <div className="page-header" style={{ marginBottom: 4 }}>
         <span style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.08em', display:'inline-block', alignSelf:'center' }}>
-          {filtered.length} Departure{filtered.length !== 1 ? 's' : ''}
+          {sorted.length} Departure{sorted.length !== 1 ? 's' : ''}
           {search && <span style={{ marginLeft:8, color:'var(--text3)', fontWeight:500 }}>· filtered</span>}
         </span>
-        <ClockSection tz={tz} clockTime={clockTime} clockDate={clockDate} />
+        <ClockSection tz={tz} clockTime={clockTime} clockDate={clockDate} slClockTime={slClockTime} slClockDate={slClockDate} />
       </div>
 
       {/* Mobile controls section */}
@@ -139,7 +210,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
       </div>
 
       {/* Table */}
-      {filtered.length === 0 ? (
+      {sorted.length === 0 ? (
         <div className="card" style={{ padding:'60px 20px', textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
           <Plane size={30} style={{ color:'var(--text3)', transform:'rotate(45deg)' }} />
           <p style={{ fontSize:13, fontWeight:600, color:'var(--text2)' }}>
@@ -150,16 +221,17 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
           </p>
         </div>
       ) : (
-        <div className="card" style={{ overflow:'hidden' }}>
-          <div style={{ overflowX:'auto' }}>
+        <div className="card table-card">
+          <div className="table-scroll-container">
             <table className="data-table">
               <thead>
                 <tr>
                   <th style={th}>Date</th>
                   <th style={th}>Name</th>
-                  <th style={{ ...th, color:tzColor }}>{tzLabel}</th>
                   <th style={th}>From</th>
                   <th style={th}>To</th>
+                  <th style={{ ...th, color:'var(--indigo2)' }}>CET</th>
+                  <th style={{ ...th, color:'var(--cyan)' }}>SL</th>
                   <th style={th}>PNR</th>
                   <th style={{ ...th, textAlign:'center' }}>Checkin</th>
                   <th style={{ ...th, textAlign:'center' }}>Remind</th>
@@ -167,60 +239,119 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(ticket => {
+                {sorted.map(ticket => {
                   const isToday = getDateStr(ticket.departureTimeUTC) === todayStr;
-                  return (
-                    <tr key={ticket._id} className={isToday ? 'is-today' : ''}>
+                  const isNew = newTicketId === ticket._id;
+                  const hasRemark = !!(ticket.remarks && ticket.remarks.trim());
 
+                  const depTime = ticket.departureTimeUTC ? new Date(ticket.departureTimeUTC) : null;
+                  const isNotDepartedYet = depTime ? (new Date().getTime() < depTime.getTime()) : false;
+                  const isLoadingToday = isToday && isNotDepartedYet;
+
+                  return (
+                    <tr
+                      key={ticket._id}
+                      className={`${isToday ? 'is-today' : ''} ${isNew ? 'is-new-ticket' : ''}`}
+                    >
+                      {/* Date column */}
                       <td style={{ ...td, whiteSpace:'nowrap' }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                          {isToday && (
-                            <span style={{ width:6, height:6, borderRadius:'50%', background:'var(--green)', animation:'pulseGlow 1.8s ease-in-out infinite', flexShrink:0 }} />
-                          )}
-                          <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, color:'var(--text)', fontSize:13 }}>
+                        {hasRemark ? (
+                          <span
+                            className={`date-remark${isNew ? ' date-new-remark' : ''} ${isLoadingToday ? 'date-loading-green' : ''}`}
+                            title={ticket.remarks}
+                            style={{
+                              fontFamily:"'JetBrains Mono',monospace", 
+                              fontWeight:700, 
+                              fontSize:13 
+                            }}
+                          >
                             {formatDate(ticket.departureTimeUTC)}
                           </span>
-                        </div>
+                        ) : (
+                          <span
+                            className={`${isNew ? 'date-new' : ''} ${isLoadingToday ? 'date-loading-green' : ''}`}
+                            style={{ 
+                              fontFamily:"'JetBrains Mono',monospace", 
+                              fontWeight:700, 
+                              color: isLoadingToday ? 'var(--green)' : 'var(--text)', 
+                              fontSize:13 
+                            }}
+                          >
+                            {formatDate(ticket.departureTimeUTC)}
+                          </span>
+                        )}
                       </td>
 
-                      <td style={{ ...td, fontWeight:700, color:'var(--text)', maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      <td style={{ ...td, fontWeight:700, color:'var(--text)', maxWidth:260, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                         {maskName(ticket.passengerName)}
-                      </td>
-
-                      <td style={td}>
-                        <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, color:tzColor, fontSize:15 }}>
-                          {getDisplayTime(ticket.departureTimeUTC)}
-                        </span>
                       </td>
 
                       <td style={{ ...td, fontWeight:800, color:'var(--text)', letterSpacing:'0.04em' }}>{ticket.departureAirport}</td>
                       <td style={{ ...td, fontWeight:800, color:'var(--text)', letterSpacing:'0.04em' }}>{ticket.arrivalAirport}</td>
 
+                      {/* CET Time */}
                       <td style={td}>
-                        <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, color:'var(--cyan)', fontSize:13, letterSpacing:'0.04em' }}>
-                          {ticket.pnr}
+                        <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, color:'var(--indigo2)', fontSize:14 }}>
+                          {getCETTime(ticket.departureTimeUTC)}
                         </span>
                       </td>
 
+                      {/* SL Time */}
+                      <td style={td}>
+                        <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, color:'var(--cyan)', fontSize:14 }}>
+                          {getSLTime(ticket.departureTimeUTC)}
+                        </span>
+                      </td>
+
+                      <td style={td}>
+                        <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                          <span
+                            onClick={() => handleCopyPnr(ticket.pnr)}
+                            title="Click to copy PNR"
+                            style={{
+                              fontFamily:"'JetBrains Mono',monospace", fontWeight:700,
+                              color: copiedPnr === ticket.pnr ? 'var(--green)' : 'var(--cyan)',
+                              fontSize:13, letterSpacing:'0.04em',
+                              cursor: 'copy',
+                              padding: '2px 6px',
+                              borderRadius: 5,
+                              background: copiedPnr === ticket.pnr ? 'rgba(52,211,153,0.12)' : 'transparent',
+                              border: copiedPnr === ticket.pnr ? '1px solid rgba(52,211,153,0.3)' : '1px solid transparent',
+                              transition: 'all 0.2s ease',
+                              userSelect: 'none',
+                            }}
+                          >
+                            {copiedPnr === ticket.pnr ? '✓ COPIED' : ticket.pnr}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Checkin - border style */}
                       <td style={{ ...td, textAlign:'center' }}>
-                        <button onClick={() => updateTicket(ticket._id, { checkin: !ticket.checkin })}
-                          className={ticket.checkin ? 'badge-yes' : 'badge-no'}>
-                          {ticket.checkin ? 'YES' : 'NO'}
+                        <button
+                          onClick={() => updateTicket(ticket._id, { checkin: !ticket.checkin })}
+                          className={ticket.checkin ? 'badge-outline-yes' : 'badge-outline-no'}
+                        >
+                          ✓
                         </button>
                       </td>
 
+                      {/* Remind - border style, shows "?" */}
                       <td style={{ ...td, textAlign:'center' }}>
-                        <button onClick={() => updateTicket(ticket._id, { remind: !ticket.remind })}
-                          className={ticket.remind ? 'badge-yes' : 'badge-no'}>
-                          {ticket.remind ? 'YES' : 'NO'}
+                        <button
+                          onClick={() => updateTicket(ticket._id, { remind: !ticket.remind })}
+                          className={ticket.remind ? 'badge-outline-remind-yes' : 'badge-outline-remind-no'}
+                          title={ticket.remind ? 'Reminder ON' : 'Reminder OFF'}
+                        >
+                          ?
                         </button>
                       </td>
 
                       <td style={{ ...td, textAlign:'center', whiteSpace:'nowrap' }}>
                         <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:4 }}>
                           <button onClick={() => setReminderTicket(ticket)} className="btn btn-blue btn-sm">MAIL</button>
-                          <button onClick={() => onEdit(ticket)}     className="btn btn-cyan btn-sm">EDIT</button>
-                          {currentUser?.role === 'Admin' && (
+                          <button onClick={() => onEdit(ticket)} className="btn btn-cyan btn-sm">EDIT</button>
+                          {canDelete(ticket) && (
                             <button onClick={() => setConfirmDeleteId(ticket._id)} className="btn btn-red btn-sm">DEL</button>
                           )}
                         </div>

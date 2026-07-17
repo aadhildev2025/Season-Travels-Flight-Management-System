@@ -8,9 +8,11 @@ interface ProfileProps {
   tz: TZ;
   clockTime: string;
   clockDate: string;
+  slClockTime?: string;
+  slClockDate?: string;
 }
 
-export default function Profile({ tz, clockTime, clockDate }: ProfileProps) {
+export default function Profile({ tz, clockTime, clockDate, slClockTime, slClockDate }: ProfileProps) {
   const { currentUser, updateProfile } = useFlightStore();
 
   const [name, setName]               = useState(currentUser?.name || '');
@@ -62,7 +64,7 @@ export default function Profile({ tz, clockTime, clockDate }: ProfileProps) {
           <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em' }}>Profile Settings</h2>
           <p style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2 }}>Update your name, email and password</p>
         </div>
-        <ClockSection tz={tz} clockTime={clockTime} clockDate={clockDate} />
+        <ClockSection tz={tz} clockTime={clockTime} clockDate={clockDate} slClockTime={slClockTime} slClockDate={slClockDate} />
       </div>
 
       {/* Avatar block */}

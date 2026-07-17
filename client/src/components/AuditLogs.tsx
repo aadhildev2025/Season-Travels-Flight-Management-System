@@ -18,9 +18,11 @@ interface AuditLogsProps {
   tz: TZ;
   clockTime: string;
   clockDate: string;
+  slClockTime?: string;
+  slClockDate?: string;
 }
 
-export default function AuditLogs({ tz, clockTime, clockDate }: AuditLogsProps) {
+export default function AuditLogs({ tz, clockTime, clockDate, slClockTime, slClockDate }: AuditLogsProps) {
   const { fetchAuditLogs } = useFlightStore();
   const [logs, setLogs]   = useState<AuditLog[]>([]);
   const [total, setTotal] = useState(0);
@@ -53,20 +55,20 @@ export default function AuditLogs({ tz, clockTime, clockDate }: AuditLogsProps) 
           <p style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2 }}>{total} events recorded · Admin access only</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <ClockSection tz={tz} clockTime={clockTime} clockDate={clockDate} />
+          <ClockSection tz={tz} clockTime={clockTime} clockDate={clockDate} slClockTime={slClockTime} slClockDate={slClockDate} />
           <button onClick={() => load(page)} className="btn btn-ghost" style={{ fontSize: 11 }}>↻ Refresh</button>
         </div>
       </div>
 
       {error && <div className="card" style={{ padding: 14, color: '#f87171', fontSize: 12 }}>Error: {error}</div>}
 
-      <div className="card" style={{ overflow: 'hidden' }}>
+      <div className="card table-card">
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 200 }}>
             <div style={{ width: 24, height: 24, borderRadius: '50%', border: '3px solid var(--indigo)', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} />
           </div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
+          <div className="table-scroll-container">
             <table className="data-table">
               <thead>
                 <tr>

@@ -8,9 +8,11 @@ interface AnalyticsProps {
   tz: TZ;
   clockTime: string;
   clockDate: string;
+  slClockTime?: string;
+  slClockDate?: string;
 }
 
-export default function Analytics({ tz, clockTime, clockDate }: AnalyticsProps) {
+export default function Analytics({ tz, clockTime, clockDate, slClockTime, slClockDate }: AnalyticsProps) {
   const { fetchAnalytics } = useFlightStore();
   const [data, setData]   = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,7 +55,7 @@ export default function Analytics({ tz, clockTime, clockDate }: AnalyticsProps) 
           <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em' }}>Analytics</h2>
           <p style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2 }}>Flight statistics and departure overview</p>
         </div>
-        <ClockSection tz={tz} clockTime={clockTime} clockDate={clockDate} />
+        <ClockSection tz={tz} clockTime={clockTime} clockDate={clockDate} slClockTime={slClockTime} slClockDate={slClockDate} />
       </div>
 
       {/* Stat cards */}

@@ -33,19 +33,38 @@ export type TZ = 'CET' | 'SL';
 
 export default function App() {
   const { isAuthenticated, fetchSession, currentUser, tickets, fetchTickets, logout } = useFlightStore();
-  const [view, setView] = useState<View>('dashboard');
+  const [view, setView] = useState<View>(() => {
+    const saved = localStorage.getItem('currentView');
+    return (saved as View) || 'dashboard';
+  });
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
   const [mounted, setMounted] = useState(false);
-  const [tz, setTz] = useState<TZ>('CET');
+  const [tz] = useState<TZ>('CET');
   const [search, setSearch] = useState('');
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    return localStorage.getItem('sidebarCollapsed') === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('currentView', view);
+  }, [view]);
+
+  useEffect(() => {
+    localStorage.setItem('sidebarCollapsed', String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Live ticking clock state
-  const [clockTime, setClockTime] = useState('');
-  const [clockDate, setClockDate] = useState('');
+  // Live ticking clock state - always compute both CET and SL
+  const [cetClockTime, setCetClockTime] = useState('');
+  const [cetClockDate, setCetClockDate] = useState('');
+  const [slClockTime, setSlClockTime] = useState('');
+  const [slClockDate, setSlClockDate] = useState('');
+  // Keep clockTime/clockDate for backward compat
+  const clockTime = cetClockTime;
+  const clockDate = cetClockDate;
 
   useEffect(() => {
     fetchSession().finally(() => setMounted(true));
@@ -53,39 +72,44 @@ export default function App() {
 
   // Reset view to dashboard on login
   useEffect(() => {
-    if (isAuthenticated) {
-      setView('dashboard');
+    if (isAuthenticated && currentUser) {
+      const isAdmin = currentUser.role === 'Admin';
+      const saved = localStorage.getItem('currentView') as View;
+      const adminOnlyViews: View[] = ['analytics', 'audit-logs', 'staff'];
+      
+      if (saved) {
+        if (adminOnlyViews.includes(saved) && !isAdmin) {
+          setView('dashboard');
+        } else {
+          setView(saved);
+        }
+      } else {
+        setView('dashboard');
+      }
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, currentUser]);
 
-  // Sync clock time based on selected Timezone
+  // Always sync both CET and SL clocks
   useEffect(() => {
-    const targetTz = tz === 'CET' ? 'Europe/Stockholm' : 'Asia/Colombo';
     const tick = () => {
       const now = new Date();
-      setClockTime(
-        now.toLocaleTimeString('en-GB', {
-          timeZone: targetTz,
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: false
-        })
+      setCetClockTime(
+        now.toLocaleTimeString('en-GB', { timeZone: 'Europe/Stockholm', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
       );
-      setClockDate(
-        now.toLocaleDateString('en-GB', {
-          timeZone: targetTz,
-          weekday: 'short',
-          day: '2-digit',
-          month: 'short',
-          year: 'numeric'
-        })
+      setCetClockDate(
+        now.toLocaleDateString('en-GB', { timeZone: 'Europe/Stockholm', weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
+      );
+      setSlClockTime(
+        now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+      );
+      setSlClockDate(
+        now.toLocaleDateString('en-GB', { timeZone: 'Asia/Colombo', weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
       );
     };
     tick();
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [tz]);
+  }, []);
 
   // Handle outside click for user dropdown
   useEffect(() => {
@@ -134,16 +158,19 @@ export default function App() {
         const cetTime = t.departureTimeUTC ? new Date(t.departureTimeUTC).toLocaleTimeString('en-GB', { timeZone: 'Europe/Stockholm', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
         const slTime = t.departureTimeUTC ? new Date(t.departureTimeUTC).toLocaleTimeString('en-GB', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
         const date = t.departureTimeUTC ? new Date(t.departureTimeUTC).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '';
-        return [date, t.passengerName, cetTime, slTime, t.departureAirport, t.arrivalAirport, t.pnr, t.checkin ? 'YES' : 'NO', t.remind ? 'YES' : 'NO'];
+        return [date, t.passengerName, t.departureAirport, t.arrivalAirport, cetTime, slTime, t.pnr, t.checkin ? 'YES' : 'NO', t.remind ? 'YES' : 'NO'];
       });
       autoTable(doc, {
         startY: 28,
-        head: [['Date', 'Name', 'CET', 'SL Time', 'From', 'To', 'PNR', 'Checkin', 'Remind']],
+        head: [['Date', 'Name', 'From', 'To', 'CET', 'SL Time', 'PNR', 'Checkin', 'Remind']],
         body: rows,
         styles: { fontSize: 8 },
         headStyles: { fillColor: [13, 13, 31] },
       });
-      doc.save('season-travels-departures.pdf');
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-');
+      const timeStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }).replace(/:/g, '-');
+      doc.save(`season-travels-departures_${dateStr}_${timeStr}.pdf`);
     } catch (err) { console.error('PDF failed:', err); }
   };
 
@@ -172,7 +199,7 @@ export default function App() {
       )}
 
       {/* ════════════════════ SIDEBAR ════════════════════ */}
-      <aside className={`sidebar${sidebarOpen ? ' mobile-open' : ''}`}>
+      <aside className={`sidebar${sidebarOpen ? ' mobile-open' : ''}${sidebarCollapsed ? ' collapsed' : ''}`}>
         {/* Brand/Logo Section */}
         <div className="sidebar-brand" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
@@ -189,6 +216,23 @@ export default function App() {
               <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--indigo2)', letterSpacing: '0.08em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>FLIGHT CONSOLE</span>
             </div>
           </div>
+          {/* Desktop collapse button */}
+          <button
+            className="sidebar-collapse-btn desktop-only"
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            style={{
+              background: 'none', border: '1px solid var(--border)', color: 'var(--text2)',
+              cursor: 'pointer', padding: 4, borderRadius: 6,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'all 0.15s', flexShrink: 0
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface2)'; e.currentTarget.style.color = 'var(--text)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text2)'; }}
+          >
+            <X size={14} />
+          </button>
+          {/* Mobile close button */}
           <button 
             className="mobile-close-btn"
             onClick={() => setSidebarOpen(false)}
@@ -300,10 +344,11 @@ export default function App() {
       </aside>
 
       {/* ════════════════════ MAIN CONTENT WRAPPER ════════════════════ */}
-      <div className="main-content">
+      <div className={`main-content${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
 
         {/* ════════════════════ TOPBAR ════════════════════ */}
         <header className="topbar">
+          {/* Mobile menu open */}
           <button 
             className="mobile-menu-btn" 
             onClick={() => setSidebarOpen(true)}
@@ -311,27 +356,27 @@ export default function App() {
           >
             <Menu size={18} />
           </button>
+          {/* Desktop: show expand button when sidebar is collapsed */}
+          {sidebarCollapsed && (
+            <button
+              className="desktop-only"
+              onClick={() => setSidebarCollapsed(false)}
+              title="Expand sidebar"
+              style={{
+                background: 'none', border: '1px solid var(--border)', color: 'var(--text2)',
+                cursor: 'pointer', padding: '5px 6px', borderRadius: 7, marginRight: 8,
+                display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700,
+                transition: 'all 0.15s'
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface2)'; e.currentTarget.style.color = 'var(--text)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text2)'; }}
+            >
+              <Menu size={14} />
+            </button>
+          )}
 
           <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginRight: 'auto' }}>
             {pageTitle}
-          </div>
-
-          {/* Timezone Switcher */}
-          <div className="topbar-tz" style={{ marginLeft: 'auto' }}>
-            <div className="tz-toggle">
-              <button
-                onClick={() => setTz('CET')}
-                className={`tz-btn${tz === 'CET' ? ' active-cet' : ''}`}
-              >
-                CET
-              </button>
-              <button
-                onClick={() => setTz('SL')}
-                className={`tz-btn${tz === 'SL' ? ' active-sl' : ''}`}
-              >
-                SLT (Colombo)
-              </button>
-            </div>
           </div>
 
           {/* Search bar inside topbar (Only on dashboard) */}
@@ -386,18 +431,61 @@ export default function App() {
               tz={tz} 
               search={search} 
               setSearch={setSearch}
-              clockTime={clockTime} 
-              clockDate={clockDate} 
+              clockTime={cetClockTime}
+              clockDate={cetClockDate}
+              slClockTime={slClockTime}
+              slClockDate={slClockDate}
               onAddNew={handleAddNew}
               onRefresh={handleRefresh}
               onPDF={handlePDF}
             />
           )}
-          {view === 'ticket-form' && <TicketForm editingTicket={editingTicket} onBack={handleBack} />}
-          {view === 'analytics' && isAdmin && <Analytics tz={tz} clockTime={clockTime} clockDate={clockDate} />}
-          {view === 'audit-logs' && isAdmin && <AuditLogs tz={tz} clockTime={clockTime} clockDate={clockDate} />}
-          {view === 'staff' && isAdmin && <Staff tz={tz} clockTime={clockTime} clockDate={clockDate} />}
-          {view === 'profile' && <Profile tz={tz} clockTime={clockTime} clockDate={clockDate} />}
+          {view === 'ticket-form' && (
+            <TicketForm 
+              editingTicket={editingTicket} 
+              onBack={handleBack} 
+              clockTime={clockTime} 
+              clockDate={clockDate} 
+              slClockTime={slClockTime} 
+              slClockDate={slClockDate} 
+            />
+          )}
+          {view === 'analytics' && isAdmin && (
+            <Analytics 
+              tz={tz} 
+              clockTime={clockTime} 
+              clockDate={clockDate} 
+              slClockTime={slClockTime} 
+              slClockDate={slClockDate} 
+            />
+          )}
+          {view === 'audit-logs' && isAdmin && (
+            <AuditLogs 
+              tz={tz} 
+              clockTime={clockTime} 
+              clockDate={clockDate} 
+              slClockTime={slClockTime} 
+              slClockDate={slClockDate} 
+            />
+          )}
+          {view === 'staff' && isAdmin && (
+            <Staff 
+              tz={tz} 
+              clockTime={clockTime} 
+              clockDate={clockDate} 
+              slClockTime={slClockTime} 
+              slClockDate={slClockDate} 
+            />
+          )}
+          {view === 'profile' && (
+            <Profile 
+              tz={tz} 
+              clockTime={clockTime} 
+              clockDate={clockDate} 
+              slClockTime={slClockTime} 
+              slClockDate={slClockDate} 
+            />
+          )}
         </main>
       </div>
 
@@ -408,7 +496,12 @@ export default function App() {
         message="Are you sure you want to sign out of your Season Travels session?"
         confirmLabel="Sign Out"
         variant="danger"
-        onConfirm={() => { logout(); setLogoutOpen(false); }}
+        onConfirm={() => {
+          localStorage.removeItem('currentView');
+          localStorage.removeItem('sidebarCollapsed');
+          logout();
+          setLogoutOpen(false);
+        }}
         onCancel={() => setLogoutOpen(false)}
       />
     </div>

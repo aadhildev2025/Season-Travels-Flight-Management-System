@@ -17,9 +17,11 @@ interface StaffProps {
   tz: TZ;
   clockTime: string;
   clockDate: string;
+  slClockTime?: string;
+  slClockDate?: string;
 }
 
-export default function Staff({ tz, clockTime, clockDate }: StaffProps) {
+export default function Staff({ tz, clockTime, clockDate, slClockTime, slClockDate }: StaffProps) {
   const { fetchStaff, createStaff, updateStaff, deleteStaff, currentUser } = useFlightStore();
 
   const [list, setList]         = useState<StaffUser[]>([]);
@@ -135,7 +137,7 @@ export default function Staff({ tz, clockTime, clockDate }: StaffProps) {
             <p style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2 }}>Add, view and remove system users · Admin only</p>
           </div>
         </div>
-        <ClockSection tz={tz} clockTime={clockTime} clockDate={clockDate} />
+        <ClockSection tz={tz} clockTime={clockTime} clockDate={clockDate} slClockTime={slClockTime} slClockDate={slClockDate} />
       </div>
 
       {/* Feedback */}

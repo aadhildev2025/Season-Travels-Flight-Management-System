@@ -124,8 +124,16 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
   },
 
   updateTicket: async (id, updates) => {
-    await apiFetch(`/api/tickets/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
-    await get().fetchTickets();
+    // Optimistic update: patch local state immediately for instant UI response
+    const prev = get().tickets;
+    set({ tickets: prev.map(t => t._id === id ? { ...t, ...updates } : t) });
+    try {
+      await apiFetch(`/api/tickets/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
+    } catch (err) {
+      // Revert on failure
+      set({ tickets: prev });
+      console.error('Failed to update ticket:', err);
+    }
   },
 
   deleteTicket: async (id) => {

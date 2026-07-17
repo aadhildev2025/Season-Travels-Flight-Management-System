@@ -1,34 +1,58 @@
-import type { TZ } from '../App';
-
 interface ClockSectionProps {
-  tz: TZ;
+  tz?: string;
   clockTime: string;
   clockDate: string;
+  slClockTime?: string;
+  slClockDate?: string;
 }
 
-export default function ClockSection({ tz, clockTime, clockDate }: ClockSectionProps) {
-  const tzColor = tz === 'CET' ? 'var(--indigo2)' : 'var(--cyan)';
-  const tzLabel = tz === 'CET' ? 'CET Time' : 'SL Time';
-
+export default function ClockSection({ clockTime, clockDate, slClockTime, slClockDate }: ClockSectionProps) {
   return (
-    <div className="clock-container">
-      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-        Showing: {tzLabel}
-      </span>
-      <span style={{ 
-        fontFamily: "'JetBrains Mono', monospace", 
-        fontSize: 28, 
-        fontWeight: 800, 
-        color: tzColor,
-        marginTop: 3,
-        lineHeight: 1,
-        textShadow: `0 0 20px ${tz === 'CET' ? 'rgba(165,180,252,0.2)' : 'rgba(34,211,238,0.15)'}`
-      }}>
-        {clockTime}
-      </span>
-      <span style={{ fontSize: 9, color: 'var(--text2)', fontWeight: 600, marginTop: 4 }}>
-        {clockDate}
-      </span>
+    <div className="clock-container" style={{ flexDirection: 'row', gap: 18, alignItems: 'flex-end', textAlign: 'right', flexShrink: 0 }}>
+      {/* CET Clock */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+        <span style={{ fontSize: 9, fontWeight: 800, color: 'var(--indigo2)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>
+          CET
+        </span>
+        <span style={{
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: 24,
+          fontWeight: 800,
+          color: 'var(--indigo2)',
+          lineHeight: 1,
+          textShadow: 'rgba(165,180,252,0.25) 0 0 20px'
+        }}>
+          {clockTime}
+        </span>
+        <span style={{ fontSize: 9, color: 'var(--text2)', fontWeight: 600, marginTop: 3 }}>
+          {clockDate}
+        </span>
+      </div>
+
+      {/* Divider */}
+      <div style={{ width: 1, height: 40, background: 'var(--border)', flexShrink: 0, alignSelf: 'center' }} />
+
+      {/* SL Clock */}
+      {slClockTime && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+          <span style={{ fontSize: 9, fontWeight: 800, color: 'var(--cyan)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>
+            SL
+          </span>
+          <span style={{
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 24,
+            fontWeight: 800,
+            color: 'var(--cyan)',
+            lineHeight: 1,
+            textShadow: 'rgba(34,211,238,0.2) 0 0 20px'
+          }}>
+            {slClockTime}
+          </span>
+          <span style={{ fontSize: 9, color: 'var(--text2)', fontWeight: 600, marginTop: 3 }}>
+            {slClockDate}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

@@ -18,11 +18,17 @@ const allowedOrigins = [
   'http://localhost:3002',
 ].filter(Boolean);
 
+const localOriginRegex = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-    // Allow any Vercel domain or manually configured client URL
-    if (origin.endsWith('.vercel.app') || allowedOrigins.includes(origin)) {
+    // Allow any localhost/127.0.0.1 origin, Vercel domain, or manually configured client URL
+    if (
+      localOriginRegex.test(origin) ||
+      origin.endsWith('.vercel.app') ||
+      allowedOrigins.includes(origin)
+    ) {
       return callback(null, true);
     }
     callback(new Error('Not allowed by CORS'));

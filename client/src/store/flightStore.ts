@@ -46,6 +46,7 @@ interface FlightState {
   isAuthenticated: boolean;
   tickets: Ticket[];
   loading: boolean;
+  hasFetched: boolean;
 
   fetchSession:  () => Promise<void>;
   login:         (email: string, password: string) => Promise<boolean>;
@@ -71,6 +72,7 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
   isAuthenticated: false,
   tickets:         [],
   loading:         false,
+  hasFetched:      false,
 
   fetchSession: async () => {
     try {
@@ -114,8 +116,15 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
   deleteStaff: async (id) => { await apiFetch(`/api/staff/${id}`, { method: 'DELETE' }); },
 
   fetchTickets: async () => {
-    try { const d = await apiFetch('/api/tickets'); set({ tickets: d.tickets }); }
-    catch { console.error('Failed to fetch tickets'); }
+    set({ loading: true });
+    try {
+      const d = await apiFetch('/api/tickets');
+      set({ tickets: d.tickets, hasFetched: true });
+    } catch {
+      console.error('Failed to fetch tickets');
+    } finally {
+      set({ loading: false });
+    }
   },
 
   addTicket: async (ticketData) => {

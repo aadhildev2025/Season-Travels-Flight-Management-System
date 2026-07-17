@@ -88,6 +88,8 @@ router.post('/', requireAuth, async (req, res) => {
       departureTimeUTC:req.body.departureTimeUTC|| '',
       originalTimezone:req.body.originalTimezone|| 'Asia/Colombo',
       returnTicket:    req.body.returnTicket    || false,
+      returnDepartureTimeUTC:req.body.returnDepartureTimeUTC|| '',
+      returnOriginalTimezone:req.body.returnOriginalTimezone|| '',
       remarks:         req.body.remarks         || '',
       status:          req.body.status          || 'No Need Further Actions',
       checkin:         req.body.checkin         || false,
@@ -95,7 +97,7 @@ router.post('/', requireAuth, async (req, res) => {
       createdBy:       req.user.userId,
     });
 
-    await audit(req, 'CREATE_TICKET', ticket.pnr,
+    audit(req, 'CREATE_TICKET', ticket.pnr,
       `Created ticket for ${ticket.passengerName} · ${ticket.departureAirport}→${ticket.arrivalAirport} · PNR: ${ticket.pnr}`);
 
     return res.json({ id: ticket._id.toString(), success: true });
@@ -122,7 +124,7 @@ router.put('/:id', requireAuth, async (req, res) => {
     if (req.body.passengerName)          changes.push('name updated');
     const detail = changes.length ? changes.join(', ') : 'ticket updated';
 
-    await audit(req, 'UPDATE_TICKET', ticket.pnr,
+    audit(req, 'UPDATE_TICKET', ticket.pnr,
       `Updated ticket PNR: ${ticket.pnr} · ${detail}`);
 
     return res.json({ success: true, ticket });
@@ -138,7 +140,7 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
     const ticket = await Ticket.findByIdAndDelete(req.params.id);
     if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
 
-    await audit(req, 'DELETE_TICKET', ticket.pnr,
+    audit(req, 'DELETE_TICKET', ticket.pnr,
       `Deleted ticket for ${ticket.passengerName} · PNR: ${ticket.pnr}`);
 
     return res.json({ success: true });

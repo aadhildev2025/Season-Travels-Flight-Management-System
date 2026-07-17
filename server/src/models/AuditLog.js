@@ -16,4 +16,6 @@ auditLogSchema.index({ createdAt: -1 });
 // TTL Index: Auto-delete logs older than 30 days (30 days * 24h * 60m * 60s)
 auditLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
 
+auditLogSchema.index({ action: 1 });
+
 export default mongoose.model('AuditLog', auditLogSchema);

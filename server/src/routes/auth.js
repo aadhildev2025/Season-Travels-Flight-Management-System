@@ -59,7 +59,7 @@ router.post('/login', async (req, res) => {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 60 * 60 * 24 * 7,
+      maxAge: 365 * 24 * 60 * 60 * 1000,
     });
 
     // Inline audit (no req.user yet)
@@ -133,10 +133,10 @@ router.put('/profile', requireAuth, async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax', path: '/',
-      maxAge: 60 * 60 * 24 * 7,
+      maxAge: 365 * 24 * 60 * 60 * 1000,
     });
 
-    await audit(req, 'UPDATE_PROFILE', user.email, `Profile updated: ${changes.join('; ') || 'no changes'}`);
+    audit(req, 'UPDATE_PROFILE', user.email, `Profile updated: ${changes.join('; ') || 'no changes'}`);
 
     return res.json({ user: newPayload, success: true });
   } catch (err) {

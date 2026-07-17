@@ -25,14 +25,15 @@ import {
   Plane,
   ChevronDown,
   Menu,
-  X
+  X,
+  CheckCircle
 } from 'lucide-react';
 
 export type View = 'dashboard' | 'ticket-form' | 'analytics' | 'audit-logs' | 'profile' | 'staff';
-export type TZ = 'CET' | 'SL';
+export type TZ = 'CET' | 'SLT';
 
 export default function App() {
-  const { isAuthenticated, fetchSession, currentUser, tickets, fetchTickets, logout } = useFlightStore();
+  const { isAuthenticated, fetchSession, currentUser, tickets, fetchTickets, logout, loading } = useFlightStore();
   const [view, setView] = useState<View>(() => {
     const saved = localStorage.getItem('currentView');
     return (saved as View) || 'dashboard';
@@ -44,17 +45,32 @@ export default function App() {
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    return localStorage.getItem('sidebarCollapsed') === 'true';
-  });
+  // Sidebar always starts collapsed; user opens it manually
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const [scrolled, setScrolled] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   useEffect(() => {
     localStorage.setItem('currentView', view);
   }, [view]);
 
   useEffect(() => {
-    localStorage.setItem('sidebarCollapsed', String(sidebarCollapsed));
-  }, [sidebarCollapsed]);
+    const handleScroll = (e: Event) => {
+      let scrollTop = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+      if (e.target && e.target !== document && e.target !== window && e.target instanceof HTMLElement) {
+        scrollTop = e.target.scrollTop;
+      }
+      setScrolled(scrollTop > 15);
+    };
+    window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
+    return () => window.removeEventListener('scroll', handleScroll, { capture: true });
+  }, []);
+
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Live ticking clock state - always compute both CET and SL
@@ -70,7 +86,7 @@ export default function App() {
     fetchSession().finally(() => setMounted(true));
   }, [fetchSession]);
 
-  // Reset view to dashboard on login
+  // Reset view and sidebar on login
   useEffect(() => {
     if (isAuthenticated && currentUser) {
       const isAdmin = currentUser.role === 'Admin';
@@ -86,6 +102,8 @@ export default function App() {
       } else {
         setView('dashboard');
       }
+      setSidebarOpen(false);
+      setSidebarCollapsed(true);
     }
   }, [isAuthenticated, currentUser]);
 
@@ -144,6 +162,12 @@ export default function App() {
   const handleEdit = (t: Ticket) => { setEditingTicket(t); setView('ticket-form'); };
   const handleBack = () => { setEditingTicket(null); setView('dashboard'); };
   const handleRefresh = () => fetchTickets();
+  const handleTicketSuccess = (msg: string) => {
+    showToast(msg);
+    setEditingTicket(null);
+    setView('dashboard');
+    fetchTickets();
+  };
 
   const handlePDF = async () => {
     try {
@@ -156,13 +180,13 @@ export default function App() {
       doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 22);
       const rows = tickets.map(t => {
         const cetTime = t.departureTimeUTC ? new Date(t.departureTimeUTC).toLocaleTimeString('en-GB', { timeZone: 'Europe/Stockholm', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
-        const slTime = t.departureTimeUTC ? new Date(t.departureTimeUTC).toLocaleTimeString('en-GB', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+        const sltTime = t.departureTimeUTC ? new Date(t.departureTimeUTC).toLocaleTimeString('en-GB', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
         const date = t.departureTimeUTC ? new Date(t.departureTimeUTC).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '';
-        return [date, t.passengerName, t.departureAirport, t.arrivalAirport, cetTime, slTime, t.pnr, t.checkin ? 'YES' : 'NO', t.remind ? 'YES' : 'NO'];
+        return [date, t.passengerName, t.departureAirport, t.arrivalAirport, cetTime, sltTime, t.flightNumber || '—', t.pnr, t.checkin ? 'YES' : 'NO', t.remind ? 'YES' : 'NO'];
       });
       autoTable(doc, {
         startY: 28,
-        head: [['Date', 'Name', 'From', 'To', 'CET', 'SL Time', 'PNR', 'Checkin', 'Remind']],
+        head: [['Date', 'Name', 'From', 'To', 'CET', 'SLT Time', 'Flight No.', 'PNR', 'Checkin', 'Remind']],
         body: rows,
         styles: { fontSize: 8 },
         headStyles: { fillColor: [13, 13, 31] },
@@ -375,9 +399,39 @@ export default function App() {
             </button>
           )}
 
-          <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginRight: 'auto' }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {pageTitle}
           </div>
+
+          {/* Spacer to push search and actions to the right */}
+          <div style={{ flex: 1 }} />
+
+          {/* Sticky clock shown in topbar when scrolled */}
+          {scrolled && view === 'dashboard' && (
+            <div style={{
+              position: 'absolute',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 18,
+              animation: 'fadeIn 0.25s ease-out',
+              pointerEvents: 'none',
+              zIndex: 10,
+            }}>
+              {/* CET */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <span style={{ fontSize: 9, fontWeight: 800, color: 'var(--indigo2)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>CET</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 17, fontWeight: 800, color: 'var(--indigo2)', letterSpacing: '0.04em' }}>{cetClockTime}</span>
+              </div>
+              <div style={{ width: 1, height: 22, background: 'var(--border)' }} />
+              {/* SLT */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <span style={{ fontSize: 9, fontWeight: 800, color: 'var(--cyan)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>SLT</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 17, fontWeight: 800, color: 'var(--cyan)', letterSpacing: '0.04em' }}>{slClockTime}</span>
+              </div>
+            </div>
+          )}
 
           {/* Search bar inside topbar (Only on dashboard) */}
           {view === 'dashboard' && (
@@ -407,8 +461,8 @@ export default function App() {
                 <button onClick={handleAddNew} className="btn btn-primary btn-sm" style={{ gap: 4 }}>
                   <Plus size={12} /> Add Ticket
                 </button>
-                <button onClick={handleRefresh} className="btn btn-ghost btn-icon" style={{ padding: '6px' }} title="Refresh">
-                  <RefreshCw size={13} />
+                <button onClick={handleRefresh} className="btn btn-ghost btn-icon" style={{ padding: '6px' }} title="Refresh" disabled={loading}>
+                  <RefreshCw size={13} className={loading ? "spin" : ""} />
                 </button>
                 <button onClick={handlePDF} className="btn btn-ghost btn-sm" style={{ gap: 4 }}>
                   <Download size={12} /> PDF
@@ -443,7 +497,8 @@ export default function App() {
           {view === 'ticket-form' && (
             <TicketForm 
               editingTicket={editingTicket} 
-              onBack={handleBack} 
+              onBack={handleBack}
+              onSuccess={handleTicketSuccess}
               clockTime={clockTime} 
               clockDate={clockDate} 
               slClockTime={slClockTime} 
@@ -499,11 +554,31 @@ export default function App() {
         onConfirm={() => {
           localStorage.removeItem('currentView');
           localStorage.removeItem('sidebarCollapsed');
+          setSidebarOpen(false);
+          setSidebarCollapsed(true);
           logout();
           setLogoutOpen(false);
         }}
         onCancel={() => setLogoutOpen(false)}
       />
+
+      {/* ════ Global Toast Notification ════ */}
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: 28, right: 28, zIndex: 9999,
+          display: 'flex', alignItems: 'center', gap: 10,
+          background: toast.type === 'success'
+            ? 'linear-gradient(135deg, #059669, #10b981)'
+            : 'linear-gradient(135deg, #dc2626, #ef4444)',
+          color: '#fff', borderRadius: 12, padding: '12px 20px',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
+          animation: 'slideIn 0.3s cubic-bezier(0.34,1.56,0.64,1)',
+          fontSize: 13, fontWeight: 700, minWidth: 240, maxWidth: 340,
+        }}>
+          <CheckCircle size={18} style={{ flexShrink: 0 }} />
+          {toast.message}
+        </div>
+      )}
     </div>
   );
 }

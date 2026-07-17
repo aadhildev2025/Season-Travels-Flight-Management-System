@@ -19,6 +19,8 @@ export interface Ticket {
   departureTimeUTC: string;
   originalTimezone: string;
   returnTicket: boolean;
+  returnDepartureTimeUTC?: string;
+  returnOriginalTimezone?: string;
   remarks: string;
   status: string;
   checkin: boolean;
@@ -50,6 +52,12 @@ export const AIRPORTS: Airport[] = [
   { code: 'DXB', name: 'Dubai International Airport', city: 'Dubai', country: 'UAE', timezone: 'Asia/Dubai' },
   { code: 'SIN', name: 'Singapore Changi Airport', city: 'Singapore', country: 'Singapore', timezone: 'Asia/Singapore' },
   { code: 'FRA', name: 'Frankfurt Airport', city: 'Frankfurt', country: 'Germany', timezone: 'Europe/Berlin' },
+  { code: 'SYD', name: 'Sydney Airport', city: 'Sydney', country: 'Australia', timezone: 'Australia/Sydney' },
+  { code: 'AKL', name: 'Auckland Airport', city: 'Auckland', country: 'New Zealand', timezone: 'Pacific/Auckland' },
+  { code: 'NRT', name: 'Tokyo Narita Airport', city: 'Tokyo (Narita)', country: 'Japan', timezone: 'Asia/Tokyo' },
+  { code: 'PEK', name: 'Beijing Capital International Airport', city: 'Beijing', country: 'China', timezone: 'Asia/Shanghai' },
+  { code: 'JFK', name: 'John F. Kennedy International Airport', city: 'New York', country: 'United States', timezone: 'America/New_York' },
+  { code: 'LAX', name: 'Los Angeles International Airport', city: 'Los Angeles', country: 'United States', timezone: 'America/Los_Angeles' },
 ];
 
 export const AIRLINES: Airline[] = [

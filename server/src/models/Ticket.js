@@ -47,6 +47,14 @@ const ticketSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  returnDepartureTimeUTC: {
+    type: String,
+    default: '',
+  },
+  returnOriginalTimezone: {
+    type: String,
+    default: '',
+  },
   remarks: {
     type: String,
     default: '',
@@ -68,5 +76,10 @@ const ticketSchema = new mongoose.Schema({
     default: '',
   },
 }, { timestamps: true });
+
+ticketSchema.index({ pnr: 1 });
+ticketSchema.index({ passengerName: 1 });
+ticketSchema.index({ departureTimeUTC: 1 });
+ticketSchema.index({ createdAt: -1 });
 
 export default mongoose.model('Ticket', ticketSchema);

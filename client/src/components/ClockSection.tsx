@@ -36,7 +36,7 @@ export default function ClockSection({ clockTime, clockDate, slClockTime, slCloc
       {slClockTime && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
           <span style={{ fontSize: 9, fontWeight: 800, color: 'var(--cyan)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>
-            SL
+            SLT
           </span>
           <span style={{
             fontFamily: "'JetBrains Mono', monospace",

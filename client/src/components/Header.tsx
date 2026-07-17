@@ -81,7 +81,7 @@ export default function Header({ tz, onTzChange, search, onSearchChange, showSea
           <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
             {/* TZ toggle above clock */}
             <div style={{ display:'flex', background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:7, overflow:'hidden' }}>
-              {(['CET','SL'] as TZ[]).map(t => (
+              {(['CET','SLT'] as TZ[]).map(t => (
                 <button key={t} onClick={() => onTzChange(t)}
                   style={{
                     padding:'3px 14px', border:'none', cursor:'pointer',
@@ -89,7 +89,7 @@ export default function Header({ tz, onTzChange, search, onSearchChange, showSea
                     background: tz === t ? (t === 'CET' ? 'var(--indigo)' : '#0891b2') : 'transparent',
                     color: tz === t ? '#fff' : 'var(--text2)',
                   }}>
-                  {t === 'CET' ? 'CET' : 'SL'}
+                  {t}
                 </button>
               ))}
             </div>

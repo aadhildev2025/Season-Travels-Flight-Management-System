@@ -4,7 +4,7 @@ import User from '../models/User.js';
 const SECRET = process.env.JWT_SECRET || 'season-travels-secret-key-change-in-production';
 
 export function signToken(payload) {
-  return jwt.sign(payload, SECRET, { expiresIn: '7d' });
+  return jwt.sign(payload, SECRET, { expiresIn: '365d' });
 }
 
 export function verifyToken(token) {

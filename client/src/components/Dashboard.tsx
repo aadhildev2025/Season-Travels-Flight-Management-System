@@ -4,7 +4,7 @@ import { useFlightStore } from '../store/flightStore';
 import { utcToLocalTime, formatCETTime } from '../utils/timezone';
 import ConfirmDialog from './ConfirmDialog';
 import ClockSection from './ClockSection';
-import { Plane, Mail, MessageCircle, X, Search, Plus, RefreshCw, Download } from 'lucide-react';
+import { Plane, Mail, MessageCircle, X, Search, Plus, RefreshCw, Download, Repeat } from 'lucide-react';
 import type { Ticket } from '../types';
 import type { TZ } from '../App';
 
@@ -23,17 +23,25 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, clockDate, slClockTime, slClockDate, onAddNew, onRefresh, onPDF }: DashboardProps) {
-  const { tickets, currentUser, deleteTicket, updateTicket } = useFlightStore();
+  const { tickets, currentUser, deleteTicket, updateTicket, loading, hasFetched } = useFlightStore();
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [todayStr, setTodayStr]               = useState('');
   const [reminderTicket, setReminderTicket]   = useState<Ticket | null>(null);
   const [copiedPnr, setCopiedPnr]             = useState<string | null>(null);
-  // Track newly entered ticket ID for green flash animation
   const [newTicketId, setNewTicketId]         = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing]       = useState(false);
   const prevTicketIds = useRef<Set<string>>(new Set());
+  const prevTicketsLength = useRef(tickets.length);
+  
+  // Debounce search to prevent UI lagging on rapid typing
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   useEffect(() => {
-    const tick = () => setTodayStr(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' }));
+    const tick = () => setTodayStr(formatDate(new Date().toISOString()));
     tick();
     const id = setInterval(tick, 60_000);
     return () => clearInterval(id);
@@ -50,10 +58,21 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
     prevTicketIds.current = currentIds;
   }, [tickets]);
 
+  // Trigger quick refresh animation when tickets length changes after a manual refresh
+  useEffect(() => {
+    if (onRefresh && tickets.length !== prevTicketsLength.current && hasFetched) {
+      setIsRefreshing(true);
+      const t = setTimeout(() => setIsRefreshing(false), 400);
+      prevTicketsLength.current = tickets.length;
+      return () => clearTimeout(t);
+    }
+    prevTicketsLength.current = tickets.length;
+  }, [tickets, hasFetched, onRefresh]);
+
   const filtered = tickets.filter(t => {
     // Hide departure today tickets after 1 minute has elapsed from the departure time
     if (t.departureTimeUTC) {
-      const isDepToday = getDateStr(t.departureTimeUTC) === todayStr;
+      const isDepToday = formatDate(t.departureTimeUTC) === todayStr;
       if (isDepToday) {
         const depTime = new Date(t.departureTimeUTC);
         const now = new Date();
@@ -63,15 +82,15 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
       }
     }
 
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
+    if (!debouncedSearch.trim()) return true;
+    const q = debouncedSearch.toLowerCase();
     return t.passengerName.toLowerCase().includes(q) || t.pnr.toLowerCase().includes(q);
   });
 
   // Sort: today's tickets first (newest added at top), then by departure time
   const sorted = [...filtered].sort((a, b) => {
-    const aToday = getDateStr(a.departureTimeUTC) === todayStr;
-    const bToday = getDateStr(b.departureTimeUTC) === todayStr;
+    const aToday = formatDate(a.departureTimeUTC) === todayStr;
+    const bToday = formatDate(b.departureTimeUTC) === todayStr;
     if (aToday && !bToday) return -1;
     if (!aToday && bToday) return 1;
     // Within today, most recently created first
@@ -81,15 +100,11 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
     return new Date(a.departureTimeUTC).getTime() - new Date(b.departureTimeUTC).getTime();
   });
 
-  const formatDate = (utcStr: string) => {
+  function formatDate(utcStr: string) {
     if (!utcStr) return '';
     const d = new Date(utcStr);
     const m = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
     return `${String(d.getUTCDate()).padStart(2,'0')}-${m[d.getUTCMonth()]}-${String(d.getUTCFullYear()).slice(2)}`;
-  };
-
-  function getDateStr(utcStr: string) {
-    return utcStr ? new Date(utcStr).toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' }) : '';
   }
 
   const getCETTime = (utcStr: string) => {
@@ -119,10 +134,10 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
     };
   };
 
-  const handleSendGmail = (ticket: Ticket) => {
+  const handleSendOneComMail = (ticket: Ticket) => {
     const { subject, body } = buildReminderMessage(ticket);
-    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(ticket.email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    window.open(gmailUrl, '_blank');
+    const oneComUrl = `https://webmail.one.com/`;
+    window.open(oneComUrl, '_blank');
     setReminderTicket(null);
   };
 
@@ -200,8 +215,8 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
           <button onClick={onAddNew} className="btn btn-primary btn-sm" style={{ flex: 1, gap: 4, padding: '10px' }}>
             <Plus size={12} /> Add Ticket
           </button>
-          <button onClick={onRefresh} className="btn btn-ghost btn-icon" style={{ padding: '10px' }} title="Refresh">
-            <RefreshCw size={13} />
+          <button onClick={onRefresh} className="btn btn-ghost btn-icon" style={{ padding: '10px' }} title="Refresh" disabled={loading}>
+            <RefreshCw size={13} className={loading ? "spin" : ""} />
           </button>
           <button onClick={onPDF} className="btn btn-ghost btn-sm" style={{ gap: 4, padding: '10px' }}>
             <Download size={12} /> PDF
@@ -210,7 +225,12 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
       </div>
 
       {/* Table */}
-      {sorted.length === 0 ? (
+      {!hasFetched && loading ? (
+        <div className="card" style={{ padding:'60px 20px', textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center', gap:12 }}>
+          <div className="spin" style={{ width: 28, height: 28, borderRadius: '50%', border: '3px solid var(--indigo)', borderTopColor: 'transparent' }} />
+          <p style={{ fontSize:13, fontWeight:600, color:'var(--text2)' }}>Loading departures…</p>
+        </div>
+      ) : sorted.length === 0 ? (
         <div className="card" style={{ padding:'60px 20px', textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
           <Plane size={30} style={{ color:'var(--text3)', transform:'rotate(45deg)' }} />
           <p style={{ fontSize:13, fontWeight:600, color:'var(--text2)' }}>
@@ -221,7 +241,18 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
           </p>
         </div>
       ) : (
-        <div className="card table-card">
+        <div className={`card table-card${isRefreshing ? ' refresh-pulse' : ''}`} style={{ position: 'relative', overflow: 'hidden', transition: 'all 0.3s ease' }}>
+          {loading && (
+            <div style={{
+              position: 'absolute',
+              top: 0, left: 0, right: 0,
+              height: 3,
+              background: 'linear-gradient(90deg, transparent, var(--indigo), transparent)',
+              backgroundSize: '200% 100%',
+              animation: 'shimmer 1.5s infinite linear',
+              zIndex: 10,
+            }} />
+          )}
           <div className="table-scroll-container">
             <table className="data-table">
               <thead>
@@ -231,7 +262,8 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
                   <th style={th}>From</th>
                   <th style={th}>To</th>
                   <th style={{ ...th, color:'var(--indigo2)' }}>CET</th>
-                  <th style={{ ...th, color:'var(--cyan)' }}>SL</th>
+                  <th style={{ ...th, color:'var(--cyan)' }}>SLT</th>
+                  <th style={th}>Flight No.</th>
                   <th style={th}>PNR</th>
                   <th style={{ ...th, textAlign:'center' }}>Checkin</th>
                   <th style={{ ...th, textAlign:'center' }}>Remind</th>
@@ -240,7 +272,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
               </thead>
               <tbody>
                 {sorted.map(ticket => {
-                  const isToday = getDateStr(ticket.departureTimeUTC) === todayStr;
+                  const isToday = formatDate(ticket.departureTimeUTC) === todayStr;
                   const isNew = newTicketId === ticket._id;
                   const hasRemark = !!(ticket.remarks && ticket.remarks.trim());
 
@@ -282,8 +314,32 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
                         )}
                       </td>
 
-                      <td style={{ ...td, fontWeight:700, color:'var(--text)', maxWidth:260, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                        {maskName(ticket.passengerName)}
+                      <td style={{ ...td, fontWeight:700, color:'var(--text)', maxWidth:280, overflow:'visible', whiteSpace:'nowrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                          <span style={{ overflow:'hidden', textOverflow:'ellipsis' }}>{maskName(ticket.passengerName)}</span>
+                          {ticket.returnTicket && (
+                            <span 
+                              title="Round Trip (Return Ticket Included)"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 3,
+                                fontSize: 8,
+                                fontWeight: 900,
+                                color: 'var(--cyan)',
+                                background: 'rgba(34, 211, 238, 0.12)',
+                                border: '1px solid rgba(34, 211, 238, 0.25)',
+                                padding: '1px 5px',
+                                borderRadius: 5,
+                                letterSpacing: '0.04em',
+                                textTransform: 'uppercase',
+                                flexShrink: 0
+                              }}
+                            >
+                              <Repeat size={8} /> RT
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       <td style={{ ...td, fontWeight:800, color:'var(--text)', letterSpacing:'0.04em' }}>{ticket.departureAirport}</td>
@@ -296,10 +352,17 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
                         </span>
                       </td>
 
-                      {/* SL Time */}
+                      {/* SLT Time */}
                       <td style={td}>
                         <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, color:'var(--cyan)', fontSize:14 }}>
                           {getSLTime(ticket.departureTimeUTC)}
+                        </span>
+                      </td>
+
+                      {/* Flight Number */}
+                      <td style={td}>
+                        <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, color:'var(--text2)', fontSize:12, letterSpacing:'0.04em' }}>
+                          {ticket.flightNumber || '—'}
                         </span>
                       </td>
 
@@ -373,7 +436,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
       {reminderTicket && (
         <SendReminderDialog
           ticket={reminderTicket}
-          onGmail={() => handleSendGmail(reminderTicket)}
+          onOneComMail={() => handleSendOneComMail(reminderTicket)}
           onWhatsApp={() => handleSendWhatsApp(reminderTicket)}
           onClose={() => setReminderTicket(null)}
         />
@@ -383,9 +446,9 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
 }
 
 /* ─── Send Reminder Dialog ─── */
-function SendReminderDialog({ ticket, onGmail, onWhatsApp, onClose }: {
+function SendReminderDialog({ ticket, onOneComMail, onWhatsApp, onClose }: {
   ticket: Ticket;
-  onGmail: () => void;
+  onOneComMail: () => void;
   onWhatsApp: () => void;
   onClose: () => void;
 }) {
@@ -463,36 +526,36 @@ function SendReminderDialog({ ticket, onGmail, onWhatsApp, onClose }: {
           </div>
         </div>
 
-        {/* Options */}
-        <div style={{ padding: '20px 22px', display: 'flex', gap: 14 }}>
-          {/* Gmail */}
-          <button
-            onClick={onGmail}
-            style={optionBtn}
-            onMouseEnter={e => {
-              e.currentTarget.style.borderColor = '#ea4335';
-              e.currentTarget.style.background = 'rgba(234,67,53,0.06)';
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 8px 24px rgba(234,67,53,0.15)';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.borderColor = 'var(--border)';
-              e.currentTarget.style.background = 'var(--surface)';
-              e.currentTarget.style.transform = 'none';
-              e.currentTarget.style.boxShadow = 'none';
-            }}
-          >
-            <div style={{
-              width: 48, height: 48, borderRadius: 14,
-              background: 'linear-gradient(135deg, #ea4335 0%, #fbbc04 50%, #34a853 100%)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 4px 16px rgba(234,67,53,0.25)',
-            }}>
-              <Mail size={22} color="#fff" />
-            </div>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Gmail</span>
-            <span style={{ fontSize: 9, color: 'var(--text2)', textAlign: 'center' }}>Open Gmail to send email reminder</span>
-          </button>
+         {/* Options */}
+         <div style={{ padding: '20px 22px', display: 'flex', gap: 14 }}>
+           {/* One.com Mail */}
+           <button
+             onClick={onOneComMail}
+             style={optionBtn}
+             onMouseEnter={e => {
+               e.currentTarget.style.borderColor = '#0055aa';
+               e.currentTarget.style.background = 'rgba(0,85,170,0.06)';
+               e.currentTarget.style.transform = 'translateY(-2px)';
+               e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,85,170,0.15)';
+             }}
+             onMouseLeave={e => {
+               e.currentTarget.style.borderColor = 'var(--border)';
+               e.currentTarget.style.background = 'var(--surface)';
+               e.currentTarget.style.transform = 'none';
+               e.currentTarget.style.boxShadow = 'none';
+             }}
+           >
+             <div style={{
+               width: 48, height: 48, borderRadius: 14,
+               background: 'linear-gradient(135deg, #0055aa 0%, #0077cc 100%)',
+               display: 'flex', alignItems: 'center', justifyContent: 'center',
+               boxShadow: '0 4px 16px rgba(0,85,170,0.25)',
+             }}>
+               <Mail size={22} color="#fff" />
+             </div>
+             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>One.com Mail</span>
+             <span style={{ fontSize: 9, color: 'var(--text2)', textAlign: 'center' }}>Open One.com Mail to send email reminder</span>
+           </button>
 
           {/* WhatsApp */}
           <button

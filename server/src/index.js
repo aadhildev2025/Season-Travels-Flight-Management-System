@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import compression from 'compression';
 import { connectDB } from './config/db.js';
 import authRoutes     from './routes/auth.js';
 import ticketRoutes   from './routes/tickets.js';
@@ -9,6 +10,7 @@ import staffRoutes    from './routes/staff.js';
 import auditLogRoutes from './routes/auditLogs.js';
 
 const app  = express();
+app.use(compression());
 const PORT = process.env.PORT || 5000;
 
 const allowedOrigins = [
@@ -77,6 +79,7 @@ app.use((err, req, res, _next) => {
 // For local running
 if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
   connectDB().then(() => {
+    isConnected = true;
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   }).catch(err => {
     console.error('Failed to start server:', err);

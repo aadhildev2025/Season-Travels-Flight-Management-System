@@ -3,25 +3,27 @@ import { useFlightStore } from '../store/flightStore';
 import { localTimeToUTC, utcToLocalTime, getTimezoneDiff } from '../utils/timezone';
 import { AIRPORTS } from '../types';
 import type { Ticket } from '../types';
-import { ArrowLeft, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Plane, CalendarDays, Clock3 } from 'lucide-react';
 import ClockSection from './ClockSection';
 
 interface TicketFormProps {
   editingTicket: Ticket | null;
   onBack: () => void;
+  onSuccess?: (msg: string) => void;
   clockTime: string;
   clockDate: string;
   slClockTime?: string;
   slClockDate?: string;
 }
 
-export default function TicketForm({ editingTicket, onBack, clockTime, clockDate, slClockTime, slClockDate }: TicketFormProps) {
+export default function TicketForm({ editingTicket, onBack, onSuccess, clockTime, clockDate, slClockTime, slClockDate }: TicketFormProps) {
   const { addTicket, updateTicket } = useFlightStore();
 
   const [passengerName, setPassengerName] = useState('');
   const [email, setEmail]                 = useState('');
   const [phone, setPhone]                 = useState('');
   const [pnr, setPnr]                     = useState('');
+  const [flightNumber, setFlightNumber]   = useState('');
   const [departureAirport, setDepAirport] = useState('');
   const [arrivalAirport, setArrAirport]   = useState('');
   const [dipDate, setDipDate]             = useState('');
@@ -30,9 +32,11 @@ export default function TicketForm({ editingTicket, onBack, clockTime, clockDate
   const [status, setStatus]               = useState('No Need Further Actions');
   const [remarks, setRemarks]             = useState('');
   const [returnTicket, setReturnTicket]   = useState(false);
+  const [returnDate, setReturnDate]       = useState('');
+  const [returnTime, setReturnTime]       = useState('');
+  const [returnCetTime, setReturnCetTime] = useState('');
   const [autoTime, setAutoTime]           = useState(true);
-  const [successMsg, setSuccessMsg]       = useState(false);
-  const [successType, setSuccessType]     = useState<'add' | 'update'>('add');
+  const [submitting, setSubmitting]       = useState(false);
 
   const [showDepList, setShowDepList]     = useState(false);
   const [showArrList, setShowArrList]     = useState(false);
@@ -57,6 +61,7 @@ export default function TicketForm({ editingTicket, onBack, clockTime, clockDate
     setEmail(editingTicket.email);
     setPhone(editingTicket.phone);
     setPnr(editingTicket.pnr);
+    setFlightNumber(editingTicket.flightNumber || '');
     setDepAirport(editingTicket.departureAirport);
     setArrAirport(editingTicket.arrivalAirport);
     setReturnTicket(editingTicket.returnTicket);
@@ -68,17 +73,18 @@ export default function TicketForm({ editingTicket, onBack, clockTime, clockDate
     setDipTime(local.time);
     const cet = utcToLocalTime(editingTicket.departureTimeUTC, 'Europe/Stockholm');
     setCetTime(cet.time);
+
+    if (editingTicket.returnDepartureTimeUTC) {
+      const retTz = editingTicket.returnOriginalTimezone || editingTicket.originalTimezone;
+      const retLocal = utcToLocalTime(editingTicket.returnDepartureTimeUTC, retTz);
+      setReturnDate(retLocal.date);
+      setReturnTime(retLocal.time);
+      const retCet = utcToLocalTime(editingTicket.returnDepartureTimeUTC, 'Europe/Stockholm');
+      setReturnCetTime(retCet.time);
+    }
   }, [editingTicket]);
 
-  // Auto CET from Dip
-  useEffect(() => {
-    if (!autoTime || !dipDate || !dipTime) return;
-    const tz  = AIRPORTS.find(a => a.code === departureAirport)?.timezone || 'Asia/Colombo';
-    const utc = localTimeToUTC(dipDate, dipTime, tz);
-    if (utc) setCetTime(utcToLocalTime(utc, 'Europe/Stockholm').time);
-  }, [dipDate, dipTime, departureAirport, autoTime]);
-
-  // CET → Dip
+  // CET Time → auto compute local departure time from departure airport tz
   const handleCETChange = (val: string) => {
     setCetTime(val);
     if (autoTime && dipDate && val) {
@@ -90,22 +96,55 @@ export default function TicketForm({ editingTicket, onBack, clockTime, clockDate
     }
   };
 
-  const handleReturnToggle = () => {
-    if (!returnTicket) {
-      const tmp = departureAirport;
-      setDepAirport(arrivalAirport);
-      setArrAirport(tmp);
-    }
-    setReturnTicket(!returnTicket);
-  };
-
-  const timeDiff = (() => {
-    if (!dipDate || !dipTime) return '';
+  // Local departure time → auto compute CET
+  useEffect(() => {
+    if (!autoTime || !dipDate || !dipTime || !departureAirport) return;
     const tz  = AIRPORTS.find(a => a.code === departureAirport)?.timezone || 'Asia/Colombo';
     const utc = localTimeToUTC(dipDate, dipTime, tz);
+    if (utc) setCetTime(utcToLocalTime(utc, 'Europe/Stockholm').time);
+  }, [dipDate, dipTime, departureAirport, autoTime]);
+
+  // Return CET → auto compute return local time
+  const handleReturnCETChange = (val: string) => {
+    setReturnCetTime(val);
+    if (autoTime && returnDate && val) {
+      const utc = localTimeToUTC(returnDate, val, 'Europe/Stockholm');
+      if (utc) {
+        const tz = AIRPORTS.find(a => a.code === arrivalAirport)?.timezone || 'Asia/Colombo';
+        setReturnTime(utcToLocalTime(utc, tz).time);
+      }
+    }
+  };
+
+  // Return local time → auto compute Return CET
+  useEffect(() => {
+    if (!autoTime || !returnDate || !returnTime || !arrivalAirport) return;
+    const tz  = AIRPORTS.find(a => a.code === arrivalAirport)?.timezone || 'Asia/Colombo';
+    const utc = localTimeToUTC(returnDate, returnTime, tz);
+    if (utc) setReturnCetTime(utcToLocalTime(utc, 'Europe/Stockholm').time);
+  }, [returnDate, returnTime, arrivalAirport, autoTime]);
+
+  // Time diffs
+  const depAirportTz = AIRPORTS.find(a => a.code === departureAirport)?.timezone || '';
+  const arrAirportTz = AIRPORTS.find(a => a.code === arrivalAirport)?.timezone || '';
+
+  const timeDiffDepCET = (() => {
+    if (!dipDate || !dipTime || !depAirportTz) return '';
+    const utc = localTimeToUTC(dipDate, dipTime, depAirportTz);
     if (!utc) return '';
-    return getTimezoneDiff(new Date(utc), tz, 'Europe/Stockholm');
+    return getTimezoneDiff(new Date(utc), depAirportTz, 'Europe/Stockholm');
   })();
+
+  const timeDiffDepArr = (() => {
+    if (!dipDate || !dipTime || !depAirportTz || !arrAirportTz) return '';
+    const utc = localTimeToUTC(dipDate, dipTime, depAirportTz);
+    if (!utc) return '';
+    return getTimezoneDiff(new Date(utc), depAirportTz, arrAirportTz);
+  })();
+
+  const handleReturnToggle = () => {
+    setReturnTicket(prev => !prev);
+  };
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
@@ -116,6 +155,10 @@ export default function TicketForm({ editingTicket, onBack, clockTime, clockDate
     if (!departureAirport)    e.dep             = 'Required';
     if (!arrivalAirport)      e.arr             = 'Required';
     if (!pnr.trim())          e.pnr             = 'Required';
+    if (returnTicket) {
+      if (!returnDate)        e.returnDate      = 'Required';
+      if (!returnTime)        e.returnTime      = 'Required';
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -123,46 +166,60 @@ export default function TicketForm({ editingTicket, onBack, clockTime, clockDate
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
-    const tz   = AIRPORTS.find(a => a.code === departureAirport)?.timezone || 'Asia/Colombo';
-    const dtu  = localTimeToUTC(dipDate, dipTime, tz);
-    const payload = { passengerName, email, phone, airline: '', flightNumber: '', pnr, departureAirport, arrivalAirport, departureTimeUTC: dtu, originalTimezone: tz, returnTicket, remarks, status };
-    if (editingTicket) {
-      await updateTicket(editingTicket._id, payload);
-      setSuccessType('update');
-      setSuccessMsg(true);
-      setTimeout(() => {
-        setSuccessMsg(false);
-        onBack();
-      }, 1500);
-      return;
-    } else {
-      await addTicket(payload);
-      setSuccessType('add');
-      setSuccessMsg(true);
-      setTimeout(() => setSuccessMsg(false), 2000);
-      // Clear form after add
-      clearAll();
-      return;
+    setSubmitting(true);
+
+    const tz  = AIRPORTS.find(a => a.code === departureAirport)?.timezone || 'Asia/Colombo';
+    const dtu = localTimeToUTC(dipDate, dipTime, tz);
+
+    let returnDepartureTimeUTC = '';
+    let returnOriginalTimezone = '';
+    if (returnTicket && returnDate && returnTime) {
+      const retTz = AIRPORTS.find(a => a.code === arrivalAirport)?.timezone || 'Asia/Colombo';
+      returnDepartureTimeUTC = localTimeToUTC(returnDate, returnTime, retTz);
+      returnOriginalTimezone = retTz;
+    }
+
+    const payload = {
+      passengerName, email, phone,
+      airline: '', flightNumber,
+      pnr, departureAirport, arrivalAirport,
+      departureTimeUTC: dtu, originalTimezone: tz,
+      returnTicket, returnDepartureTimeUTC, returnOriginalTimezone,
+      remarks, status,
+    };
+
+    try {
+      if (editingTicket) {
+        await updateTicket(editingTicket._id, payload);
+        onSuccess?.('Ticket Updated Successfully!');
+      } else {
+        await addTicket(payload);
+        onSuccess?.('Ticket Saved Successfully!');
+      }
+    } catch {
+      // fallback: just go back
+      onBack();
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const clearAll = () => {
-    setPassengerName(''); setEmail(''); setPhone(''); setPnr('');
+    setPassengerName(''); setEmail(''); setPhone(''); setPnr(''); setFlightNumber('');
     setDepAirport(''); setArrAirport(''); setDipDate(''); setDipTime('');
     setCetTime(''); setRemarks(''); setReturnTicket(false);
+    setReturnDate(''); setReturnTime(''); setReturnCetTime('');
     setStatus('No Need Further Actions'); setErrors({});
   };
 
   // Styles
-  const label = { fontSize: 10, fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase' as const, letterSpacing: '0.1em', marginBottom: 5, display: 'block' };
-  const row   = (cols = 2) => ({ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 14 } as React.CSSProperties);
-  const col   = (span = 1) => ({ gridColumn: `span ${span}` } as React.CSSProperties);
-  const err   = (key: string) => errors[key] ? { borderColor: 'var(--red)' } as React.CSSProperties : {};
+  const label: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 5, display: 'block' };
+  const err   = (key: string): React.CSSProperties => errors[key] ? { borderColor: 'var(--red)' } : {};
 
   const dropdownStyle: React.CSSProperties = {
     position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50,
     background: 'var(--surface)', border: '1px solid var(--border)',
-    borderRadius: 10, padding: 4, maxHeight: 160, overflowY: 'auto',
+    borderRadius: 10, padding: 4, maxHeight: 200, overflowY: 'auto',
     boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
   };
 
@@ -172,39 +229,17 @@ export default function TicketForm({ editingTicket, onBack, clockTime, clockDate
     transition: 'background 0.1s',
   };
 
-  return (
-    <div className="fade-up" style={{ maxWidth: 700, margin: '0 auto' }}>
+  const sectionTitle = (n: string, color: string) => (
+    <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 8, marginBottom: 14 }}>
+      <h3 style={{ fontSize: 11, fontWeight: 800, color, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{n}</h3>
+    </div>
+  );
 
-      {/* Success Toast */}
-      {successMsg && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 9999,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)',
-          animation: 'fadeIn 0.2s ease-out',
-        }}>
-          <div style={{
-            background: 'linear-gradient(135deg, #059669, #10b981)',
-            color: '#fff', borderRadius: 16, padding: '20px 32px',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
-            boxShadow: '0 20px 50px rgba(16,185,129,0.3)',
-            animation: 'scaleIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
-            fontSize: 15, fontWeight: 700,
-            textAlign: 'center',
-            maxWidth: 320,
-          }}>
-            <div style={{
-              width: 50, height: 50, borderRadius: '50%',
-              background: 'rgba(255,255,255,0.2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              marginBottom: 4,
-            }}>
-              <CheckCircle size={30} />
-            </div>
-            {successType === 'add' ? 'Ticket Entered Successfully!' : 'Ticket Updated Successfully!'}
-          </div>
-        </div>
-      )}
+  const depAirportLabel = AIRPORTS.find(a => a.code === departureAirport)?.city || '';
+  const arrAirportLabel = AIRPORTS.find(a => a.code === arrivalAirport)?.city || '';
+
+  return (
+    <div className="fade-up" style={{ maxWidth: 860, margin: '0 auto' }}>
 
       {/* Page header */}
       <div className="page-header" style={{ marginBottom: 24 }}>
@@ -223,16 +258,12 @@ export default function TicketForm({ editingTicket, onBack, clockTime, clockDate
       </div>
 
       <form onSubmit={handleSubmit}>
-        <div className="card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <div className="card" style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 26 }}>
 
-          {/* Section: Customer Information */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>
-              <h3 style={{ fontSize: 11, fontWeight: 800, color: 'var(--indigo2)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                1. Customer Information
-              </h3>
-            </div>
-            <div className="form-grid-3">
+          {/* ── 1. Customer Information ── */}
+          <div>
+            {sectionTitle('1. Customer Information', 'var(--indigo2)')}
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.5fr 1.5fr', gap: 14 }}>
               <div>
                 <label style={label}>Customer Name *</label>
                 <input className="field" style={err('passengerName')} value={passengerName} placeholder="Full name"
@@ -252,26 +283,25 @@ export default function TicketForm({ editingTicket, onBack, clockTime, clockDate
             </div>
           </div>
 
-          {/* Section: Flight & Departure Details */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>
-              <h3 style={{ fontSize: 11, fontWeight: 800, color: 'var(--cyan)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                2. Flight & Departure Details
-              </h3>
-            </div>
+          {/* ── 2. Flight & Route ── */}
+          <div>
+            {sectionTitle('2. Flight & Route', 'var(--cyan)')}
 
-            {/* Row 1: From + To + PNR */}
-            <div className="form-grid-equal-3">
+            {/* Row: From + To + Flight Number + PNR */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 14, marginBottom: 14 }}>
               <div ref={depRef} style={{ position: 'relative' }}>
                 <label style={label}>From *</label>
                 <input className="field" style={err('dep')} value={departureAirport} placeholder="e.g. CMB"
                   onChange={e => { setDepAirport(e.target.value.toUpperCase()); setShowDepList(true); }}
                   onFocus={() => setShowDepList(true)} />
-                {errors.dep && <span style={{ fontSize: 10, color: 'var(--red)', marginTop: 3, display: 'block' }}>{errors.dep}</span>}
+                {depAirportLabel && <span style={{ fontSize: 9, color: 'var(--text2)', marginTop: 2, display: 'block' }}>{depAirportLabel}</span>}
+                {errors.dep && <span style={{ fontSize: 10, color: 'var(--red)', display: 'block' }}>{errors.dep}</span>}
                 {showDepList && (
                   <div style={dropdownStyle}>
                     {AIRPORTS.filter(a =>
-                      a.code.includes(departureAirport.toUpperCase()) || a.city.toLowerCase().includes(departureAirport.toLowerCase())
+                      !departureAirport || a.code.startsWith(departureAirport.toUpperCase()) ||
+                      a.city.toLowerCase().includes(departureAirport.toLowerCase()) ||
+                      a.country.toLowerCase().includes(departureAirport.toLowerCase())
                     ).map(a => (
                       <button key={a.code} type="button" style={airportBtn}
                         onClick={() => { setDepAirport(a.code); setShowDepList(false); }}
@@ -279,6 +309,7 @@ export default function TicketForm({ editingTicket, onBack, clockTime, clockDate
                         onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
                         <span style={{ fontWeight: 800 }}>{a.code}</span>
                         <span style={{ color: 'var(--text2)', marginLeft: 8 }}>{a.city}</span>
+                        <span style={{ color: 'var(--text3)', marginLeft: 6, fontSize: 10 }}>{a.country}</span>
                       </button>
                     ))}
                   </div>
@@ -290,11 +321,14 @@ export default function TicketForm({ editingTicket, onBack, clockTime, clockDate
                 <input className="field" style={err('arr')} value={arrivalAirport} placeholder="e.g. ARN"
                   onChange={e => { setArrAirport(e.target.value.toUpperCase()); setShowArrList(true); }}
                   onFocus={() => setShowArrList(true)} />
-                {errors.arr && <span style={{ fontSize: 10, color: 'var(--red)', marginTop: 3, display: 'block' }}>{errors.arr}</span>}
+                {arrAirportLabel && <span style={{ fontSize: 9, color: 'var(--text2)', marginTop: 2, display: 'block' }}>{arrAirportLabel}</span>}
+                {errors.arr && <span style={{ fontSize: 10, color: 'var(--red)', display: 'block' }}>{errors.arr}</span>}
                 {showArrList && (
                   <div style={dropdownStyle}>
                     {AIRPORTS.filter(a =>
-                      a.code.includes(arrivalAirport.toUpperCase()) || a.city.toLowerCase().includes(arrivalAirport.toLowerCase())
+                      !arrivalAirport || a.code.startsWith(arrivalAirport.toUpperCase()) ||
+                      a.city.toLowerCase().includes(arrivalAirport.toLowerCase()) ||
+                      a.country.toLowerCase().includes(arrivalAirport.toLowerCase())
                     ).map(a => (
                       <button key={a.code} type="button" style={airportBtn}
                         onClick={() => { setArrAirport(a.code); setShowArrList(false); }}
@@ -302,10 +336,18 @@ export default function TicketForm({ editingTicket, onBack, clockTime, clockDate
                         onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
                         <span style={{ fontWeight: 800 }}>{a.code}</span>
                         <span style={{ color: 'var(--text2)', marginLeft: 8 }}>{a.city}</span>
+                        <span style={{ color: 'var(--text3)', marginLeft: 6, fontSize: 10 }}>{a.country}</span>
                       </button>
                     ))}
                   </div>
                 )}
+              </div>
+
+              <div>
+                <label style={label}>Flight Number</label>
+                <input className="field" value={flightNumber} placeholder="e.g. UL503"
+                  style={{ fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase' }}
+                  onChange={e => setFlightNumber(e.target.value.toUpperCase())} />
               </div>
 
               <div>
@@ -317,30 +359,65 @@ export default function TicketForm({ editingTicket, onBack, clockTime, clockDate
               </div>
             </div>
 
-            {/* Row 2: Departure Date + Departure Time + CET Time */}
-            <div className="form-grid-date-time">
+            {/* Row: CET Time (first) + Departure Date + Departure Time (local) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr 1fr', gap: 14, marginBottom: 14 }}>
               <div>
-                <label style={label}>Departure Date *</label>
+                <label style={{ ...label, color: 'var(--indigo2)' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <Clock3 size={10} /> CET Time * <span style={{ fontSize: 8, opacity: 0.7 }}>(auto-sync)</span>
+                  </span>
+                </label>
+                <input className="field" style={{ ...err('cetTime'), borderColor: cetTime ? 'rgba(165,180,252,0.4)' : undefined }} type="time" value={cetTime}
+                  onChange={e => handleCETChange(e.target.value)} />
+                {errors.cetTime && <span style={{ fontSize: 10, color: 'var(--red)', marginTop: 3, display: 'block' }}>{errors.cetTime}</span>}
+              </div>
+              <div>
+                <label style={label}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <CalendarDays size={10} /> Departure Date *
+                  </span>
+                </label>
                 <input className="field" style={err('dipDate')} type="date" value={dipDate}
                   onChange={e => setDipDate(e.target.value)} />
                 {errors.dipDate && <span style={{ fontSize: 10, color: 'var(--red)', marginTop: 3, display: 'block' }}>{errors.dipDate}</span>}
               </div>
               <div>
-                <label style={label}>Departure Time *</label>
+                <label style={label}>
+                  Local Time *
+                  {depAirportLabel && <span style={{ marginLeft: 6, fontWeight: 500, fontSize: 9, opacity: 0.7 }}>({depAirportLabel})</span>}
+                </label>
                 <input className="field" style={err('dipTime')} type="time" value={dipTime}
                   onChange={e => setDipTime(e.target.value)} />
                 {errors.dipTime && <span style={{ fontSize: 10, color: 'var(--red)', marginTop: 3, display: 'block' }}>{errors.dipTime}</span>}
               </div>
-              <div>
-                <label style={label}>CET Time *</label>
-                <input className="field" style={err('cetTime')} type="time" value={cetTime}
-                  onChange={e => handleCETChange(e.target.value)} />
-                {errors.cetTime && <span style={{ fontSize: 10, color: 'var(--red)', marginTop: 3, display: 'block' }}>{errors.cetTime}</span>}
-              </div>
             </div>
 
-            {/* Row 3: Status + Remarks */}
-            <div className="form-grid-status-remarks">
+            {/* Time difference badges */}
+            {(timeDiffDepCET || timeDiffDepArr) && (
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+                {timeDiffDepCET && depAirportLabel && (
+                  <span style={{
+                    fontFamily: "'JetBrains Mono', monospace", fontSize: 10, fontWeight: 700,
+                    color: 'var(--indigo2)', background: 'rgba(165,180,252,0.08)',
+                    border: '1px solid rgba(165,180,252,0.2)', borderRadius: 6, padding: '3px 9px',
+                  }}>
+                    {depAirportLabel} ↔ CET: {timeDiffDepCET}
+                  </span>
+                )}
+                {timeDiffDepArr && depAirportLabel && arrAirportLabel && depAirportTz !== arrAirportTz && (
+                  <span style={{
+                    fontFamily: "'JetBrains Mono', monospace", fontSize: 10, fontWeight: 700,
+                    color: 'var(--cyan)', background: 'rgba(34,211,238,0.07)',
+                    border: '1px solid rgba(34,211,238,0.2)', borderRadius: 6, padding: '3px 9px',
+                  }}>
+                    {depAirportLabel} ↔ {arrAirportLabel}: {timeDiffDepArr}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Status + Remarks */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 14 }}>
               <div>
                 <label style={label}>Status</label>
                 <select className="field" value={status} onChange={e => setStatus(e.target.value)}>
@@ -353,32 +430,72 @@ export default function TicketForm({ editingTicket, onBack, clockTime, clockDate
               </div>
               <div>
                 <label style={label}>Remarks</label>
-                <textarea className="field" rows={3} value={remarks} placeholder="Any additional notes…"
+                <textarea className="field" rows={2} value={remarks} placeholder="Any additional notes…"
                   onChange={e => setRemarks(e.target.value)}
-                  style={{ resize: 'vertical', minHeight: 72 }} />
+                  style={{ resize: 'vertical', minHeight: 60 }} />
               </div>
             </div>
           </div>
 
-          {/* Row 6: Checkboxes + time diff */}
-          <div style={{
-            display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 20,
-            paddingTop: 14, borderTop: '1px solid var(--border)',
-          }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: 'var(--text)', cursor: 'pointer' }}>
-              <input type="checkbox" checked={returnTicket} onChange={handleReturnToggle}
-                style={{ width: 14, height: 14, accentColor: 'var(--indigo)' }} />
-              Return Ticket
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: 'var(--text)', cursor: 'pointer' }}>
-              <input type="checkbox" checked={autoTime} onChange={e => setAutoTime(e.target.checked)}
-                style={{ width: 14, height: 14, accentColor: 'var(--indigo)' }} />
-              Auto Time (CET ↔ Local)
-            </label>
-            {timeDiff && (
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--cyan)', fontWeight: 700 }}>
-                Colombo ↔ Europe: {timeDiff}
-              </span>
+          {/* ── 3. Options ── */}
+          <div style={{ paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 20 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: returnTicket ? 'var(--indigo2)' : 'var(--text)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={returnTicket} onChange={handleReturnToggle}
+                  style={{ width: 14, height: 14, accentColor: 'var(--indigo)' }} />
+                <Plane size={12} style={{ transform: 'scaleX(-1)' }} />
+                Return Ticket
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: 'var(--text)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={autoTime} onChange={e => setAutoTime(e.target.checked)}
+                  style={{ width: 14, height: 14, accentColor: 'var(--indigo)' }} />
+                Auto Time (CET ↔ Local)
+              </label>
+            </div>
+
+            {/* Return Ticket fields — shown only when checked */}
+            {returnTicket && (
+              <div style={{
+                marginTop: 16, padding: 18,
+                background: 'linear-gradient(135deg, rgba(99,102,241,0.06), rgba(34,211,238,0.04))',
+                border: '1px solid rgba(99,102,241,0.2)', borderRadius: 12,
+                animation: 'fadeIn 0.2s ease-out',
+              }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--indigo2)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14 }}>
+                  Return Flight Details
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr 1fr', gap: 14 }}>
+                  <div>
+                    <label style={{ ...label, color: 'var(--indigo2)' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <Clock3 size={10} /> Return CET *
+                      </span>
+                    </label>
+                    <input className="field" type="time" value={returnCetTime}
+                      style={{ borderColor: returnCetTime ? 'rgba(165,180,252,0.4)' : undefined }}
+                      onChange={e => handleReturnCETChange(e.target.value)} />
+                  </div>
+                  <div>
+                    <label style={label}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <CalendarDays size={10} /> Return Date *
+                      </span>
+                    </label>
+                    <input className="field" style={err('returnDate')} type="date" value={returnDate}
+                      onChange={e => setReturnDate(e.target.value)} />
+                    {errors.returnDate && <span style={{ fontSize: 10, color: 'var(--red)', marginTop: 3, display: 'block' }}>{errors.returnDate}</span>}
+                  </div>
+                  <div>
+                    <label style={label}>
+                      Return Local Time *
+                      {arrAirportLabel && <span style={{ marginLeft: 6, fontWeight: 500, fontSize: 9, opacity: 0.7 }}>({arrAirportLabel})</span>}
+                    </label>
+                    <input className="field" style={err('returnTime')} type="time" value={returnTime}
+                      onChange={e => setReturnTime(e.target.value)} />
+                    {errors.returnTime && <span style={{ fontSize: 10, color: 'var(--red)', marginTop: 3, display: 'block' }}>{errors.returnTime}</span>}
+                  </div>
+                </div>
+              </div>
             )}
           </div>
 
@@ -395,8 +512,10 @@ export default function TicketForm({ editingTicket, onBack, clockTime, clockDate
               style={{ color: '#f87171', borderColor: 'rgba(239,68,68,0.2)' }}>
               Clear All
             </button>
-            <button type="submit" className="btn btn-primary" style={{ padding: '8px 24px', fontSize: 13 }}>
-              {editingTicket ? 'Update Ticket' : 'Save Ticket'}
+            <button type="submit" className="btn btn-primary"
+              style={{ padding: '8px 28px', fontSize: 13, opacity: submitting ? 0.7 : 1 }}
+              disabled={submitting}>
+              {submitting ? 'Saving…' : (editingTicket ? 'Update Ticket' : 'Save Ticket')}
             </button>
           </div>
         </div>

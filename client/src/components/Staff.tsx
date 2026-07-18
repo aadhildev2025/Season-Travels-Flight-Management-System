@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useFlightStore } from '../store/flightStore';
 import { Plus, Trash2, Users, Eye, EyeOff, Edit2 } from 'lucide-react';
-import ClockSection from './ClockSection';
-import type { TZ } from '../App';
 
 interface StaffUser {
   _id?: string;
@@ -14,14 +12,10 @@ interface StaffUser {
 }
 
 interface StaffProps {
-  tz: TZ;
-  clockTime: string;
-  clockDate: string;
-  slClockTime?: string;
-  slClockDate?: string;
+  tz: string;
 }
 
-export default function Staff({ tz, clockTime, clockDate, slClockTime, slClockDate }: StaffProps) {
+export default function Staff({ tz }: StaffProps) {
   const { fetchStaff, createStaff, updateStaff, deleteStaff, currentUser } = useFlightStore();
 
   const [list, setList]         = useState<StaffUser[]>([]);
@@ -137,7 +131,6 @@ export default function Staff({ tz, clockTime, clockDate, slClockTime, slClockDa
             <p style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2 }}>Add, view and remove system users · Admin only</p>
           </div>
         </div>
-        <ClockSection tz={tz} clockTime={clockTime} clockDate={clockDate} slClockTime={slClockTime} slClockDate={slClockDate} />
       </div>
 
       {/* Feedback */}

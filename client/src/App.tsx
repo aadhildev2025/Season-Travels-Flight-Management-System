@@ -2,17 +2,16 @@ import { useState, useEffect, useRef } from 'react';
 import { useFlightStore } from './store/flightStore';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
-import BrandLogo from './components/BrandLogo';
 import TicketForm from './components/TicketForm';
-import Analytics from './components/Analytics';
 import AuditLogs from './components/AuditLogs';
 import Profile from './components/Profile';
 import Staff from './components/Staff';
 import ConfirmDialog from './components/ConfirmDialog';
+import SplashScreen from './components/SplashScreen';
+import HeaderClock from './components/HeaderClock';
 import type { Ticket } from './types';
 import {
   LayoutGrid,
-  BarChart2,
   ScrollText,
   UserCircle,
   Users,
@@ -21,15 +20,13 @@ import {
   RefreshCw,
   Download,
   Search,
-  Clock,
-  Plane,
   ChevronDown,
   Menu,
   X,
   CheckCircle
 } from 'lucide-react';
 
-export type View = 'dashboard' | 'ticket-form' | 'analytics' | 'audit-logs' | 'profile' | 'staff';
+export type View = 'dashboard' | 'ticket-form' | 'audit-logs' | 'profile' | 'staff';
 export type TZ = 'CET' | 'SLT';
 
 export default function App() {
@@ -40,6 +37,7 @@ export default function App() {
   });
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [showSplash, setShowSplash] = useState(() => !sessionStorage.getItem('splashShown'));
   const [tz] = useState<TZ>('CET');
   const [search, setSearch] = useState('');
   const [logoutOpen, setLogoutOpen] = useState(false);
@@ -47,7 +45,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   // Sidebar always starts collapsed; user opens it manually
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
-  const [scrolled, setScrolled] = useState(false);
+  const [focusRemarks, setFocusRemarks] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -59,28 +57,7 @@ export default function App() {
     localStorage.setItem('currentView', view);
   }, [view]);
 
-  useEffect(() => {
-    const handleScroll = (e: Event) => {
-      let scrollTop = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
-      if (e.target && e.target !== document && e.target !== window && e.target instanceof HTMLElement) {
-        scrollTop = e.target.scrollTop;
-      }
-      setScrolled(scrollTop > 15);
-    };
-    window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
-    return () => window.removeEventListener('scroll', handleScroll, { capture: true });
-  }, []);
-
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Live ticking clock state - always compute both CET and SL
-  const [cetClockTime, setCetClockTime] = useState('');
-  const [cetClockDate, setCetClockDate] = useState('');
-  const [slClockTime, setSlClockTime] = useState('');
-  const [slClockDate, setSlClockDate] = useState('');
-  // Keep clockTime/clockDate for backward compat
-  const clockTime = cetClockTime;
-  const clockDate = cetClockDate;
 
   useEffect(() => {
     fetchSession().finally(() => setMounted(true));
@@ -91,7 +68,7 @@ export default function App() {
     if (isAuthenticated && currentUser) {
       const isAdmin = currentUser.role === 'Admin';
       const saved = localStorage.getItem('currentView') as View;
-      const adminOnlyViews: View[] = ['analytics', 'audit-logs', 'staff'];
+      const adminOnlyViews: View[] = ['audit-logs', 'staff'];
       
       if (saved) {
         if (adminOnlyViews.includes(saved) && !isAdmin) {
@@ -108,26 +85,8 @@ export default function App() {
   }, [isAuthenticated, currentUser]);
 
   // Always sync both CET and SL clocks
-  useEffect(() => {
-    const tick = () => {
-      const now = new Date();
-      setCetClockTime(
-        now.toLocaleTimeString('en-GB', { timeZone: 'Europe/Stockholm', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
-      );
-      setCetClockDate(
-        now.toLocaleDateString('en-GB', { timeZone: 'Europe/Stockholm', weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
-      );
-      setSlClockTime(
-        now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
-      );
-      setSlClockDate(
-        now.toLocaleDateString('en-GB', { timeZone: 'Asia/Colombo', weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
-      );
-    };
-    tick();
-    const interval = setInterval(tick, 1000);
-    return () => clearInterval(interval);
-  }, []);
+  // (Clock now lives in the self-contained <HeaderClock/> so ticking does not
+  //  re-render App or the ticket table.)
 
   // Handle outside click for user dropdown
   useEffect(() => {
@@ -145,11 +104,23 @@ export default function App() {
     setSearch('');
   }, [view]);
 
+  // Branded splash on first load of the session
+  if (showSplash) {
+    return (
+      <SplashScreen
+        onDone={() => {
+          sessionStorage.setItem('splashShown', '1');
+          setShowSplash(false);
+        }}
+      />
+    );
+  }
+
   if (!mounted) return (
     <div style={{ display: 'flex', height: '100vh', width: '100vw', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-        <div className="spin" style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid var(--indigo)', borderTopColor: 'transparent' }} />
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)' }}>Loading Flight Console…</span>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }} className="fade-in">
+        <div className="spin" style={{ width: 34, height: 34, borderRadius: '50%', border: '3px solid var(--indigo)', borderTopColor: 'transparent' }} />
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Loading Flight Console…</span>
       </div>
     </div>
   );
@@ -158,9 +129,9 @@ export default function App() {
 
   const isAdmin = currentUser?.role === 'Admin';
 
-  const handleAddNew = () => { setEditingTicket(null); setView('ticket-form'); };
-  const handleEdit = (t: Ticket) => { setEditingTicket(t); setView('ticket-form'); };
-  const handleBack = () => { setEditingTicket(null); setView('dashboard'); };
+  const handleAddNew = () => { setEditingTicket(null); setFocusRemarks(false); setView('ticket-form'); };
+  const handleEdit = (t: Ticket, focusRemarks?: boolean) => { setEditingTicket(t); setFocusRemarks(!!focusRemarks); setView('ticket-form'); };
+  const handleBack = () => { setEditingTicket(null); setFocusRemarks(false); setView('dashboard'); };
   const handleRefresh = () => fetchTickets();
   const handleTicketSuccess = (msg: string) => {
     showToast(msg);
@@ -201,7 +172,6 @@ export default function App() {
   // Nav Items definition
   const sidebarNavItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutGrid size={15} /> },
-    { id: 'analytics', label: 'Analytics', icon: <BarChart2 size={15} />, adminOnly: true },
     { id: 'audit-logs', label: 'Audit Logs', icon: <ScrollText size={15} />, adminOnly: true },
     { id: 'staff', label: 'Staff Management', icon: <Users size={15} />, adminOnly: true },
     { id: 'profile', label: 'My Settings', icon: <UserCircle size={15} /> },
@@ -225,20 +195,12 @@ export default function App() {
       {/* ════════════════════ SIDEBAR ════════════════════ */}
       <aside className={`sidebar${sidebarOpen ? ' mobile-open' : ''}${sidebarCollapsed ? ' collapsed' : ''}`}>
         {/* Brand/Logo Section */}
-        <div className="sidebar-brand" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: 8,
-              background: 'linear-gradient(135deg, #6366f1, #818cf8)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 0 16px rgba(99,102,241,0.3)', flexShrink: 0
-            }}>
-              <BrandLogo size={16} style={{ color: 'white' }} />
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-              <span style={{ fontSize: 12, fontWeight: 900, letterSpacing: '0.04em', color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>SEASON TRAVELS</span>
-              <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--indigo2)', letterSpacing: '0.08em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>FLIGHT CONSOLE</span>
-            </div>
+          <div className="sidebar-brand" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
+            <img src="/logo.png" alt="Season Travels" style={{ width: 200, height: 88, objectFit: 'contain', flexShrink: 0 }} />
+            <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--indigo2)', letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: -18, paddingLeft: 2 }}>
+              Flight Management System
+            </span>
           </div>
           {/* Desktop collapse button */}
           <button
@@ -406,32 +368,8 @@ export default function App() {
           {/* Spacer to push search and actions to the right */}
           <div style={{ flex: 1 }} />
 
-          {/* Sticky clock shown in topbar when scrolled */}
-          {scrolled && view === 'dashboard' && (
-            <div style={{
-              position: 'absolute',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 18,
-              animation: 'fadeIn 0.25s ease-out',
-              pointerEvents: 'none',
-              zIndex: 10,
-            }}>
-              {/* CET */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                <span style={{ fontSize: 9, fontWeight: 800, color: 'var(--indigo2)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>CET</span>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 17, fontWeight: 800, color: 'var(--indigo2)', letterSpacing: '0.04em' }}>{cetClockTime}</span>
-              </div>
-              <div style={{ width: 1, height: 22, background: 'var(--border)' }} />
-              {/* SLT */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                <span style={{ fontSize: 9, fontWeight: 800, color: 'var(--cyan)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>SLT</span>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 17, fontWeight: 800, color: 'var(--cyan)', letterSpacing: '0.04em' }}>{slClockTime}</span>
-              </div>
-            </div>
-          )}
+          {/* Sticky clock always shown in topbar (self-contained, ticks without re-rendering App) */}
+          <HeaderClock />
 
           {/* Search bar inside topbar (Only on dashboard) */}
           {view === 'dashboard' && (
@@ -479,16 +417,13 @@ export default function App() {
 
         {/* ════════════════════ MAIN CONTENT AREA ════════════════════ */}
         <main className="main-content-area" style={{ flex: 1, position: 'relative' }}>
+          <div key={view} className="view-transition" style={{ height: '100%' }}>
           {view === 'dashboard' && (
             <Dashboard 
               onEdit={handleEdit} 
               tz={tz} 
               search={search} 
               setSearch={setSearch}
-              clockTime={cetClockTime}
-              clockDate={cetClockDate}
-              slClockTime={slClockTime}
-              slClockDate={slClockDate}
               onAddNew={handleAddNew}
               onRefresh={handleRefresh}
               onPDF={handlePDF}
@@ -499,48 +434,19 @@ export default function App() {
               editingTicket={editingTicket} 
               onBack={handleBack}
               onSuccess={handleTicketSuccess}
-              clockTime={clockTime} 
-              clockDate={clockDate} 
-              slClockTime={slClockTime} 
-              slClockDate={slClockDate} 
-            />
-          )}
-          {view === 'analytics' && isAdmin && (
-            <Analytics 
-              tz={tz} 
-              clockTime={clockTime} 
-              clockDate={clockDate} 
-              slClockTime={slClockTime} 
-              slClockDate={slClockDate} 
+              focusRemarks={focusRemarks}
             />
           )}
           {view === 'audit-logs' && isAdmin && (
-            <AuditLogs 
-              tz={tz} 
-              clockTime={clockTime} 
-              clockDate={clockDate} 
-              slClockTime={slClockTime} 
-              slClockDate={slClockDate} 
-            />
+            <AuditLogs tz={tz} />
           )}
           {view === 'staff' && isAdmin && (
-            <Staff 
-              tz={tz} 
-              clockTime={clockTime} 
-              clockDate={clockDate} 
-              slClockTime={slClockTime} 
-              slClockDate={slClockDate} 
-            />
+            <Staff tz={tz} />
           )}
           {view === 'profile' && (
-            <Profile 
-              tz={tz} 
-              clockTime={clockTime} 
-              clockDate={clockDate} 
-              slClockTime={slClockTime} 
-              slClockDate={slClockDate} 
-            />
+            <Profile tz={tz} />
           )}
+          </div>
         </main>
       </div>
 
@@ -564,7 +470,7 @@ export default function App() {
 
       {/* ════ Global Toast Notification ════ */}
       {toast && (
-        <div style={{
+        <div className="toast-pop" style={{
           position: 'fixed', bottom: 28, right: 28, zIndex: 9999,
           display: 'flex', alignItems: 'center', gap: 10,
           background: toast.type === 'success'
@@ -572,7 +478,6 @@ export default function App() {
             : 'linear-gradient(135deg, #dc2626, #ef4444)',
           color: '#fff', borderRadius: 12, padding: '12px 20px',
           boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
-          animation: 'slideIn 0.3s cubic-bezier(0.34,1.56,0.64,1)',
           fontSize: 13, fontWeight: 700, minWidth: 240, maxWidth: 340,
         }}>
           <CheckCircle size={18} style={{ flexShrink: 0 }} />

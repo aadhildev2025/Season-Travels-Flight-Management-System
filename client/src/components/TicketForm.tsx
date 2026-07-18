@@ -3,20 +3,16 @@ import { useFlightStore } from '../store/flightStore';
 import { localTimeToUTC, utcToLocalTime, getTimezoneDiff } from '../utils/timezone';
 import { AIRPORTS } from '../types';
 import type { Ticket } from '../types';
-import { ArrowLeft, Plane, CalendarDays, Clock3 } from 'lucide-react';
-import ClockSection from './ClockSection';
+import { ArrowLeft, CalendarDays, Clock3, RotateCcw } from 'lucide-react';
 
 interface TicketFormProps {
   editingTicket: Ticket | null;
   onBack: () => void;
   onSuccess?: (msg: string) => void;
-  clockTime: string;
-  clockDate: string;
-  slClockTime?: string;
-  slClockDate?: string;
+  focusRemarks?: boolean;
 }
 
-export default function TicketForm({ editingTicket, onBack, onSuccess, clockTime, clockDate, slClockTime, slClockDate }: TicketFormProps) {
+export default function TicketForm({ editingTicket, onBack, onSuccess, focusRemarks }: TicketFormProps) {
   const { addTicket, updateTicket } = useFlightStore();
 
   const [passengerName, setPassengerName] = useState('');
@@ -31,24 +27,37 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, clockTime
   const [cetTime, setCetTime]             = useState('');
   const [status, setStatus]               = useState('No Need Further Actions');
   const [remarks, setRemarks]             = useState('');
-  const [returnTicket, setReturnTicket]   = useState(false);
-  const [returnDate, setReturnDate]       = useState('');
-  const [returnTime, setReturnTime]       = useState('');
-  const [returnCetTime, setReturnCetTime] = useState('');
   const [autoTime, setAutoTime]           = useState(true);
   const [submitting, setSubmitting]       = useState(false);
+  const [returnTicket, setReturnTicket]           = useState(false);
+  const [returnDepAirport, setReturnDepAirport]   = useState('');
+  const [returnArrAirport, setReturnArrAirport]   = useState('');
+  const [returnFlightNumber, setReturnFlightNumber] = useState('');
+  const [returnPnr, setReturnPnr]                 = useState('');
+  const [returnDipDate, setReturnDipDate]         = useState('');
+  const [returnDipTime, setReturnDipTime]         = useState('');
+  const [returnCetTime, setReturnCetTime]         = useState('');
+  const [returnAutoTime, setReturnAutoTime]       = useState(true);
 
   const [showDepList, setShowDepList]     = useState(false);
   const [showArrList, setShowArrList]     = useState(false);
+  const [showReturnDepList, setShowReturnDepList] = useState(false);
+  const [showReturnArrList, setShowReturnArrList] = useState(false);
   const [errors, setErrors]               = useState<Record<string, string>>({});
   const depRef = useRef<HTMLDivElement>(null);
   const arrRef = useRef<HTMLDivElement>(null);
+  const returnDepRef = useRef<HTMLDivElement>(null);
+  const returnArrRef = useRef<HTMLDivElement>(null);
+  const remarksRef = useRef<HTMLTextAreaElement>(null);
+  const prevReturnTicket = useRef(false);
 
   // Close dropdowns on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (depRef.current && !depRef.current.contains(e.target as Node)) setShowDepList(false);
       if (arrRef.current && !arrRef.current.contains(e.target as Node)) setShowArrList(false);
+      if (returnDepRef.current && !returnDepRef.current.contains(e.target as Node)) setShowReturnDepList(false);
+      if (returnArrRef.current && !returnArrRef.current.contains(e.target as Node)) setShowReturnArrList(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -64,7 +73,6 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, clockTime
     setFlightNumber(editingTicket.flightNumber || '');
     setDepAirport(editingTicket.departureAirport);
     setArrAirport(editingTicket.arrivalAirport);
-    setReturnTicket(editingTicket.returnTicket);
     setRemarks(editingTicket.remarks);
     setStatus(editingTicket.status);
 
@@ -74,15 +82,31 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, clockTime
     const cet = utcToLocalTime(editingTicket.departureTimeUTC, 'Europe/Stockholm');
     setCetTime(cet.time);
 
-    if (editingTicket.returnDepartureTimeUTC) {
-      const retTz = editingTicket.returnOriginalTimezone || editingTicket.originalTimezone;
-      const retLocal = utcToLocalTime(editingTicket.returnDepartureTimeUTC, retTz);
-      setReturnDate(retLocal.date);
-      setReturnTime(retLocal.time);
-      const retCet = utcToLocalTime(editingTicket.returnDepartureTimeUTC, 'Europe/Stockholm');
-      setReturnCetTime(retCet.time);
+    if (editingTicket.returnTicket) {
+      setReturnTicket(true);
+      setReturnDepAirport(editingTicket.returnDepartureAirport || '');
+      setReturnArrAirport(editingTicket.returnArrivalAirport || '');
+      setReturnFlightNumber(editingTicket.returnFlightNumber || '');
+      setReturnPnr(editingTicket.returnPnr || '');
+      if (editingTicket.returnDepartureTimeUTC) {
+        const retLocal = utcToLocalTime(editingTicket.returnDepartureTimeUTC, editingTicket.returnOriginalTimezone || 'Asia/Colombo');
+        setReturnDipDate(retLocal.date);
+        setReturnDipTime(retLocal.time);
+        const retCet = utcToLocalTime(editingTicket.returnDepartureTimeUTC, 'Europe/Stockholm');
+        setReturnCetTime(retCet.time);
+      }
     }
   }, [editingTicket]);
+
+  // Auto-focus remarks when opened from remark badge click
+  useEffect(() => {
+    if (focusRemarks && remarksRef.current) {
+      setTimeout(() => {
+        remarksRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        remarksRef.current?.focus();
+      }, 300);
+    }
+  }, [focusRemarks]);
 
   // CET Time → auto compute local departure time from departure airport tz
   const handleCETChange = (val: string) => {
@@ -104,25 +128,25 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, clockTime
     if (utc) setCetTime(utcToLocalTime(utc, 'Europe/Stockholm').time);
   }, [dipDate, dipTime, departureAirport, autoTime]);
 
-  // Return CET → auto compute return local time
+  // Return ticket: CET Time → auto compute local departure time
   const handleReturnCETChange = (val: string) => {
     setReturnCetTime(val);
-    if (autoTime && returnDate && val) {
-      const utc = localTimeToUTC(returnDate, val, 'Europe/Stockholm');
+    if (returnAutoTime && returnDipDate && val) {
+      const utc = localTimeToUTC(returnDipDate, val, 'Europe/Stockholm');
       if (utc) {
-        const tz = AIRPORTS.find(a => a.code === arrivalAirport)?.timezone || 'Asia/Colombo';
-        setReturnTime(utcToLocalTime(utc, tz).time);
+        const tz = AIRPORTS.find(a => a.code === returnDepAirport)?.timezone || 'Asia/Colombo';
+        setReturnDipTime(utcToLocalTime(utc, tz).time);
       }
     }
   };
 
-  // Return local time → auto compute Return CET
+  // Return ticket: local departure time → auto compute CET
   useEffect(() => {
-    if (!autoTime || !returnDate || !returnTime || !arrivalAirport) return;
-    const tz  = AIRPORTS.find(a => a.code === arrivalAirport)?.timezone || 'Asia/Colombo';
-    const utc = localTimeToUTC(returnDate, returnTime, tz);
+    if (!returnAutoTime || !returnDipDate || !returnDipTime || !returnDepAirport) return;
+    const tz  = AIRPORTS.find(a => a.code === returnDepAirport)?.timezone || 'Asia/Colombo';
+    const utc = localTimeToUTC(returnDipDate, returnDipTime, tz);
     if (utc) setReturnCetTime(utcToLocalTime(utc, 'Europe/Stockholm').time);
-  }, [returnDate, returnTime, arrivalAirport, autoTime]);
+  }, [returnDipDate, returnDipTime, returnDepAirport, returnAutoTime]);
 
   // Time diffs
   const depAirportTz = AIRPORTS.find(a => a.code === departureAirport)?.timezone || '';
@@ -142,9 +166,58 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, clockTime
     return getTimezoneDiff(new Date(utc), depAirportTz, arrAirportTz);
   })();
 
-  const handleReturnToggle = () => {
-    setReturnTicket(prev => !prev);
-  };
+  // Return ticket time diffs
+  const returnDepAirportTz = AIRPORTS.find(a => a.code === returnDepAirport)?.timezone || '';
+  const returnArrAirportTz = AIRPORTS.find(a => a.code === returnArrAirport)?.timezone || '';
+  const returnDepAirportLabel = AIRPORTS.find(a => a.code === returnDepAirport)?.city || '';
+  const returnArrAirportLabel = AIRPORTS.find(a => a.code === returnArrAirport)?.city || '';
+
+  const returnTimeDiffDepCET = (() => {
+    if (!returnDipDate || !returnDipTime || !returnDepAirportTz) return '';
+    const utc = localTimeToUTC(returnDipDate, returnDipTime, returnDepAirportTz);
+    if (!utc) return '';
+    return getTimezoneDiff(new Date(utc), returnDepAirportTz, 'Europe/Stockholm');
+  })();
+
+  // Return Ticket toggle. On tick: stash the outbound leg (so we can save it as a
+  // separate ticket on submit), then reuse the SAME top fields for the return leg —
+  // only the From→To airports are auto-filled (swapped); CET, date, flight no. & PNR
+  // are cleared and entered manually.
+  // On untick: restore the outbound leg back into the top fields.
+  useEffect(() => {
+    if (returnTicket && !prevReturnTicket.current) {
+      // Stash current top fields as the OUTBOUND leg (to be saved separately)
+      setReturnDepAirport(departureAirport);
+      setReturnArrAirport(arrivalAirport);
+      setReturnFlightNumber(flightNumber);
+      setReturnPnr(pnr);
+      setReturnDipDate(dipDate);
+      setReturnDipTime(dipTime);
+      setReturnCetTime(cetTime);
+      // Reuse top fields for the RETURN leg: swap airports only, clear everything else
+      setDepAirport(arrivalAirport);
+      setArrAirport(departureAirport);
+      setFlightNumber('');
+      setPnr('');
+      setDipDate('');
+      setDipTime('');
+      setCetTime('');
+    } else if (!returnTicket && prevReturnTicket.current) {
+      // Restore the stashed outbound leg back into the top fields
+      setDepAirport(returnDepAirport);
+      setArrAirport(returnArrAirport);
+      setFlightNumber(returnFlightNumber);
+      setPnr(returnPnr);
+      setDipDate(returnDipDate);
+      setDipTime(returnDipTime);
+      setCetTime(returnCetTime);
+      // Clear the stash
+      setReturnDepAirport(''); setReturnArrAirport('');
+      setReturnFlightNumber(''); setReturnPnr('');
+      setReturnDipDate(''); setReturnDipTime(''); setReturnCetTime('');
+    }
+    prevReturnTicket.current = returnTicket;
+  }, [returnTicket]);
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
@@ -155,10 +228,6 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, clockTime
     if (!departureAirport)    e.dep             = 'Required';
     if (!arrivalAirport)      e.arr             = 'Required';
     if (!pnr.trim())          e.pnr             = 'Required';
-    if (returnTicket) {
-      if (!returnDate)        e.returnDate      = 'Required';
-      if (!returnTime)        e.returnTime      = 'Required';
-    }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -168,36 +237,115 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, clockTime
     if (!validate()) return;
     setSubmitting(true);
 
-    const tz  = AIRPORTS.find(a => a.code === departureAirport)?.timezone || 'Asia/Colombo';
-    const dtu = localTimeToUTC(dipDate, dipTime, tz);
+    // Base passenger info shared by both legs
+    const base = { passengerName, email, phone, airline: '', remarks, status };
 
-    let returnDepartureTimeUTC = '';
-    let returnOriginalTimezone = '';
-    if (returnTicket && returnDate && returnTime) {
-      const retTz = AIRPORTS.find(a => a.code === arrivalAirport)?.timezone || 'Asia/Colombo';
-      returnDepartureTimeUTC = localTimeToUTC(returnDate, returnTime, retTz);
-      returnOriginalTimezone = retTz;
-    }
-
-    const payload = {
-      passengerName, email, phone,
-      airline: '', flightNumber,
-      pnr, departureAirport, arrivalAirport,
-      departureTimeUTC: dtu, originalTimezone: tz,
-      returnTicket, returnDepartureTimeUTC, returnOriginalTimezone,
-      remarks, status,
+    const emptyReturnFields = {
+      returnDepartureAirport: '', returnArrivalAirport: '',
+      returnFlightNumber: '', returnPnr: '',
+      returnDepartureTimeUTC: '', returnOriginalTimezone: '',
     };
+
+    // The top fields always represent the CURRENT leg being entered.
+    const topTz  = AIRPORTS.find(a => a.code === departureAirport)?.timezone || 'Asia/Colombo';
+    const topDtu = localTimeToUTC(dipDate, dipTime, topTz);
 
     try {
       if (editingTicket) {
-        await updateTicket(editingTicket._id, payload);
+        if (returnTicket && returnDepAirport && returnArrAirport && returnDipDate && returnDipTime) {
+          // Editing a normal ticket and adding a return leg:
+          // 1) Keep the original ticket as the outbound (from the stash),
+          // 2) Create a NEW separate return ticket from the top fields.
+          const outTz  = AIRPORTS.find(a => a.code === returnDepAirport)?.timezone || 'Asia/Colombo';
+          const outDtu = localTimeToUTC(returnDipDate, returnDipTime, outTz);
+
+          await updateTicket(editingTicket._id, {
+            ...base,
+            flightNumber: returnFlightNumber,
+            pnr: returnPnr,
+            departureAirport: returnDepAirport,
+            arrivalAirport: returnArrAirport,
+            departureTimeUTC: outDtu,
+            originalTimezone: outTz,
+            returnTicket: true,
+            returnLeg: false,
+            ...emptyReturnFields,
+          });
+
+          await addTicket({
+            ...base,
+            flightNumber, pnr,
+            departureAirport, arrivalAirport,
+            departureTimeUTC: topDtu,
+            originalTimezone: topTz,
+            returnTicket: true,
+            returnLeg: true,
+            ...emptyReturnFields,
+          });
+
+          onSuccess?.('Return ticket added successfully!');
+          return;
+        }
+
+        // Plain edit: update just this record (preserve its returnLeg flag).
+        await updateTicket(editingTicket._id, {
+          ...base,
+          flightNumber, pnr, departureAirport, arrivalAirport,
+          departureTimeUTC: topDtu, originalTimezone: topTz,
+          returnLeg: editingTicket.returnLeg,
+          ...emptyReturnFields,
+        });
         onSuccess?.('Ticket Updated Successfully!');
-      } else {
-        await addTicket(payload);
-        onSuccess?.('Ticket Saved Successfully!');
+        return;
       }
+
+      if (returnTicket && returnDepAirport && returnArrAirport && returnDipDate && returnDipTime) {
+        // Round trip → create TWO separate ticket records.
+        // Outbound (leg 1) is in the stash; return (leg 2) is in the top fields.
+        const outTz  = AIRPORTS.find(a => a.code === returnDepAirport)?.timezone || 'Asia/Colombo';
+        const outDtu = localTimeToUTC(returnDipDate, returnDipTime, outTz);
+
+        // 1) Outbound ticket
+        await addTicket({
+          ...base,
+          flightNumber: returnFlightNumber,
+          pnr: returnPnr,
+          departureAirport: returnDepAirport,
+          arrivalAirport: returnArrAirport,
+          departureTimeUTC: outDtu,
+          originalTimezone: outTz,
+          returnTicket: true,
+          returnLeg: false,
+          ...emptyReturnFields,
+        });
+
+        // 2) Return ticket (separate row, marked as return)
+        await addTicket({
+          ...base,
+          flightNumber, pnr,
+          departureAirport, arrivalAirport,
+          departureTimeUTC: topDtu,
+          originalTimezone: topTz,
+          returnTicket: true,
+          returnLeg: true,
+          ...emptyReturnFields,
+        });
+
+        onSuccess?.('Round-trip tickets saved successfully!');
+        return;
+      }
+
+      // One-way ticket
+      await addTicket({
+        ...base,
+        flightNumber, pnr, departureAirport, arrivalAirport,
+        departureTimeUTC: topDtu, originalTimezone: topTz,
+        returnTicket: false,
+        returnLeg: false,
+        ...emptyReturnFields,
+      });
+      onSuccess?.('Ticket Saved Successfully!');
     } catch {
-      // fallback: just go back
       onBack();
     } finally {
       setSubmitting(false);
@@ -207,9 +355,10 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, clockTime
   const clearAll = () => {
     setPassengerName(''); setEmail(''); setPhone(''); setPnr(''); setFlightNumber('');
     setDepAirport(''); setArrAirport(''); setDipDate(''); setDipTime('');
-    setCetTime(''); setRemarks(''); setReturnTicket(false);
-    setReturnDate(''); setReturnTime(''); setReturnCetTime('');
-    setStatus('No Need Further Actions'); setErrors({});
+    setCetTime(''); setRemarks(''); setStatus('No Need Further Actions'); setErrors({});
+    setReturnTicket(false); setReturnDepAirport(''); setReturnArrAirport('');
+    setReturnFlightNumber(''); setReturnPnr('');
+    setReturnDipDate(''); setReturnDipTime(''); setReturnCetTime('');
   };
 
   // Styles
@@ -254,7 +403,6 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, clockTime
             <p style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2 }}>Fill in the passenger and departure details</p>
           </div>
         </div>
-        <ClockSection clockTime={clockTime} clockDate={clockDate} slClockTime={slClockTime} slClockDate={slClockDate} />
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -420,19 +568,20 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, clockTime
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 14 }}>
               <div>
                 <label style={label}>Status</label>
-                <select className="field" value={status} onChange={e => setStatus(e.target.value)}>
+                <select className="field" value={status} onChange={e => {
+                  const val = e.target.value;
+                  setStatus(val);
+                  if (val === 'No Need Further Actions') setRemarks('');
+                }}>
                   <option>No Need Further Actions</option>
                   <option>Need Further Actions</option>
-                  <option>Check-In</option>
-                  <option>Remind</option>
-                  <option>Departed</option>
                 </select>
               </div>
               <div>
                 <label style={label}>Remarks</label>
-                <textarea className="field" rows={2} value={remarks} placeholder="Any additional notes…"
+                <textarea ref={remarksRef} className="field" rows={2} value={remarks} placeholder="Any additional notes…"
                   onChange={e => setRemarks(e.target.value)}
-                  style={{ resize: 'vertical', minHeight: 60 }} />
+                  style={{ resize: 'vertical', minHeight: 60, ...(focusRemarks ? { borderColor: '#eab308', boxShadow: '0 0 0 3px rgba(234,179,8,0.15)' } : {}) }} />
               </div>
             </div>
           </div>
@@ -440,61 +589,44 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, clockTime
           {/* ── 3. Options ── */}
           <div style={{ paddingTop: 14, borderTop: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 20 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: returnTicket ? 'var(--indigo2)' : 'var(--text)', cursor: 'pointer' }}>
-                <input type="checkbox" checked={returnTicket} onChange={handleReturnToggle}
-                  style={{ width: 14, height: 14, accentColor: 'var(--indigo)' }} />
-                <Plane size={12} style={{ transform: 'scaleX(-1)' }} />
-                Return Ticket
-              </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: 'var(--text)', cursor: 'pointer' }}>
                 <input type="checkbox" checked={autoTime} onChange={e => setAutoTime(e.target.checked)}
                   style={{ width: 14, height: 14, accentColor: 'var(--indigo)' }} />
                 Auto Time (CET ↔ Local)
               </label>
+
+              {/* Return Ticket option — hidden only when editing a return leg */}
+              {!editingTicket?.returnLeg && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: 'var(--text)', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={returnTicket} onChange={e => setReturnTicket(e.target.checked)}
+                    style={{ width: 14, height: 14, accentColor: 'var(--indigo)' }} />
+                  <RotateCcw size={12} style={{ color: 'var(--indigo2)' }} />
+                  Return Ticket
+                </label>
+              )}
             </div>
 
-            {/* Return Ticket fields — shown only when checked */}
-            {returnTicket && (
+            {!editingTicket?.returnLeg && returnTicket && (
               <div style={{
-                marginTop: 16, padding: 18,
-                background: 'linear-gradient(135deg, rgba(99,102,241,0.06), rgba(34,211,238,0.04))',
-                border: '1px solid rgba(99,102,241,0.2)', borderRadius: 12,
-                animation: 'fadeIn 0.2s ease-out',
+                marginTop: 12, display: 'flex', alignItems: 'center', gap: 8,
+                fontSize: 11, color: 'var(--indigo2)', fontWeight: 600,
+                background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)',
+                borderRadius: 8, padding: '8px 12px',
               }}>
-                <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--indigo2)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14 }}>
-                  Return Flight Details
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr 1fr', gap: 14 }}>
-                  <div>
-                    <label style={{ ...label, color: 'var(--indigo2)' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <Clock3 size={10} /> Return CET *
-                      </span>
-                    </label>
-                    <input className="field" type="time" value={returnCetTime}
-                      style={{ borderColor: returnCetTime ? 'rgba(165,180,252,0.4)' : undefined }}
-                      onChange={e => handleReturnCETChange(e.target.value)} />
-                  </div>
-                  <div>
-                    <label style={label}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <CalendarDays size={10} /> Return Date *
-                      </span>
-                    </label>
-                    <input className="field" style={err('returnDate')} type="date" value={returnDate}
-                      onChange={e => setReturnDate(e.target.value)} />
-                    {errors.returnDate && <span style={{ fontSize: 10, color: 'var(--red)', marginTop: 3, display: 'block' }}>{errors.returnDate}</span>}
-                  </div>
-                  <div>
-                    <label style={label}>
-                      Return Local Time *
-                      {arrAirportLabel && <span style={{ marginLeft: 6, fontWeight: 500, fontSize: 9, opacity: 0.7 }}>({arrAirportLabel})</span>}
-                    </label>
-                    <input className="field" style={err('returnTime')} type="time" value={returnTime}
-                      onChange={e => setReturnTime(e.target.value)} />
-                    {errors.returnTime && <span style={{ fontSize: 10, color: 'var(--red)', marginTop: 3, display: 'block' }}>{errors.returnTime}</span>}
-                  </div>
-                </div>
+                <RotateCcw size={13} />
+                Return leg — only the route was auto-filled (reversed to <b style={{ fontWeight: 800 }}>{departureAirport || '—'} → {arrivalAirport || '—'}</b>). Fill in the CET time, date, flight no. &amp; PNR manually. A separate return row will be created.
+              </div>
+            )}
+
+            {/* When editing a return ticket, just show a static mark */}
+            {editingTicket?.returnLeg && (
+              <div style={{
+                marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 6,
+                fontSize: 11, color: 'var(--indigo2)', fontWeight: 700,
+                background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)',
+                borderRadius: 8, padding: '6px 12px',
+              }}>
+                <RotateCcw size={13} /> This is a Return Ticket
               </div>
             )}
           </div>

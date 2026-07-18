@@ -1,18 +1,12 @@
 import { useState } from 'react';
 import { useFlightStore } from '../store/flightStore';
 import { User, Mail, Lock, Save } from 'lucide-react';
-import ClockSection from './ClockSection';
-import type { TZ } from '../App';
 
 interface ProfileProps {
-  tz: TZ;
-  clockTime: string;
-  clockDate: string;
-  slClockTime?: string;
-  slClockDate?: string;
+  tz: string;
 }
 
-export default function Profile({ tz, clockTime, clockDate, slClockTime, slClockDate }: ProfileProps) {
+export default function Profile({ tz }: ProfileProps) {
   const { currentUser, updateProfile } = useFlightStore();
 
   const [name, setName]               = useState(currentUser?.name || '');
@@ -64,7 +58,6 @@ export default function Profile({ tz, clockTime, clockDate, slClockTime, slClock
           <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em' }}>Profile Settings</h2>
           <p style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2 }}>Update your name, email and password</p>
         </div>
-        <ClockSection tz={tz} clockTime={clockTime} clockDate={clockDate} slClockTime={slClockTime} slClockDate={slClockDate} />
       </div>
 
       {/* Avatar block */}

@@ -1,8 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useFlightStore, type AuditLog } from '../store/flightStore';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import ClockSection from './ClockSection';
-import type { TZ } from '../App';
 
 const ACTION_COLORS: Record<string, { bg: string; color: string; label: string }> = {
   LOGIN:           { bg: 'rgba(34,197,94,0.1)',   color: '#4ade80', label: 'LOGIN' },
@@ -15,14 +13,10 @@ const ACTION_COLORS: Record<string, { bg: string; color: string; label: string }
 };
 
 interface AuditLogsProps {
-  tz: TZ;
-  clockTime: string;
-  clockDate: string;
-  slClockTime?: string;
-  slClockDate?: string;
+  tz: string;
 }
 
-export default function AuditLogs({ tz, clockTime, clockDate, slClockTime, slClockDate }: AuditLogsProps) {
+export default function AuditLogs({ tz }: AuditLogsProps) {
   const { fetchAuditLogs } = useFlightStore();
   const [logs, setLogs]   = useState<AuditLog[]>([]);
   const [total, setTotal] = useState(0);
@@ -55,7 +49,6 @@ export default function AuditLogs({ tz, clockTime, clockDate, slClockTime, slClo
           <p style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2 }}>{total} events recorded · Admin access only</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <ClockSection tz={tz} clockTime={clockTime} clockDate={clockDate} slClockTime={slClockTime} slClockDate={slClockDate} />
           <button onClick={() => load(page)} className="btn btn-ghost" style={{ fontSize: 11 }}>↻ Refresh</button>
         </div>
       </div>

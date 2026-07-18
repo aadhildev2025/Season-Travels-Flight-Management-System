@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useFlightStore } from '../store/flightStore';
 import { Eye, EyeOff } from 'lucide-react';
-import BrandLogo from './BrandLogo';
 
 export default function Login() {
   const { login } = useFlightStore();
@@ -71,7 +70,7 @@ export default function Login() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', padding: '12px 24px 24px' }}>
 
       {/* Ambient glow behind card */}
       <div style={{
@@ -83,18 +82,8 @@ export default function Login() {
       <div className="fade-up" style={{ width: '100%', maxWidth: 400, position: 'relative', zIndex: 1 }}>
 
         {/* Brand header */}
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{
-            width: 56, height: 56, borderRadius: 16, margin: '0 auto 16px',
-            background: 'linear-gradient(135deg, #6366f1, #818cf8)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 8px 32px rgba(99,102,241,0.35)',
-          }}>
-            <BrandLogo size={26} style={{ color: 'white' }} />
-          </div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em', marginBottom: 4 }}>
-            Season Travels
-          </h1>
+        <div style={{ textAlign: 'center', marginBottom: 4 }}>
+          <img src="/logo.png" alt="Season Travels" style={{ width: 300, height: 300, margin: '0 auto -120px', objectFit: 'contain', display: 'block' }} />
           <p style={{ fontSize: 11, color: 'var(--text2)', fontWeight: 500, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
             Flight Management System
           </p>
@@ -106,7 +95,7 @@ export default function Login() {
           style={{
             display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center',
             background: 'var(--surface)', border: '1px solid var(--border)',
-            borderRadius: 10, padding: '10px 16px', marginBottom: 24,
+            borderRadius: 10, padding: '10px 16px', marginBottom: 16,
             cursor: 'pointer', transition: 'all 0.2s ease',
             userSelect: 'none',
           }}

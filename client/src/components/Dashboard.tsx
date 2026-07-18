@@ -3,31 +3,27 @@ import { createPortal } from 'react-dom';
 import { useFlightStore } from '../store/flightStore';
 import { utcToLocalTime, formatCETTime } from '../utils/timezone';
 import ConfirmDialog from './ConfirmDialog';
-import ClockSection from './ClockSection';
-import { Plane, Mail, MessageCircle, X, Search, Plus, RefreshCw, Download, Repeat } from 'lucide-react';
+import { Plane, Search, Plus, RefreshCw, Download, RotateCcw } from 'lucide-react';
 import type { Ticket } from '../types';
 import type { TZ } from '../App';
 
 interface DashboardProps {
-  onEdit: (ticket: Ticket) => void;
+  onEdit: (ticket: Ticket, focusRemarks?: boolean) => void;
   tz:     TZ;
   search: string;
   setSearch?: (s: string) => void;
-  clockTime: string;
-  clockDate: string;
-  slClockTime?: string;
-  slClockDate?: string;
   onAddNew?: () => void;
   onRefresh?: () => void;
   onPDF?: () => void;
 }
 
-export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, clockDate, slClockTime, slClockDate, onAddNew, onRefresh, onPDF }: DashboardProps) {
+export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onRefresh, onPDF }: DashboardProps) {
   const { tickets, currentUser, deleteTicket, updateTicket, loading, hasFetched } = useFlightStore();
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [mailTicket, setMailTicket]           = useState<Ticket | null>(null);
   const [todayStr, setTodayStr]               = useState('');
-  const [reminderTicket, setReminderTicket]   = useState<Ticket | null>(null);
   const [copiedPnr, setCopiedPnr]             = useState<string | null>(null);
+  const [copiedSurname, setCopiedSurname]     = useState<string | null>(null);
   const [newTicketId, setNewTicketId]         = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing]       = useState(false);
   const prevTicketIds = useRef<Set<string>>(new Set());
@@ -119,34 +115,79 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
 
   const maskName = (name: string) => {
     if (!name) return '';
-    const parts = name.toUpperCase().split(' ');
-    if (parts.length === 1) return parts[0];
-    const [first, ...rest] = parts;
-    return first + '/' + rest.map(p => p.slice(0,1) + p.slice(1).replace(/\w/g,'*')).join(' ');
+    return name;
+  };
+
+  const getSurname = (name: string) => {
+    if (!name) return '';
+    const parts = name.trim().split(/[/\s]+/);
+    return parts[0] || '';
   };
 
   const buildReminderMessage = (ticket: Ticket) => {
     const dep = utcToLocalTime(ticket.departureTimeUTC, ticket.originalTimezone);
     const tzLabel = ticket.originalTimezone.split('/').pop()?.replace('_',' ') || '';
     return {
-      subject: `Flight Reminder - PNR: ${ticket.pnr}`,
-      body: `Dear ${ticket.passengerName},\n\nThis is a reminder for your upcoming flight.\n\n✈️ Flight Details:\n━━━━━━━━━━━━━━━━━━━━━━━━\nPNR: ${ticket.pnr}\nRoute: ${ticket.departureAirport} → ${ticket.arrivalAirport}\nDeparture: ${dep.formatted} (${tzLabel})\n━━━━━━━━━━━━━━━━━━━━━━━━\n\nPlease ensure you check in at least 3 hours prior to departure.\n\nWe wish you a safe and pleasant journey! ✈️🌟\n\nWarm regards,\nSEASON TRAVELS\n"Your journey, our passion"`,
+      subject: `Reminder - Flight ${ticket.pnr} | ${ticket.departureAirport} → ${ticket.arrivalAirport}`,
+      body: `Dear ${ticket.passengerName},\n\nThis is a reminder for your upcoming flight.\n\nFlight Details:\nPNR: ${ticket.pnr}\nRoute: ${ticket.departureAirport} → ${ticket.arrivalAirport}\nDeparture: ${dep.formatted} (${tzLabel})\n\nPlease ensure you check in at least 3 hours prior to departure.\n\nWe wish you a safe and pleasant journey!\n\nWarm regards,\nSEASON TRAVELS`,
     };
   };
 
-  const handleSendOneComMail = (ticket: Ticket) => {
+  // Plain-text version of the reminder for WhatsApp / clipboard
+  const buildReminderText = (ticket: Ticket) => {
     const { subject, body } = buildReminderMessage(ticket);
-    const oneComUrl = `https://webmail.one.com/`;
-    window.open(oneComUrl, '_blank');
-    setReminderTicket(null);
+    return `${subject}\n\n${body}`;
   };
 
-  const handleSendWhatsApp = (ticket: Ticket) => {
-    const { body } = buildReminderMessage(ticket);
-    const phone = ticket.phone?.replace(/[^\d+]/g, '') || '';
-    const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(body)}`;
-    window.open(waUrl, '_blank');
-    setReminderTicket(null);
+  // ── Email via one.com webmail ──
+  // one.com/Roundcube cannot be pre-filled from a link, so we open the user's
+  // already-logged-in one.com webmail and copy the message to the clipboard.
+  // The user starts a new message and pastes.
+  const ONECOM_WEBMAIL_URL = 'https://mail.one.com';
+
+  const sendViaEmail = async (ticket: Ticket) => {
+    const { subject, body } = buildReminderMessage(ticket);
+    const to = ticket.email || '';
+    if (!to) {
+      alert('This passenger has no email address on file.');
+      return;
+    }
+
+    // Open the user's own logged-in one.com webmail in a new tab first (within the
+    // click gesture so the popup isn't blocked), then copy the message.
+    window.open(ONECOM_WEBMAIL_URL, '_blank', 'noopener,noreferrer');
+
+    // Copy the message body to the clipboard so it can be pasted into the compose area.
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(body);
+      copied = true;
+    } catch {
+      copied = false;
+    }
+
+    setMailTicket(null);
+
+    alert(
+      `one.com webmail opened.\n\n` +
+      `To:  ${to}\n` +
+      `Subject:  ${subject}\n\n` +
+      (copied
+        ? `The message has been COPIED — start a new message, paste (Ctrl+V) into the body, and add the To & Subject above.`
+        : `Copy the message body from the ticket and paste it into a new message.`)
+    );
+  };
+
+  // ── WhatsApp ──
+  const sendViaWhatsApp = (ticket: Ticket) => {
+    const text = buildReminderText(ticket);
+    // Keep only digits from the phone number for wa.me
+    const phone = (ticket.phone || '').replace(/[^\d]/g, '');
+    const waUrl = phone
+      ? `https://wa.me/${phone}?text=${encodeURIComponent(text)}`
+      : `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(waUrl, '_blank', 'noopener,noreferrer');
+    setMailTicket(null);
   };
 
   // Staff can only delete tickets created today
@@ -164,7 +205,6 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
       setCopiedPnr(pnr);
       setTimeout(() => setCopiedPnr(null), 1800);
     }).catch(() => {
-      // Fallback for older browsers
       const el = document.createElement('textarea');
       el.value = pnr;
       document.body.appendChild(el);
@@ -173,6 +213,24 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
       document.body.removeChild(el);
       setCopiedPnr(pnr);
       setTimeout(() => setCopiedPnr(null), 1800);
+    });
+  };
+
+  const handleCopySurname = (name: string) => {
+    const surname = getSurname(name);
+    if (!surname) return;
+    navigator.clipboard.writeText(surname).then(() => {
+      setCopiedSurname(name);
+      setTimeout(() => setCopiedSurname(null), 1800);
+    }).catch(() => {
+      const el = document.createElement('textarea');
+      el.value = surname;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+      setCopiedSurname(name);
+      setTimeout(() => setCopiedSurname(null), 1800);
     });
   };
 
@@ -188,7 +246,6 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
           {sorted.length} Departure{sorted.length !== 1 ? 's' : ''}
           {search && <span style={{ marginLeft:8, color:'var(--text3)', fontWeight:500 }}>· filtered</span>}
         </span>
-        <ClockSection tz={tz} clockTime={clockTime} clockDate={clockDate} slClockTime={slClockTime} slClockDate={slClockDate} />
       </div>
 
       {/* Mobile controls section */}
@@ -261,6 +318,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
                   <th style={th}>Name</th>
                   <th style={th}>From</th>
                   <th style={th}>To</th>
+                  <th style={{ ...th, textAlign:'center' }}></th>
                   <th style={{ ...th, color:'var(--indigo2)' }}>CET</th>
                   <th style={{ ...th, color:'var(--cyan)' }}>SLT</th>
                   <th style={th}>Flight No.</th>
@@ -274,7 +332,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
                 {sorted.map(ticket => {
                   const isToday = formatDate(ticket.departureTimeUTC) === todayStr;
                   const isNew = newTicketId === ticket._id;
-                  const hasRemark = !!(ticket.remarks && ticket.remarks.trim());
+                  const hasRemark = ticket.status === 'Need Further Actions';
 
                   const depTime = ticket.departureTimeUTC ? new Date(ticket.departureTimeUTC) : null;
                   const isNotDepartedYet = depTime ? (new Date().getTime() < depTime.getTime()) : false;
@@ -290,14 +348,21 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
                         {hasRemark ? (
                           <span
                             className={`date-remark${isNew ? ' date-new-remark' : ''} ${isLoadingToday ? 'date-loading-green' : ''}`}
-                            title={ticket.remarks}
+                            onClick={() => onEdit(ticket, true)}
                             style={{
                               fontFamily:"'JetBrains Mono',monospace", 
                               fontWeight:700, 
-                              fontSize:13 
+                              fontSize:13,
+                              cursor: 'pointer',
                             }}
                           >
                             {formatDate(ticket.departureTimeUTC)}
+                            {ticket.remarks && ticket.remarks.trim() && (
+                              <span className="remark-tooltip">
+                                <div className="remark-tooltip-label">Remark</div>
+                                <div className="remark-tooltip-text">{ticket.remarks}</div>
+                              </span>
+                            )}
                           </span>
                         ) : (
                           <span
@@ -315,35 +380,35 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
                       </td>
 
                       <td style={{ ...td, fontWeight:700, color:'var(--text)', maxWidth:280, overflow:'visible', whiteSpace:'nowrap' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                          <span style={{ overflow:'hidden', textOverflow:'ellipsis' }}>{maskName(ticket.passengerName)}</span>
-                          {ticket.returnTicket && (
-                            <span 
-                              title="Round Trip (Return Ticket Included)"
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 3,
-                                fontSize: 8,
-                                fontWeight: 900,
-                                color: 'var(--cyan)',
-                                background: 'rgba(34, 211, 238, 0.12)',
-                                border: '1px solid rgba(34, 211, 238, 0.25)',
-                                padding: '1px 5px',
-                                borderRadius: 5,
-                                letterSpacing: '0.04em',
-                                textTransform: 'uppercase',
-                                flexShrink: 0
-                              }}
-                            >
-                              <Repeat size={8} /> RT
-                            </span>
-                          )}
-                        </div>
+                        <span
+                          onClick={() => handleCopySurname(ticket.passengerName)}
+                          title="Click to copy surname"
+                          style={{
+                            cursor: 'pointer',
+                            padding: '2px 6px',
+                            borderRadius: 5,
+                            background: copiedSurname === ticket.passengerName ? 'rgba(52,211,153,0.12)' : 'transparent',
+                            border: copiedSurname === ticket.passengerName ? '1px solid rgba(52,211,153,0.3)' : '1px solid transparent',
+                            transition: 'all 0.2s ease',
+                            userSelect: 'none',
+                            color: copiedSurname === ticket.passengerName ? 'var(--green)' : 'var(--text)',
+                          }}
+                        >
+                          {copiedSurname === ticket.passengerName ? '✓ COPIED' : maskName(ticket.passengerName)}
+                        </span>
                       </td>
 
                       <td style={{ ...td, fontWeight:800, color:'var(--text)', letterSpacing:'0.04em' }}>{ticket.departureAirport}</td>
                       <td style={{ ...td, fontWeight:800, color:'var(--text)', letterSpacing:'0.04em' }}>{ticket.arrivalAirport}</td>
+
+                      {/* Return flight symbol */}
+                      <td style={{ ...td, textAlign:'center' }}>
+                        {ticket.returnLeg && (
+                          <span title="Return flight" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', color:'var(--indigo2)' }}>
+                            <RotateCcw size={13} />
+                          </span>
+                        )}
+                      </td>
 
                       {/* CET Time */}
                       <td style={td}>
@@ -412,7 +477,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
 
                       <td style={{ ...td, textAlign:'center', whiteSpace:'nowrap' }}>
                         <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:4 }}>
-                          <button onClick={() => setReminderTicket(ticket)} className="btn btn-blue btn-sm">MAIL</button>
+                          <button onClick={() => setMailTicket(ticket)} className="btn btn-blue btn-sm" title="Send reminder">MAIL</button>
                           <button onClick={() => onEdit(ticket)} className="btn btn-cyan btn-sm">EDIT</button>
                           {canDelete(ticket) && (
                             <button onClick={() => setConfirmDeleteId(ticket._id)} className="btn btn-red btn-sm">DEL</button>
@@ -432,173 +497,52 @@ export default function Dashboard({ onEdit, tz, search, setSearch, clockTime, cl
         onConfirm={() => { if (confirmDeleteId) deleteTicket(confirmDeleteId); setConfirmDeleteId(null); }}
         onCancel={() => setConfirmDeleteId(null)} />
 
-      {/* Send Reminder Dialog */}
-      {reminderTicket && (
-        <SendReminderDialog
-          ticket={reminderTicket}
-          onOneComMail={() => handleSendOneComMail(reminderTicket)}
-          onWhatsApp={() => handleSendWhatsApp(reminderTicket)}
-          onClose={() => setReminderTicket(null)}
-        />
+      {/* Send-reminder channel picker */}
+      {mailTicket && createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', cursor: 'pointer' }}
+            onClick={() => setMailTicket(null)}
+          />
+          <div
+            className="card fade-up"
+            style={{ position: 'relative', width: '100%', maxWidth: 360, padding: 24, boxShadow: '0 24px 64px rgba(0,0,0,0.6)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Send Reminder</h3>
+            <p style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 18 }}>
+              How would you like to send the reminder to {mailTicket.passengerName}?
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {/* WhatsApp */}
+              <button
+                onClick={() => sendViaWhatsApp(mailTicket)}
+                className="btn"
+                style={{ width: '100%', justifyContent: 'flex-start', gap: 12, padding: '12px 16px', background: '#25D366', color: '#fff', fontSize: 13, fontWeight: 700 }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.71.306 1.263.489 1.694.625.712.227 1.36.195 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+                WhatsApp
+              </button>
+
+              {/* Email */}
+              <button
+                onClick={() => sendViaEmail(mailTicket)}
+                className="btn"
+                style={{ width: '100%', justifyContent: 'flex-start', gap: 12, padding: '12px 16px', background: 'var(--indigo)', color: '#fff', fontSize: 13, fontWeight: 700 }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                Email
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+              <button onClick={() => setMailTicket(null)} className="btn btn-ghost" style={{ fontSize: 12 }}>Cancel</button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
-  );
-}
-
-/* ─── Send Reminder Dialog ─── */
-function SendReminderDialog({ ticket, onOneComMail, onWhatsApp, onClose }: {
-  ticket: Ticket;
-  onOneComMail: () => void;
-  onWhatsApp: () => void;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    document.body.style.overflow = 'hidden';
-    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = ''; };
-  }, [onClose]);
-
-  const optionBtn: React.CSSProperties = {
-    flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-    padding: '24px 16px', borderRadius: 14, cursor: 'pointer',
-    border: '1px solid var(--border)', background: 'var(--surface)',
-    transition: 'all 0.2s ease', position: 'relative', overflow: 'hidden',
-  };
-
-  return createPortal(
-    <div
-      style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-    >
-      <div 
-        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)', cursor: 'pointer' }} 
-        onClick={onClose}
-      />
-      <div
-        className="card fade-up"
-        style={{ position: 'relative', width: '100%', maxWidth: 420, padding: 0, boxShadow: '0 24px 64px rgba(0,0,0,0.6)', overflow: 'hidden' }}
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '18px 22px', borderBottom: '1px solid var(--border)',
-          background: 'linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(34,211,238,0.05) 100%)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{
-              width: 34, height: 34, borderRadius: 9,
-              background: 'linear-gradient(135deg, #6366f1, #818cf8)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 4px 14px rgba(99,102,241,0.35)',
-            }}>
-              <Mail size={16} color="#fff" />
-            </div>
-            <div>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Send Reminder</h3>
-              <p style={{ fontSize: 10, color: 'var(--text2)', marginTop: 1 }}>Choose how to contact the passenger</p>
-            </div>
-          </div>
-          <button onClick={onClose} style={{
-            background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)',
-            borderRadius: 8, padding: 6, cursor: 'pointer', color: 'var(--text2)',
-            transition: 'all 0.15s',
-          }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'var(--text)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'var(--text2)'; }}
-          >
-            <X size={14} />
-          </button>
-        </div>
-
-        {/* Ticket summary */}
-        <div style={{ padding: '14px 22px', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>{ticket.passengerName}</span>
-            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, fontWeight: 700, color: 'var(--cyan)', letterSpacing: '0.04em' }}>
-              {ticket.pnr}
-            </span>
-          </div>
-          <div style={{ fontSize: 10, color: 'var(--text2)', marginTop: 4 }}>
-            {ticket.departureAirport} → {ticket.arrivalAirport}
-            {ticket.email && <span style={{ marginLeft: 10 }}>· {ticket.email}</span>}
-            {ticket.phone && <span style={{ marginLeft: 10 }}>· {ticket.phone}</span>}
-          </div>
-        </div>
-
-         {/* Options */}
-         <div style={{ padding: '20px 22px', display: 'flex', gap: 14 }}>
-           {/* One.com Mail */}
-           <button
-             onClick={onOneComMail}
-             style={optionBtn}
-             onMouseEnter={e => {
-               e.currentTarget.style.borderColor = '#0055aa';
-               e.currentTarget.style.background = 'rgba(0,85,170,0.06)';
-               e.currentTarget.style.transform = 'translateY(-2px)';
-               e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,85,170,0.15)';
-             }}
-             onMouseLeave={e => {
-               e.currentTarget.style.borderColor = 'var(--border)';
-               e.currentTarget.style.background = 'var(--surface)';
-               e.currentTarget.style.transform = 'none';
-               e.currentTarget.style.boxShadow = 'none';
-             }}
-           >
-             <div style={{
-               width: 48, height: 48, borderRadius: 14,
-               background: 'linear-gradient(135deg, #0055aa 0%, #0077cc 100%)',
-               display: 'flex', alignItems: 'center', justifyContent: 'center',
-               boxShadow: '0 4px 16px rgba(0,85,170,0.25)',
-             }}>
-               <Mail size={22} color="#fff" />
-             </div>
-             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>One.com Mail</span>
-             <span style={{ fontSize: 9, color: 'var(--text2)', textAlign: 'center' }}>Open One.com Mail to send email reminder</span>
-           </button>
-
-          {/* WhatsApp */}
-          <button
-            onClick={onWhatsApp}
-            style={optionBtn}
-            onMouseEnter={e => {
-              e.currentTarget.style.borderColor = '#25D366';
-              e.currentTarget.style.background = 'rgba(37,211,102,0.06)';
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 8px 24px rgba(37,211,102,0.15)';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.borderColor = 'var(--border)';
-              e.currentTarget.style.background = 'var(--surface)';
-              e.currentTarget.style.transform = 'none';
-              e.currentTarget.style.boxShadow = 'none';
-            }}
-          >
-            <div style={{
-              width: 48, height: 48, borderRadius: 14,
-              background: 'linear-gradient(135deg, #25D366, #128C7E)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 4px 16px rgba(37,211,102,0.25)',
-            }}>
-              <MessageCircle size={22} color="#fff" />
-            </div>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>WhatsApp</span>
-            <span style={{ fontSize: 9, color: 'var(--text2)', textAlign: 'center' }}>Send message via WhatsApp</span>
-          </button>
-        </div>
-
-        {/* Footer */}
-        <div style={{
-          padding: '12px 22px', borderTop: '1px solid var(--border)',
-          background: 'rgba(255,255,255,0.02)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <span style={{ fontSize: 9, color: 'var(--text3)', letterSpacing: '0.08em', fontWeight: 600, textTransform: 'uppercase' }}>
-            Season Travels · "Your journey, our passion"
-          </span>
-        </div>
-      </div>
-    </div>,
-    document.body
   );
 }

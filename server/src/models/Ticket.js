@@ -43,18 +43,6 @@ const ticketSchema = new mongoose.Schema({
     type: String,
     default: 'Asia/Colombo',
   },
-  returnTicket: {
-    type: Boolean,
-    default: false,
-  },
-  returnDepartureTimeUTC: {
-    type: String,
-    default: '',
-  },
-  returnOriginalTimezone: {
-    type: String,
-    default: '',
-  },
   remarks: {
     type: String,
     default: '',
@@ -70,6 +58,39 @@ const ticketSchema = new mongoose.Schema({
   remind: {
     type: Boolean,
     default: false,
+  },
+  returnTicket: {
+    type: Boolean,
+    default: false,
+  },
+  // Marks this ticket record as the RETURN leg of a round trip
+  returnLeg: {
+    type: Boolean,
+    default: false,
+  },
+  returnDepartureAirport: {
+    type: String,
+    default: '',
+  },
+  returnArrivalAirport: {
+    type: String,
+    default: '',
+  },
+  returnFlightNumber: {
+    type: String,
+    default: '',
+  },
+  returnPnr: {
+    type: String,
+    default: '',
+  },
+  returnDepartureTimeUTC: {
+    type: String,
+    default: '',
+  },
+  returnOriginalTimezone: {
+    type: String,
+    default: '',
   },
   createdBy: {
     type: String,

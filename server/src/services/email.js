@@ -9,7 +9,7 @@ const transporter = nodemailer.createTransport({
   secure: Number(process.env.SMTP_PORT) === 465,
   auth: {
     user: process.env.SMTP_USER || 'eu@seasontravels.com',
-    pass: process.env.SMTP_PASS || '',
+    pass: process.env.SMTP_PASS || 'Nord@scandic',
   },
   connectionTimeout: 10000,
   socketTimeout: 10000,

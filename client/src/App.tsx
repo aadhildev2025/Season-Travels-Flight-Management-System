@@ -4,7 +4,6 @@ import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import TicketForm from './components/TicketForm';
 import AuditLogs from './components/AuditLogs';
-import Profile from './components/Profile';
 import Staff from './components/Staff';
 import ConfirmDialog from './components/ConfirmDialog';
 import SplashScreen from './components/SplashScreen';
@@ -13,7 +12,6 @@ import type { Ticket } from './types';
 import {
   LayoutGrid,
   ScrollText,
-  UserCircle,
   Users,
   LogOut,
   Plus,
@@ -25,6 +23,7 @@ import {
   X,
   CheckCircle
 } from 'lucide-react';
+import logoSrc from './logo/2.png';
 
 export type View = 'dashboard' | 'ticket-form' | 'audit-logs' | 'profile' | 'staff';
 export type TZ = 'CET' | 'SLT';
@@ -38,6 +37,7 @@ export default function App() {
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
   const [mounted, setMounted] = useState(false);
   const [showSplash, setShowSplash] = useState(() => !sessionStorage.getItem('splashShown'));
+  const [appReady, setAppReady] = useState(false);
   const [tz] = useState<TZ>('CET');
   const [search, setSearch] = useState('');
   const [logoutOpen, setLogoutOpen] = useState(false);
@@ -63,12 +63,22 @@ export default function App() {
     fetchSession().finally(() => setMounted(true));
   }, [fetchSession]);
 
+  // Check backend readiness on mount, then mark app as ready
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await useFlightStore.getState().checkBackendReady();
+      if (!cancelled) setAppReady(true);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   // Reset view and sidebar on login
   useEffect(() => {
     if (isAuthenticated && currentUser) {
       const isAdmin = currentUser.role === 'Admin';
       const saved = localStorage.getItem('currentView') as View;
-      const adminOnlyViews: View[] = ['audit-logs', 'staff'];
+      const adminOnlyViews: View[] = ['audit-logs', 'staff', 'profile'];
       
       if (saved) {
         if (adminOnlyViews.includes(saved) && !isAdmin) {
@@ -104,8 +114,8 @@ export default function App() {
     setSearch('');
   }, [view]);
 
-  // Branded splash on first load of the session
-  if (showSplash) {
+  // Branded splash on first load of the session or while backend is starting
+  if (showSplash || !appReady) {
     return (
       <SplashScreen
         onDone={() => {
@@ -174,7 +184,6 @@ export default function App() {
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutGrid size={15} /> },
     { id: 'audit-logs', label: 'Audit Logs', icon: <ScrollText size={15} />, adminOnly: true },
     { id: 'staff', label: 'Staff Management', icon: <Users size={15} />, adminOnly: true },
-    { id: 'profile', label: 'My Settings', icon: <UserCircle size={15} /> },
   ];
 
   const activeTab = view === 'ticket-form' ? 'dashboard' : view;
@@ -197,10 +206,7 @@ export default function App() {
         {/* Brand/Logo Section */}
           <div className="sidebar-brand" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
-            <img src="/logo.png" alt="Season Travels" style={{ width: 200, height: 88, objectFit: 'contain', flexShrink: 0 }} />
-            <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--indigo2)', letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: -18, paddingLeft: 2 }}>
-              Flight Management System
-            </span>
+            <img src={logoSrc} alt="Season Travels" style={{ width: 260, height: 120, objectFit: 'contain', flexShrink: 0 }} />
           </div>
           {/* Desktop collapse button */}
           <button
@@ -246,14 +252,6 @@ export default function App() {
               >
                 <span className="link-icon">{item.icon}</span>
                 <span style={{ flex: 1 }}>{item.label}</span>
-                {item.adminOnly && (
-                  <span style={{
-                    fontSize: 7, fontWeight: 800, padding: '1px 4px',
-                    borderRadius: 4, background: 'rgba(99,102,241,0.15)', color: 'var(--indigo2)'
-                  }}>
-                    ADM
-                  </span>
-                )}
               </button>
             );
           })}
@@ -290,41 +288,28 @@ export default function App() {
               <ChevronDown size={12} style={{ color: 'var(--text2)', transform: userDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
             </button>
 
-            {userDropdownOpen && (
-              <div style={{
-                position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, right: 0,
-                background: 'var(--surface2)', border: '1px solid var(--border)',
-                borderRadius: 10, padding: 4, zIndex: 100,
-                boxShadow: '0 -8px 24px rgba(0,0,0,0.5)'
-              }}>
-                <button
-                  onClick={() => { setUserDropdownOpen(false); setView('profile'); setSidebarOpen(false); }}
-                  style={{
-                    width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '8px 10px', borderRadius: 7, border: 'none', background: 'none',
-                    cursor: 'pointer', color: 'var(--text2)', fontSize: 11, fontWeight: 600,
-                    textAlign: 'left'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface3)'; e.currentTarget.style.color = 'var(--text)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text2)'; }}
-                >
-                  <UserCircle size={14} /> My Profile
-                </button>
-                <button
-                  onClick={() => { setUserDropdownOpen(false); setLogoutOpen(true); setSidebarOpen(false); }}
-                  style={{
-                    width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '8px 10px', borderRadius: 7, border: 'none', background: 'none',
-                    cursor: 'pointer', color: 'var(--red)', fontSize: 11, fontWeight: 600,
-                    textAlign: 'left'
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(244,63,94,0.08)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
-                >
-                  <LogOut size={14} /> Sign Out
-                </button>
-              </div>
-            )}
+             {userDropdownOpen && (
+               <div style={{
+                 position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, right: 0,
+                 background: 'var(--surface2)', border: '1px solid var(--border)',
+                 borderRadius: 10, padding: 4, zIndex: 100,
+                 boxShadow: '0 -8px 24px rgba(0,0,0,0.5)'
+                }}>
+                  <button
+                    onClick={() => { setUserDropdownOpen(false); setLogoutOpen(true); setSidebarOpen(false); }}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '8px 10px', borderRadius: 7, border: 'none', background: 'none',
+                      cursor: 'pointer', color: 'var(--red)', fontSize: 11, fontWeight: 600,
+                      textAlign: 'left'
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(244,63,94,0.08)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
+                  >
+                    <LogOut size={14} /> Sign Out
+                  </button>
+                </div>
+             )}
           </div>
         </div>
       </aside>
@@ -443,9 +428,6 @@ export default function App() {
           {view === 'staff' && isAdmin && (
             <Staff tz={tz} />
           )}
-          {view === 'profile' && (
-            <Profile tz={tz} />
-          )}
           </div>
         </main>
       </div>
@@ -471,7 +453,7 @@ export default function App() {
       {/* ════ Global Toast Notification ════ */}
       {toast && (
         <div className="toast-pop" style={{
-          position: 'fixed', bottom: 28, right: 28, zIndex: 9999,
+          position: 'fixed', top: 28, right: 28, zIndex: 9999,
           display: 'flex', alignItems: 'center', gap: 10,
           background: toast.type === 'success'
             ? 'linear-gradient(135deg, #059669, #10b981)'

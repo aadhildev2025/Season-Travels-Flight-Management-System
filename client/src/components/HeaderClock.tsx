@@ -36,16 +36,20 @@ export default function HeaderClock() {
       zIndex: 10,
     }}>
       {/* CET */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-        <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--indigo2)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>CET</span>
-        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 26, fontWeight: 800, color: 'var(--indigo2)', letterSpacing: '0.04em', lineHeight: 1 }}>{cetTime}</span>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--indigo2)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>CET</span>
+          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 22, fontWeight: 800, color: 'var(--indigo2)', letterSpacing: '0.04em', lineHeight: 1 }}>{cetTime}</span>
+        </div>
         <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', lineHeight: 1, marginTop: 3 }}>{cetDate}</span>
       </div>
       <div style={{ width: 1, height: 38, background: 'var(--border)', alignSelf: 'center' }} />
       {/* SLT */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-        <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--cyan)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>SLT</span>
-        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 26, fontWeight: 800, color: 'var(--cyan)', letterSpacing: '0.04em', lineHeight: 1 }}>{slTime}</span>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--cyan)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>SLT</span>
+          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 22, fontWeight: 800, color: 'var(--cyan)', letterSpacing: '0.04em', lineHeight: 1 }}>{slTime}</span>
+        </div>
         <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', lineHeight: 1, marginTop: 3 }}>{slDate}</span>
       </div>
     </div>

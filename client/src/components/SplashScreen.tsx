@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import logoSrc from '../logo/2.png';
 
 interface SplashScreenProps {
   /** Called once the splash finishes its exit animation */
@@ -48,7 +49,7 @@ export default function SplashScreen({ onDone, duration = 2200 }: SplashScreenPr
       <div className="splash-content">
         {/* Logo with reveal + shimmer */}
         <div className="splash-logo-wrap">
-          <img src="/logo.png" alt="Season Travels" className="splash-logo" />
+          <img src={logoSrc} alt="Season Travels" className="splash-logo" />
           <div className="splash-shimmer" />
         </div>
 

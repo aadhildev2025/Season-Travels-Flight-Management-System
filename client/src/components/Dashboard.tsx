@@ -454,24 +454,56 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                         </div>
                       </td>
 
-                      {/* Checkin - border style */}
+                      {/* Checkin */}
                       <td style={{ ...td, textAlign:'center' }}>
                         <button
                           onClick={() => updateTicket(ticket._id, { checkin: !ticket.checkin })}
-                          className={ticket.checkin ? 'badge-outline-yes' : 'badge-outline-no'}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            gap: 4, minWidth: 48, padding: '4px 10px', borderRadius: 6,
+                            fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+                            cursor: 'pointer', transition: 'all 0.2s ease',
+                            border: ticket.checkin ? '1px solid var(--green)' : '1px solid var(--border2)',
+                            background: ticket.checkin ? 'rgba(52,211,153,0.1)' : 'var(--surface2)',
+                            color: ticket.checkin ? 'var(--green)' : 'var(--text3)',
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.boxShadow = '0 0 12px rgba(52,211,153,0.25)';
+                            e.currentTarget.style.borderColor = ticket.checkin ? 'var(--green)' : 'rgba(52,211,153,0.5)';
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.boxShadow = 'none';
+                            e.currentTarget.style.borderColor = ticket.checkin ? 'var(--green)' : 'var(--border2)';
+                          }}
                         >
-                          ✓
+                          <span style={{ opacity: ticket.checkin ? 1 : 0.5 }}>✓</span>
+                          <span>{ticket.checkin ? 'YES' : 'NO'}</span>
                         </button>
                       </td>
 
-                      {/* Remind - border style, shows "?" */}
+                      {/* Remind */}
                       <td style={{ ...td, textAlign:'center' }}>
                         <button
-                          onClick={() => updateTicket(ticket._id, { remind: !ticket.remind })}
-                          className={ticket.remind ? 'badge-outline-remind-yes' : 'badge-outline-remind-no'}
-                          title={ticket.remind ? 'Reminder ON' : 'Reminder OFF'}
+                          onClick={() => onEdit(ticket, true)}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            gap: 4, minWidth: 48, padding: '4px 10px', borderRadius: 6,
+                            fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+                            cursor: 'pointer', transition: 'all 0.2s ease',
+                            border: (ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) ? '1px solid var(--indigo)' : '1px solid var(--border2)',
+                            background: (ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) ? 'rgba(99,102,241,0.1)' : 'var(--surface2)',
+                            color: (ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) ? 'var(--indigo)' : 'var(--text3)',
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.boxShadow = '0 0 12px rgba(99,102,241,0.25)';
+                            e.currentTarget.style.borderColor = (ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) ? 'var(--indigo)' : 'rgba(99,102,241,0.5)';
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.boxShadow = 'none';
+                            e.currentTarget.style.borderColor = (ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) ? 'var(--indigo)' : 'var(--border2)';
+                          }}
                         >
-                          ?
+                          <span>{(ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) ? '?' : 'NO'}</span>
                         </button>
                       </td>
 

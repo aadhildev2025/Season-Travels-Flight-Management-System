@@ -5,17 +5,13 @@ import {
   ArrowRight, User, Copy, Check, Clock 
 } from 'lucide-react';
 import ClockSection from './ClockSection';
-import type { TZ } from '../App';
 
 interface AnalyticsProps {
-  tz: TZ;
-  clockTime: string;
-  clockDate: string;
   slClockTime?: string;
   slClockDate?: string;
 }
 
-export default function Analytics({ tz, clockTime, clockDate, slClockTime, slClockDate }: AnalyticsProps) {
+export default function Analytics({ slClockTime, slClockDate }: AnalyticsProps) {
   const { fetchAnalytics } = useFlightStore();
   const [data, setData]   = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -91,7 +87,7 @@ export default function Analytics({ tz, clockTime, clockDate, slClockTime, slClo
           <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em' }}>Console Analytics</h2>
           <p style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2 }}>Flight statistics and departure overview</p>
         </div>
-        <ClockSection tz={tz} clockTime={clockTime} clockDate={clockDate} slClockTime={slClockTime} slClockDate={slClockDate} />
+        <ClockSection slClockTime={slClockTime} slClockDate={slClockDate} />
       </div>
 
       {/* Premium Stat cards */}

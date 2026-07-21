@@ -565,7 +565,6 @@ input, select, textarea, button { font-family: inherit; }
 
 /* Custom tooltip for remark date badge */
 .date-remark .remark-tooltip {
-  display: none;
   position: absolute;
   top: calc(100% + 8px);
   left: 50%;
@@ -581,6 +580,9 @@ input, select, textarea, button { font-family: inherit; }
   text-align: left;
   white-space: pre-wrap;
   word-break: break-word;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
   pointer-events: none;
 }
 
@@ -595,7 +597,8 @@ input, select, textarea, button { font-family: inherit; }
 }
 
 .date-remark:hover .remark-tooltip {
-  display: block;
+  opacity: 1;
+  visibility: visible;
 }
 
 .remark-tooltip-label {
@@ -615,9 +618,9 @@ input, select, textarea, button { font-family: inherit; }
 }
 
 .date-remark:hover {
+  animation: none;
   background: rgba(244, 63, 94, 0.25);
   box-shadow: 0 0 12px rgba(244, 63, 94, 0.35);
-  transform: scale(1.05);
 }
 
 /* Date column: newly entered ticket green flash */
@@ -649,9 +652,9 @@ input, select, textarea, button { font-family: inherit; }
 }
 
 .date-new-remark:hover {
+  animation: none;
   background: rgba(244, 63, 94, 0.25);
   box-shadow: 0 0 12px rgba(244, 63, 94, 0.35);
-  transform: scale(1.05);
 }
 
 /* Newly entered row highlight */
@@ -1270,8 +1273,8 @@ input, select, textarea, button { font-family: inherit; }
 }
 
 .splash-logo {
-  width: 260px;
-  height: 260px;
+  width: 320px;
+  height: 320px;
   object-fit: contain;
   display: block;
   filter: drop-shadow(0 12px 40px rgba(99, 102, 241, 0.4));
@@ -1392,4 +1395,36 @@ input, select, textarea, button { font-family: inherit; }
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* Checkin button - outline style, tick only when active */
+.badge-outline-checkin-yes {
+  background: transparent;
+  color: var(--green);
+  border: 1.5px solid var(--green);
+}
+
+.badge-outline-checkin-no {
+  background: transparent;
+  color: transparent;
+  border: 1.5px solid var(--border);
+}
+
+/* Remind box - outline style, "?" only when active */
+.badge-outline-remind-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 900;
+  border: 1.5px solid var(--border);
+  transition: all 0.15s;
+}
+
+.badge-outline-remind-box.active {
+  border-color: var(--red);
+  color: var(--red);
 }

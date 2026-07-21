@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useFlightStore } from '../store/flightStore';
 import { Plus, Trash2, Users, Eye, EyeOff, Edit2 } from 'lucide-react';
 
@@ -32,6 +32,7 @@ export default function Staff({ tz }: StaffProps) {
   
   const [editingUser, setEditingUser] = useState<StaffUser | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const nameRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -67,6 +68,11 @@ export default function Staff({ tz }: StaffProps) {
     setShowPassword(false);
     setError('');
     setSuccess('');
+  };
+
+  const handleAddClick = () => {
+    handleCancelEdit();
+    setTimeout(() => nameRef.current?.focus(), 50);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -163,7 +169,7 @@ export default function Staff({ tz }: StaffProps) {
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
               <label style={label}>Full Name *</label>
-              <input className="field" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Anura Perera" required />
+              <input ref={nameRef} className="field" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Anura Perera" required />
             </div>
             <div>
               <label style={label}>Email Address *</label>
@@ -230,7 +236,12 @@ export default function Staff({ tz }: StaffProps) {
               Current Users
               <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, background: 'var(--surface2)', color: 'var(--text2)', padding: '2px 7px', borderRadius: 10 }}>{list.length}</span>
             </p>
-            <button onClick={load} className="btn btn-ghost" style={{ fontSize: 10, padding: '4px 10px' }}>↻ Refresh</button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={handleAddClick} className="btn btn-primary" style={{ fontSize: 10, padding: '4px 10px', gap: 4 }}>
+                <Plus size={12} /> Add Staff
+              </button>
+              <button onClick={load} className="btn btn-ghost" style={{ fontSize: 10, padding: '4px 10px' }}>↻ Refresh</button>
+            </div>
           </div>
 
           {loading ? (

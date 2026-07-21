@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useFlightStore } from '../store/flightStore';
+import { useFlightStore, checkBackendHealth } from '../store/flightStore';
 import { Eye, EyeOff } from 'lucide-react';
+import logoSrc from '../logo/2.png';
 
 export default function Login() {
   const { login } = useFlightStore();
@@ -16,6 +17,14 @@ export default function Login() {
   const [tzLabel, setTzLabel]     = useState('CET');
   const [quickAccessUsers, setQuickAccessUsers] = useState<{ name: string; email: string; role: string }[]>([]);
   const [selectedEmail, setSelectedEmail] = useState('');
+  const [backendReady, setBackendReady] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const ready = await checkBackendHealth();
+      setBackendReady(ready);
+    })();
+  }, []);
 
   useEffect(() => {
     const tick = () => {
@@ -42,6 +51,7 @@ export default function Login() {
   }, [isLocalTime]);
 
   useEffect(() => {
+    if (!backendReady) return;
     fetch(`${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '').replace(/\/api$/, '')}/api/auth/quick-access`)
       .then(res => res.json())
       .then(data => {
@@ -50,7 +60,7 @@ export default function Login() {
         }
       })
       .catch(err => console.error('Failed to fetch quick access users', err));
-  }, []);
+  }, [backendReady]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,10 +93,7 @@ export default function Login() {
 
         {/* Brand header */}
         <div style={{ textAlign: 'center', marginBottom: 4 }}>
-          <img src="/logo.png" alt="Season Travels" style={{ width: 300, height: 300, margin: '0 auto -120px', objectFit: 'contain', display: 'block' }} />
-          <p style={{ fontSize: 11, color: 'var(--text2)', fontWeight: 500, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-            Flight Management System
-          </p>
+          <img src={logoSrc} alt="Season Travels" style={{ width: 280, height: 280, objectFit: 'contain', marginBottom: 2, display: 'block', margin: '0 auto 2px' }} />
         </div>
 
         {/* Live clock pill */}
@@ -95,7 +102,7 @@ export default function Login() {
           style={{
             display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center',
             background: 'var(--surface)', border: '1px solid var(--border)',
-            borderRadius: 10, padding: '10px 16px', marginBottom: 16,
+            borderRadius: 10, padding: '6px 10px', marginBottom: 2, marginTop: -2,
             cursor: 'pointer', transition: 'all 0.2s ease',
             userSelect: 'none',
           }}
@@ -119,7 +126,7 @@ export default function Login() {
         </div>
 
         {/* Card */}
-        <div className="card" style={{ padding: 28 }}>
+        <div className="card" style={{ padding: 24 }}>
           <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 20 }}>Sign in to your account</p>
 
           {error && (
@@ -169,8 +176,10 @@ export default function Login() {
           <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border2)' }}>
             <p style={{ fontSize: 9, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 10 }}>Quick access</p>
             <div className="quick-access-grid">
-              {quickAccessUsers.length === 0 ? (
-                <div style={{ gridColumn: 'span 2', fontSize: 10, color: 'var(--text3)', fontStyle: 'italic', padding: '4px 0', textAlign: 'center' }}>Loading users...</div>
+              {!backendReady ? (
+                <div style={{ gridColumn: 'span 2', fontSize: 10, color: 'var(--text3)', fontStyle: 'italic', padding: '4px 0', textAlign: 'center' }}>Connecting to server…</div>
+              ) : quickAccessUsers.length === 0 ? (
+                <div style={{ gridColumn: 'span 2', fontSize: 10, color: 'var(--text3)', fontStyle: 'italic', padding: '4px 0', textAlign: 'center' }}>No users found</div>
               ) : (
                 quickAccessUsers.map((user) => {
                   const isSelected = selectedEmail === user.email;

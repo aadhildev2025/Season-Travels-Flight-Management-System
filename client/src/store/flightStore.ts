@@ -18,6 +18,24 @@ export async function apiFetch(url: string, options?: RequestInit) {
   return data;
 }
 
+export async function checkBackendHealth(maxAttempts = 30, intervalMs = 1000): Promise<boolean> {
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const res = await fetch(`${API_BASE}/api/health`, { method: 'GET' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === 'ok' || data.status === 'degraded') {
+          return true;
+        }
+      }
+    } catch {
+      // Backend not ready yet
+    }
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+  return false;
+}
+
 export interface AnalyticsData {
   total: number;
   todayCount: number;
@@ -42,16 +60,18 @@ export interface AuditLog {
 }
 
 interface FlightState {
-  currentUser: User | null;
+  currentUser:     User | null;
   isAuthenticated: boolean;
-  tickets: Ticket[];
-  loading: boolean;
-  hasFetched: boolean;
+  tickets:         Ticket[];
+  loading:         boolean;
+  hasFetched:      boolean;
+  backendReady:    boolean;
 
   fetchSession:  () => Promise<void>;
   login:         (email: string, password: string) => Promise<boolean>;
   logout:        () => Promise<void>;
   updateProfile: (data: { name?: string; email?: string; currentPassword?: string; newPassword?: string }) => Promise<void>;
+  checkBackendReady: () => Promise<boolean>;
 
   fetchStaff:  () => Promise<{ id: string; name: string; email: string; role: string }[]>;
   createStaff: (data: { name: string; email: string; password: string; role: string }) => Promise<void>;
@@ -60,7 +80,7 @@ interface FlightState {
 
   fetchTickets:  () => Promise<void>;
   addTicket:     (data: Partial<Ticket>) => Promise<void>;
-  updateTicket:  (id: string, data: Partial<Ticket>) => Promise<void>;
+  updateTicket:  (id: string, updates: Partial<Ticket>) => Promise<void>;
   deleteTicket:  (id: string) => Promise<void>;
 
   fetchAnalytics: () => Promise<AnalyticsData>;
@@ -73,6 +93,13 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
   tickets:         [],
   loading:         false,
   hasFetched:      false,
+  backendReady:    false,
+
+  checkBackendReady: async () => {
+    const ready = await checkBackendHealth();
+    set({ backendReady: ready });
+    return ready;
+  },
 
   fetchSession: async () => {
     try {

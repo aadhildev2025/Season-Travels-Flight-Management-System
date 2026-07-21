@@ -7,6 +7,7 @@ import authRoutes     from '../server/src/routes/auth.js';
 import ticketRoutes   from '../server/src/routes/tickets.js';
 import staffRoutes    from '../server/src/routes/staff.js';
 import auditLogRoutes from '../server/src/routes/auditLogs.js';
+import emailRoutes    from '../server/src/routes/email.js';
 
 const app = express();
 
@@ -49,6 +50,7 @@ app.use('/api/auth',       authRoutes);
 app.use('/api/tickets',    ticketRoutes);
 app.use('/api/staff',      staffRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
+app.use('/api/email',      emailRoutes);
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 

@@ -340,7 +340,7 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
   };
 
   // Styles
-  const label: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 5, display: 'block' };
+  const label: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 3, display: 'block' };
   const err   = (key: string): React.CSSProperties => errors[key] ? { borderColor: 'var(--red)' } : {};
 
   const dropdownStyle: React.CSSProperties = {
@@ -357,8 +357,8 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
   };
 
   const sectionTitle = (n: string, color: string) => (
-    <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 8, marginBottom: 14 }}>
-      <h3 style={{ fontSize: 11, fontWeight: 800, color, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{n}</h3>
+    <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 6, marginBottom: 10 }}>
+      <h3 style={{ fontSize: 10, fontWeight: 800, color, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{n}</h3>
     </div>
   );
 
@@ -399,12 +399,12 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
     <div className="fade-up" style={{ maxWidth: 860, margin: '0 auto' }}>
 
       <form ref={formRef} onSubmit={handleSubmit}>
-        <div className="card" style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 26 }}>
+        <div className="card" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 18 }}>
 
           {/* ── 1. Customer Information ── */}
           <div>
             {sectionTitle('1. Customer Information', 'var(--indigo2)')}
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.5fr 1.5fr', gap: 14 }}>
+             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.5fr 1.5fr', gap: 10 }}>
               <div>
                 <label style={label}>Customer Name *</label>
                 <input className="field" style={err('passengerName')} value={passengerName} placeholder="Surname/FirstName"
@@ -428,8 +428,8 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
           <div>
             {sectionTitle('2. Flight & Route', 'var(--cyan)')}
 
-            {/* Row: From + To + Flight Number + PNR */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 14, marginBottom: 14 }}>
+             {/* Row: From + To + Flight Number + PNR */}
+             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
               <div ref={depRef} style={{ position: 'relative' }}>
                 <label style={label}>From *</label>
                 <input className="field" style={err('dep')} value={departureAirport} placeholder="e.g. CMB"
@@ -484,24 +484,24 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
                 )}
               </div>
 
-              <div>
-                <label style={label}>Flight Number</label>
-                <input className="field" value={flightNumber} placeholder="e.g. UL503"
-                  style={{ fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase' }}
-                  onChange={e => setFlightNumber(e.target.value.toUpperCase())} />
-              </div>
+               <div>
+                 <label style={label}>Flight Number</label>
+                 <input className="field" value={flightNumber} placeholder="e.g. UL503"
+                   style={{ fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', color: '#fff' }}
+                   onChange={e => setFlightNumber(e.target.value.toUpperCase())} />
+               </div>
 
-              <div>
-                <label style={label}>PNR *</label>
-                <input className="field" style={{ ...err('pnr'), fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase' }}
-                  value={pnr} placeholder="e.g. X7KQP2"
-                  onChange={e => setPnr(e.target.value.toUpperCase())} />
-                {errors.pnr && <span style={{ fontSize: 10, color: 'var(--red)', marginTop: 3, display: 'block' }}>{errors.pnr}</span>}
-              </div>
+               <div>
+                 <label style={label}>PNR *</label>
+                 <input className="field" style={{ ...err('pnr'), fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', color: 'var(--cyan)' }}
+                   value={pnr} placeholder="e.g. X7KQP2"
+                   onChange={e => setPnr(e.target.value.toUpperCase())} />
+                 {errors.pnr && <span style={{ fontSize: 10, color: 'var(--red)', marginTop: 3, display: 'block' }}>{errors.pnr}</span>}
+               </div>
             </div>
 
-            {/* Row: Departure Date + CET Time + Local Time */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 14 }}>
+             {/* Row: Departure Date + CET Time + Local Time */}
+             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
               <div>
                 <label style={label}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -520,19 +520,6 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
                 </label>
                 <input className="field" style={{ ...err('cetTime'), borderColor: cetTime ? 'rgba(165,180,252,0.4)' : undefined }} type="time" value={cetTime}
                   onChange={e => handleCETChange(e.target.value)} />
-                {sltTime && (
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 4,
-                    marginTop: 5, fontSize: 10, fontWeight: 700,
-                    fontFamily: "'JetBrains Mono', monospace",
-                    color: '#34d399',
-                    background: 'rgba(52,211,153,0.08)',
-                    border: '1px solid rgba(52,211,153,0.25)',
-                    borderRadius: 5, padding: '2px 8px',
-                  }}>
-                    🇱🇰 SLT: {sltTime}
-                  </span>
-                )}
                 {errors.cetTime && <span style={{ fontSize: 10, color: 'var(--red)', marginTop: 3, display: 'block' }}>{errors.cetTime}</span>}
               </div>
               <div>
@@ -548,7 +535,7 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
 
             {/* Time difference badges */}
             {(timeDiffDepCET || timeDiffDepArr) && (
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
                 {timeDiffDepCET && depAirportLabel && (
                   <span style={{
                     fontFamily: "'JetBrains Mono', monospace", fontSize: 10, fontWeight: 700,
@@ -570,8 +557,8 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
               </div>
             )}
 
-            {/* Status + Remarks */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 14 }}>
+             {/* Status + Remarks */}
+             <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10 }}>
               <div>
                 <label style={label}>Status</label>
                 <select className="field" value={status} onChange={e => {
@@ -586,16 +573,16 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
               </div>
               <div>
                 <label style={label}>Remarks</label>
-                <textarea ref={remarksRef} className="field" rows={2} value={remarks} placeholder="Any additional notes…"
-                  onChange={e => setRemarks(e.target.value)}
-                  style={{ resize: 'vertical', minHeight: 60, ...(focusRemarks ? { borderColor: '#eab308', boxShadow: '0 0 0 3px rgba(234,179,8,0.15)' } : {}) }} />
+                 <textarea ref={remarksRef} className="field" rows={2} value={remarks} placeholder="Any additional notes…"
+                   onChange={e => setRemarks(e.target.value)}
+                   style={{ resize: 'vertical', minHeight: 44, ...(focusRemarks ? { borderColor: '#eab308', boxShadow: '0 0 0 3px rgba(234,179,8,0.15)' } : {}) }} />
               </div>
             </div>
           </div>
 
-          {/* ── 3. Options ── */}
-          <div style={{ paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 20 }}>
+           {/* ── 3. Options ── */}
+           <div style={{ paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: 'var(--text)', cursor: 'pointer' }}>
                 <input type="checkbox" checked={autoTime} onChange={e => setAutoTime(e.target.checked)}
                   style={{ width: 14, height: 14, accentColor: 'var(--indigo)' }} />
@@ -613,14 +600,14 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
               )}
             </div>
 
-            {/* Banner shown while user is filling in the return leg after outbound was saved */}
-            {isReturnLegMode && (
-              <div style={{
-                marginTop: 12, display: 'flex', alignItems: 'center', gap: 8,
-                fontSize: 11, color: 'var(--indigo2)', fontWeight: 600,
-                background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)',
-                borderRadius: 8, padding: '8px 12px',
-              }}>
+             {/* Banner shown while user is filling in the return leg after outbound was saved */}
+             {isReturnLegMode && (
+               <div style={{
+                 marginTop: 8, display: 'flex', alignItems: 'center', gap: 8,
+                 fontSize: 10, color: 'var(--indigo2)', fontWeight: 600,
+                 background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)',
+                 borderRadius: 8, padding: '6px 10px',
+               }}>
                 <RotateCcw size={13} />
                 Outbound saved ✓ — Now fill in the <b style={{ fontWeight: 800 }}>Return leg</b> details ({departureAirport || '—'} → {arrivalAirport || '—'}). Enter the date, CET time &amp; flight number manually.
               </div>
@@ -629,10 +616,10 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
             {/* When editing a return ticket, just show a static mark */}
             {editingTicket?.returnLeg && (
               <div style={{
-                marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 6,
-                fontSize: 11, color: 'var(--indigo2)', fontWeight: 700,
+                marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6,
+                fontSize: 10, color: 'var(--indigo2)', fontWeight: 700,
                 background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)',
-                borderRadius: 8, padding: '6px 12px',
+                borderRadius: 8, padding: '5px 10px',
               }}>
                 <RotateCcw size={13} /> This is a Return Ticket
               </div>
@@ -642,7 +629,7 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
         </div>
 
         {/* Footer actions */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
           <button type="button" onClick={onBack} className="btn btn-ghost" style={{ gap: 6 }}>
             <ArrowLeft size={14} /> Back to List
           </button>

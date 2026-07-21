@@ -8,6 +8,7 @@ import authRoutes     from './routes/auth.js';
 import ticketRoutes   from './routes/tickets.js';
 import staffRoutes    from './routes/staff.js';
 import auditLogRoutes from './routes/auditLogs.js';
+import emailRoutes    from './routes/email.js';
 
 const app  = express();
 app.use(compression());
@@ -59,6 +60,7 @@ apiRouter.use('/auth',       authRoutes);
 apiRouter.use('/tickets',    ticketRoutes);
 apiRouter.use('/staff',      staffRoutes);
 apiRouter.use('/audit-logs', auditLogRoutes);
+apiRouter.use('/email',      emailRoutes);
 apiRouter.get('/health', async (_req, res) => {
   const ready = await isDBReady();
   res.json({ status: ready ? 'ok' : 'degraded', timestamp: new Date().toISOString(), db: ready ? 'connected' : 'disconnected' });

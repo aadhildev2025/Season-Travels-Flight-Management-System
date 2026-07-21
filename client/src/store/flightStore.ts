@@ -13,7 +13,14 @@ export async function apiFetch(url: string, options?: RequestInit) {
   if (res.status === 401 && !url.includes('/api/auth/login')) {
     useFlightStore.setState({ currentUser: null, isAuthenticated: false });
   }
-  const data = await res.json();
+  let data: any;
+  const contentType = res.headers.get('content-type');
+  if (contentType && contentType.includes('application/json')) {
+    data = await res.json();
+  } else {
+    const text = await res.text();
+    data = { error: text || `Request failed with status ${res.status}` };
+  }
   if (!res.ok) throw new Error(data.error || 'API request failed');
   return data;
 }
@@ -66,12 +73,16 @@ interface FlightState {
   loading:         boolean;
   hasFetched:      boolean;
   backendReady:    boolean;
+  expiringIds:     Set<string>;
+  toast:           { message: string; type: 'success' | 'error' } | null;
 
   fetchSession:  () => Promise<void>;
   login:         (email: string, password: string) => Promise<boolean>;
   logout:        () => Promise<void>;
   updateProfile: (data: { name?: string; email?: string; currentPassword?: string; newPassword?: string }) => Promise<void>;
   checkBackendReady: () => Promise<boolean>;
+  expireOldTickets: () => Promise<void>;
+  showToast: (message: string, type?: 'success' | 'error') => void;
 
   fetchStaff:  () => Promise<{ id: string; name: string; email: string; role: string }[]>;
   createStaff: (data: { name: string; email: string; password: string; role: string }) => Promise<void>;
@@ -94,6 +105,13 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
   loading:         false,
   hasFetched:      false,
   backendReady:    false,
+  expiringIds:     new Set<string>(),
+  toast:           null,
+
+  showToast: (message, type = 'success') => {
+    set({ toast: { message, type } });
+    setTimeout(() => set({ toast: null }), 3000);
+  },
 
   checkBackendReady: async () => {
     const ready = await checkBackendHealth();
@@ -147,6 +165,7 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
     try {
       const d = await apiFetch('/api/tickets');
       set({ tickets: d.tickets, hasFetched: true });
+      setTimeout(() => get().expireOldTickets(), 1000);
     } catch {
       console.error('Failed to fetch tickets');
     } finally {
@@ -160,13 +179,11 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
   },
 
   updateTicket: async (id, updates) => {
-    // Optimistic update: patch local state immediately for instant UI response
     const prev = get().tickets;
     set({ tickets: prev.map(t => t._id === id ? { ...t, ...updates } : t) });
     try {
       await apiFetch(`/api/tickets/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
     } catch (err) {
-      // Revert on failure
       set({ tickets: prev });
       console.error('Failed to update ticket:', err);
     }
@@ -175,6 +192,29 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
   deleteTicket: async (id) => {
     await apiFetch(`/api/tickets/${id}`, { method: 'DELETE' });
     await get().fetchTickets();
+  },
+
+  expireOldTickets: async () => {
+    const now = new Date();
+    const expired = get().tickets.filter(t => {
+      if (!t.departureTimeUTC) return false;
+      return new Date(t.departureTimeUTC) <= now;
+    });
+
+    if (expired.length === 0) return;
+
+    const ids = new Set(expired.map(t => t._id));
+    set({ expiringIds: ids });
+
+    await new Promise(r => setTimeout(r, 600));
+
+    try {
+      await apiFetch('/api/tickets/expire-departed', { method: 'POST' });
+    } catch (err) {
+      console.error('Failed to expire tickets on server:', err);
+    }
+
+    set({ tickets: get().tickets.filter(t => !ids.has(t._id)), expiringIds: new Set() });
   },
 
   fetchAnalytics: async () => {

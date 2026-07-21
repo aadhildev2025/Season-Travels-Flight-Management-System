@@ -92,8 +92,8 @@ export default function Login() {
       <div className="fade-up" style={{ width: '100%', maxWidth: 400, position: 'relative', zIndex: 1 }}>
 
         {/* Brand header */}
-        <div style={{ textAlign: 'center', marginBottom: 4 }}>
-          <img src={logoSrc} alt="Season Travels" style={{ width: 280, height: 280, objectFit: 'contain', marginBottom: 2, display: 'block', margin: '0 auto 2px' }} />
+        <div style={{ textAlign: 'center', marginBottom: 0 }}>
+          <img src={logoSrc} alt="Season Travels" style={{ width: 280, height: 280, objectFit: 'contain', marginBottom: 6, display: 'block', margin: '0 auto 6px' }} />
         </div>
 
         {/* Live clock pill */}
@@ -102,7 +102,7 @@ export default function Login() {
           style={{
             display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center',
             background: 'var(--surface)', border: '1px solid var(--border)',
-            borderRadius: 10, padding: '6px 10px', marginBottom: 2, marginTop: -2,
+            borderRadius: 10, padding: '8px 12px', marginBottom: 24, marginTop: -72,
             cursor: 'pointer', transition: 'all 0.2s ease',
             userSelect: 'none',
           }}
@@ -126,7 +126,7 @@ export default function Login() {
         </div>
 
         {/* Card */}
-        <div className="card" style={{ padding: 24 }}>
+        <div className="card" style={{ padding: 24, marginTop: 0 }}>
           <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 20 }}>Sign in to your account</p>
 
           {error && (

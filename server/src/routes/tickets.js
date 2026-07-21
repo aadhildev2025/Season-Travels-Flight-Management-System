@@ -139,6 +139,18 @@ router.put('/:id', requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/tickets/expire-departed - Auto-delete tickets whose departure time has passed
+router.post('/expire-departed', requireAuth, async (req, res) => {
+  try {
+    const now = new Date();
+    const result = await Ticket.deleteMany({ departureTimeUTC: { $lte: now.toISOString() } });
+    return res.json({ success: true, deletedCount: result.deletedCount });
+  } catch (err) {
+    console.error('Expire departed tickets error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // DELETE /api/tickets/:id
 router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
   try {

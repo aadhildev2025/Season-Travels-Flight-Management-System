@@ -10,7 +10,6 @@ import SplashScreen from './components/SplashScreen';
 import HeaderClock from './components/HeaderClock';
 import type { Ticket } from './types';
 import {
-  LayoutGrid,
   ScrollText,
   Users,
   LogOut,
@@ -24,12 +23,13 @@ import {
   CheckCircle
 } from 'lucide-react';
 import logoSrc from './logo/2.png';
+import dashboardLogoSrc from './logo/3.png';
 
 export type View = 'dashboard' | 'ticket-form' | 'audit-logs' | 'profile' | 'staff';
 export type TZ = 'CET' | 'SLT';
 
 export default function App() {
-  const { isAuthenticated, fetchSession, currentUser, tickets, fetchTickets, logout, loading } = useFlightStore();
+  const { isAuthenticated, fetchSession, currentUser, tickets, fetchTickets, logout, loading, toast, showToast } = useFlightStore();
   const [view, setView] = useState<View>(() => {
     const saved = localStorage.getItem('currentView');
     return (saved as View) || 'dashboard';
@@ -46,12 +46,6 @@ export default function App() {
   // Sidebar always starts collapsed; user opens it manually
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [focusRemarks, setFocusRemarks] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
 
   useEffect(() => {
     localStorage.setItem('currentView', view);
@@ -72,6 +66,15 @@ export default function App() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Auto-expire tickets whose departure time has passed
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const check = () => useFlightStore.getState().expireOldTickets();
+    check();
+    const interval = setInterval(check, 30000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated]);
 
   // Reset view and sidebar on login
   useEffect(() => {
@@ -181,7 +184,7 @@ export default function App() {
 
   // Nav Items definition
   const sidebarNavItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: <LayoutGrid size={15} /> },
+    { id: 'dashboard', label: 'Flight Departure', logoSrc: dashboardLogoSrc },
     { id: 'audit-logs', label: 'Audit Logs', icon: <ScrollText size={15} />, adminOnly: true },
     { id: 'staff', label: 'Staff Management', icon: <Users size={15} />, adminOnly: true },
   ];
@@ -189,7 +192,14 @@ export default function App() {
   const activeTab = view === 'ticket-form' ? 'dashboard' : view;
   const pageTitle = view === 'ticket-form'
     ? (editingTicket ? 'Edit Departure Ticket' : 'Add Departure Ticket')
-    : view.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    : view === 'dashboard'
+      ? (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+          <img src={dashboardLogoSrc} alt="" style={{ width: 24, height: 24, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+          <span style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.01em' }}>Flight Departure</span>
+        </span>
+      )
+      : view.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}>
@@ -250,7 +260,13 @@ export default function App() {
                 onClick={() => { setView(item.id as View); setSidebarOpen(false); }}
                 className={`sidebar-link${isActive ? ' active' : ''}`}
               >
-                <span className="link-icon">{item.icon}</span>
+                {item.logoSrc ? (
+                  <span className="link-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18 }}>
+                    <img src={item.logoSrc} alt="" style={{ width: 18, height: 18, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+                  </span>
+                ) : (
+                  <span className="link-icon">{item.icon}</span>
+                )}
                 <span style={{ flex: 1 }}>{item.label}</span>
               </button>
             );

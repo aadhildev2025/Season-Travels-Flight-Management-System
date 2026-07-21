@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useFlightStore } from '../store/flightStore';
+import { useFlightStore, apiFetch } from '../store/flightStore';
 import { utcToLocalTime, formatCETTime } from '../utils/timezone';
 import ConfirmDialog from './ConfirmDialog';
 import { Plane, Search, Plus, RefreshCw, Download, RotateCcw } from 'lucide-react';
@@ -18,9 +18,10 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onRefresh, onPDF }: DashboardProps) {
-  const { tickets, currentUser, deleteTicket, updateTicket, loading, hasFetched } = useFlightStore();
+  const { tickets, currentUser, deleteTicket, updateTicket, loading, hasFetched, expiringIds } = useFlightStore();
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [mailTicket, setMailTicket]           = useState<Ticket | null>(null);
+  const [composeMessage, setComposeMessage]   = useState('');
   const [todayStr, setTodayStr]               = useState('');
   const [copiedPnr, setCopiedPnr]             = useState<string | null>(null);
   const [copiedSurname, setCopiedSurname]     = useState<string | null>(null);
@@ -66,13 +67,11 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
   }, [tickets, hasFetched, onRefresh]);
 
   const filtered = tickets.filter(t => {
-    // Hide departure today tickets after 1 minute has elapsed from the departure time
     if (t.departureTimeUTC) {
-      const isDepToday = formatDate(t.departureTimeUTC) === todayStr;
-      if (isDepToday) {
-        const depTime = new Date(t.departureTimeUTC);
-        const now = new Date();
-        if (now.getTime() > depTime.getTime() + 60 * 1000) {
+      const depTime = new Date(t.departureTimeUTC);
+      const now = new Date();
+      if (now.getTime() > depTime.getTime()) {
+        if (!expiringIds.has(t._id)) {
           return false;
         }
       }
@@ -139,43 +138,33 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
     return `${subject}\n\n${body}`;
   };
 
-  // ── Email via one.com webmail ──
-  // one.com/Roundcube cannot be pre-filled from a link, so we open the user's
-  // already-logged-in one.com webmail and copy the message to the clipboard.
-  // The user starts a new message and pastes.
-  const ONECOM_WEBMAIL_URL = 'https://mail.one.com';
-
-  const sendViaEmail = async (ticket: Ticket) => {
-    const { subject, body } = buildReminderMessage(ticket);
+  // ── Email via SMTP ──
+  const sendViaEmail = (ticket: Ticket, customMessage?: string) => {
     const to = ticket.email || '';
     if (!to) {
-      alert('This passenger has no email address on file.');
+      useFlightStore.getState().showToast('This passenger has no email address on file.', 'error');
       return;
     }
 
-    // Open the user's own logged-in one.com webmail in a new tab first (within the
-    // click gesture so the popup isn't blocked), then copy the message.
-    window.open(ONECOM_WEBMAIL_URL, '_blank', 'noopener,noreferrer');
+    const bodyText = (customMessage && customMessage.trim()) ? customMessage : buildReminderMessage(ticket).body;
+    const mailSubject = (customMessage && customMessage.trim()) ? `Message from Season Travels` : buildReminderMessage(ticket).subject;
+    const endpoint = (customMessage && customMessage.trim()) ? '/api/email/send-custom' : '/api/email/send-reminder';
 
-    // Copy the message body to the clipboard so it can be pasted into the compose area.
-    let copied = false;
-    try {
-      await navigator.clipboard.writeText(body);
-      copied = true;
-    } catch {
-      copied = false;
-    }
+    apiFetch(endpoint, {
+      method: 'POST',
+      body: JSON.stringify({
+        to,
+        subject: mailSubject,
+        text: bodyText,
+      }),
+    }).catch(err => {
+      console.error('Send email background error:', err);
+      useFlightStore.getState().showToast('Failed to send email. Please check configuration.', 'error');
+    });
 
+    useFlightStore.getState().showToast('Email sent successfully!');
     setMailTicket(null);
-
-    alert(
-      `one.com webmail opened.\n\n` +
-      `To:  ${to}\n` +
-      `Subject:  ${subject}\n\n` +
-      (copied
-        ? `The message has been COPIED — start a new message, paste (Ctrl+V) into the body, and add the To & Subject above.`
-        : `Copy the message body from the ticket and paste it into a new message.`)
-    );
+    setComposeMessage('');
   };
 
   // ── WhatsApp ──
@@ -314,8 +303,8 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
             <table className="data-table">
               <thead>
                 <tr>
-                  <th style={th}>Date</th>
-                  <th style={th}>Name</th>
+                  <th style={{ ...th, width: 120, paddingRight: 6 }}>Date</th>
+                  <th style={{ ...th, paddingLeft: 6 }}>Name</th>
                   <th style={th}>From</th>
                   <th style={th}>To</th>
                   <th style={{ ...th, textAlign:'center' }}></th>
@@ -341,10 +330,10 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                   return (
                     <tr
                       key={ticket._id}
-                      className={`${isToday ? 'is-today' : ''} ${isNew ? 'is-new-ticket' : ''}`}
+                      className={`${isToday ? 'is-today' : ''} ${isNew ? 'is-new-ticket' : ''} ${expiringIds.has(ticket._id) ? 'row-expiring' : ''}`}
                     >
                       {/* Date column */}
-                      <td style={{ ...td, whiteSpace:'nowrap' }}>
+                      <td style={{ ...td, paddingRight: 6, whiteSpace:'nowrap' }}>
                         {hasRemark ? (
                           <span
                             className={`date-remark${isNew ? ' date-new-remark' : ''} ${isLoadingToday ? 'date-loading-green' : ''}`}
@@ -379,7 +368,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                         )}
                       </td>
 
-                      <td style={{ ...td, fontWeight:700, color:'var(--text)', maxWidth:280, overflow:'visible', whiteSpace:'nowrap' }}>
+                      <td style={{ ...td, paddingLeft: 6, fontWeight:700, color:'var(--text)', maxWidth:280, overflow:'visible', whiteSpace:'nowrap' }}>
                         <span
                           onClick={() => handleCopySurname(ticket.passengerName)}
                           title="Click to copy surname"
@@ -426,7 +415,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
 
                       {/* Flight Number */}
                       <td style={td}>
-                        <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, color:'var(--text2)', fontSize:12, letterSpacing:'0.04em' }}>
+                        <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, color:'#fff', fontSize:12, letterSpacing:'0.04em' }}>
                           {ticket.flightNumber || '—'}
                         </span>
                       </td>
@@ -438,7 +427,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                             title="Click to copy PNR"
                             style={{
                               fontFamily:"'JetBrains Mono',monospace", fontWeight:700,
-                              color: copiedPnr === ticket.pnr ? 'var(--green)' : 'var(--cyan)',
+                              color: copiedPnr === ticket.pnr ? 'var(--green)' : '#ec4899',
                               fontSize:13, letterSpacing:'0.04em',
                               cursor: 'copy',
                               padding: '2px 6px',
@@ -460,24 +449,23 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                           onClick={() => updateTicket(ticket._id, { checkin: !ticket.checkin })}
                           style={{
                             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                            gap: 4, minWidth: 48, padding: '4px 10px', borderRadius: 6,
-                            fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
-                            cursor: 'pointer', transition: 'all 0.2s ease',
-                            border: ticket.checkin ? '1px solid var(--green)' : '1px solid var(--border2)',
-                            background: ticket.checkin ? 'rgba(52,211,153,0.1)' : 'var(--surface2)',
-                            color: ticket.checkin ? 'var(--green)' : 'var(--text3)',
+                            width: 24, height: 24, borderRadius: 6, padding: 0,
+                            border: ticket.checkin ? '1.5px solid var(--green)' : '1.5px solid var(--border)',
+                            background: ticket.checkin ? 'rgba(52,211,153,0.15)' : 'transparent',
+                            cursor: 'pointer', transition: 'all 0.15s',
                           }}
                           onMouseEnter={e => {
-                            e.currentTarget.style.boxShadow = '0 0 12px rgba(52,211,153,0.25)';
                             e.currentTarget.style.borderColor = ticket.checkin ? 'var(--green)' : 'rgba(52,211,153,0.5)';
+                            e.currentTarget.style.boxShadow = '0 0 8px rgba(52,211,153,0.2)';
                           }}
                           onMouseLeave={e => {
+                            e.currentTarget.style.borderColor = ticket.checkin ? 'var(--green)' : 'var(--border)';
                             e.currentTarget.style.boxShadow = 'none';
-                            e.currentTarget.style.borderColor = ticket.checkin ? 'var(--green)' : 'var(--border2)';
                           }}
                         >
-                          <span style={{ opacity: ticket.checkin ? 1 : 0.5 }}>✓</span>
-                          <span>{ticket.checkin ? 'YES' : 'NO'}</span>
+                          {ticket.checkin && (
+                            <span style={{ color: 'var(--green)', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>✓</span>
+                          )}
                         </button>
                       </td>
 
@@ -487,23 +475,23 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                           onClick={() => onEdit(ticket, true)}
                           style={{
                             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                            gap: 4, minWidth: 48, padding: '4px 10px', borderRadius: 6,
-                            fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
-                            cursor: 'pointer', transition: 'all 0.2s ease',
-                            border: (ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) ? '1px solid var(--indigo)' : '1px solid var(--border2)',
-                            background: (ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) ? 'rgba(99,102,241,0.1)' : 'var(--surface2)',
-                            color: (ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) ? 'var(--indigo)' : 'var(--text3)',
+                            width: 24, height: 24, borderRadius: 6, padding: 0,
+                            border: (ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) ? '1.5px solid var(--red)' : '1.5px solid var(--border)',
+                            background: (ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) ? 'rgba(244,63,94,0.15)' : 'transparent',
+                            cursor: 'pointer', transition: 'all 0.15s',
                           }}
                           onMouseEnter={e => {
-                            e.currentTarget.style.boxShadow = '0 0 12px rgba(99,102,241,0.25)';
-                            e.currentTarget.style.borderColor = (ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) ? 'var(--indigo)' : 'rgba(99,102,241,0.5)';
+                            e.currentTarget.style.borderColor = (ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) ? 'var(--red)' : 'rgba(244,63,94,0.5)';
+                            e.currentTarget.style.boxShadow = '0 0 8px rgba(244,63,94,0.2)';
                           }}
                           onMouseLeave={e => {
+                            e.currentTarget.style.borderColor = (ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) ? 'var(--red)' : 'var(--border)';
                             e.currentTarget.style.boxShadow = 'none';
-                            e.currentTarget.style.borderColor = (ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) ? 'var(--indigo)' : 'var(--border2)';
                           }}
                         >
-                          <span>{(ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) ? '?' : 'NO'}</span>
+                          {(ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) && (
+                            <span style={{ color: 'var(--red)', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>?</span>
+                          )}
                         </button>
                       </td>
 
@@ -534,42 +522,71 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
         <div style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', cursor: 'pointer' }}
-            onClick={() => setMailTicket(null)}
+            onClick={() => { setMailTicket(null); setComposeMessage(''); }}
           />
           <div
             className="card fade-up"
-            style={{ position: 'relative', width: '100%', maxWidth: 360, padding: 24, boxShadow: '0 24px 64px rgba(0,0,0,0.6)' }}
+            style={{ position: 'relative', width: '100%', maxWidth: 420, padding: 24, boxShadow: '0 24px 64px rgba(0,0,0,0.6)' }}
             onClick={e => e.stopPropagation()}
           >
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Send Reminder</h3>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Send Message</h3>
             <p style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 18 }}>
-              How would you like to send the reminder to {mailTicket.passengerName}?
+              To: {mailTicket.passengerName} ({mailTicket.email})
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {/* WhatsApp */}
-              <button
-                onClick={() => sendViaWhatsApp(mailTicket)}
-                className="btn"
-                style={{ width: '100%', justifyContent: 'flex-start', gap: 12, padding: '12px 16px', background: '#25D366', color: '#fff', fontSize: 13, fontWeight: 700 }}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.71.306 1.263.489 1.694.625.712.227 1.36.195 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
-                WhatsApp
-              </button>
-
-              {/* Email */}
+              {/* Send Reminder */}
               <button
                 onClick={() => sendViaEmail(mailTicket)}
                 className="btn"
                 style={{ width: '100%', justifyContent: 'flex-start', gap: 12, padding: '12px 16px', background: 'var(--indigo)', color: '#fff', fontSize: 13, fontWeight: 700 }}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
-                Email
+                Send Reminder
+              </button>
+
+              {/* Compose Mail */}
+              <button
+                onClick={() => document.getElementById('compose-textarea')?.focus()}
+                className="btn"
+                style={{ width: '100%', justifyContent: 'flex-start', gap: 12, padding: '12px 16px', background: 'var(--surface2)', color: 'var(--text)', fontSize: 13, fontWeight: 700, border: '1px solid var(--border)' }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                Compose Mail
+              </button>
+
+              <textarea
+                id="compose-textarea"
+                placeholder="Type your message here..."
+                value={composeMessage}
+                onChange={e => setComposeMessage(e.target.value)}
+                rows={4}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface)',
+                  color: 'var(--text)',
+                  fontSize: 13,
+                  resize: 'vertical',
+                  minHeight: 80,
+                  fontFamily: 'inherit',
+                }}
+              />
+
+              <button
+                onClick={() => sendViaEmail(mailTicket, composeMessage)}
+                disabled={!composeMessage.trim()}
+                className="btn btn-primary"
+                style={{ width: '100%', justifyContent: 'center', padding: '10px', opacity: composeMessage.trim() ? 1 : 0.5 }}
+              >
+                Send Message
               </button>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-              <button onClick={() => setMailTicket(null)} className="btn btn-ghost" style={{ fontSize: 12 }}>Cancel</button>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+              <button onClick={() => { setMailTicket(null); setComposeMessage(''); }} className="btn btn-ghost" style={{ fontSize: 12 }}>Cancel</button>
             </div>
           </div>
         </div>,

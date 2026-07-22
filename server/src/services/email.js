@@ -32,12 +32,18 @@ export function buildReminderText(ticket) {
 
 export async function sendEmail({ to, subject, text, html }) {
   try {
+    // Always use a permanent public HTTPS URL for the logo so it renders in all
+    // email clients (including Gmail) regardless of whether the email was sent
+    // from localhost or the Vercel deployment. Gmail cannot reach localhost.
+    const logoUrl = process.env.LOGO_URL
+      || 'https://season-travels-flight-management-sy.vercel.app/season-travels-logo.png';
+
     const mailHtml = html || (text ? `
       <div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #f0f0f0; border-radius: 8px; background-color: #ffffff;">
         <div>${text.replace(/\n/g, '<br />')}</div>
         <br />
         <div style="border-top: 2px solid #eee; padding-top: 20px; margin-top: 20px; text-align: left;">
-          <img src="data:image/png;base64,${LOGO_BASE64}" alt="Season Travels" style="width: 220px; height: auto; display: block;" />
+          <img src="${logoUrl}" alt="Season Travels" style="width: 220px; height: auto; display: block;" />
         </div>
       </div>
     ` : undefined);

@@ -96,6 +96,14 @@ const ticketSchema = new mongoose.Schema({
     type: String,
     default: '',
   },
+  thankYouSent: {
+    type: Boolean,
+    default: false,
+  },
+  reminderSent: {
+    type: Boolean,
+    default: false,
+  }
 }, { timestamps: true });
 
 ticketSchema.index({ pnr: 1 });

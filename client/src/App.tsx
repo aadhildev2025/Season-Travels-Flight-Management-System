@@ -146,10 +146,12 @@ export default function App() {
   const handleEdit = (t: Ticket, focusRemarks?: boolean) => { setEditingTicket(t); setFocusRemarks(!!focusRemarks); setView('ticket-form'); };
   const handleBack = () => { setEditingTicket(null); setFocusRemarks(false); setView('dashboard'); };
   const handleRefresh = () => fetchTickets();
-  const handleTicketSuccess = (msg: string) => {
+  const handleTicketSuccess = (msg: string, keepFormOpen?: boolean) => {
     showToast(msg);
-    setEditingTicket(null);
-    setView('dashboard');
+    if (!keepFormOpen) {
+      setEditingTicket(null);
+      setView('dashboard');
+    }
     fetchTickets();
   };
 
@@ -469,12 +471,13 @@ export default function App() {
       {/* ════ Global Toast Notification ════ */}
       {toast && (
         <div className="toast-pop" style={{
-          position: 'fixed', top: 28, right: 28, zIndex: 9999,
+          position: 'fixed', top: 70, right: 28, zIndex: 9999,
           display: 'flex', alignItems: 'center', gap: 10,
           background: toast.type === 'success'
-            ? 'linear-gradient(135deg, #059669, #10b981)'
+            ? 'transparent'
             : 'linear-gradient(135deg, #dc2626, #ef4444)',
-          color: '#fff', borderRadius: 12, padding: '12px 20px',
+          color: '#fff',
+          border: toast.type === 'success' ? '2px solid #10b981' : 'none', borderRadius: 12, padding: '12px 20px',
           boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
           fontSize: 13, fontWeight: 700, minWidth: 240, maxWidth: 340,
         }}>

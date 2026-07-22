@@ -2,6 +2,7 @@ import { Router } from 'express';
 import Ticket from '../models/Ticket.js';
 import AuditLog from '../models/AuditLog.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { sendEmail, buildThankYouText, buildReminderText } from '../services/email.js';
 
 const router = Router();
 
@@ -139,14 +140,69 @@ router.put('/:id', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/tickets/expire-departed - Auto-delete tickets whose departure time has passed
+// POST /api/tickets/expire-departed - Mark 48h+ departed tickets as thanked, then remove them
 router.post('/expire-departed', requireAuth, async (req, res) => {
   try {
     const now = new Date();
-    const result = await Ticket.deleteMany({ departureTimeUTC: { $lte: now.toISOString() } });
-    return res.json({ success: true, deletedCount: result.deletedCount });
+    const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+    const toThank = await Ticket.find({
+      departureTimeUTC: { $lte: fortyEightHoursAgo.toISOString() },
+      thankYouSent: false,
+      email: { $exists: true, $ne: '' },
+    });
+
+    for (const ticket of toThank) {
+      try {
+        if (ticket.email) {
+          const text = buildThankYouText(ticket);
+          await sendEmail({ to: ticket.email, subject: text.subject, text: text.body });
+        }
+        await Ticket.findByIdAndUpdate(ticket._id, { thankYouSent: true });
+        audit(req, 'SEND_THANK_YOU', ticket.pnr,
+          `Sent thank-you email to ${ticket.passengerName} · ${ticket.pnr}`);
+      } catch (err) {
+        console.error('Thank-you email failed:', err);
+      }
+    }
+
+    const result = await Ticket.deleteMany({ departureTimeUTC: { $lte: fortyEightHoursAgo.toISOString() } });
+    return res.json({ success: true, deletedCount: result.deletedCount, thankedCount: toThank.length });
   } catch (err) {
     console.error('Expire departed tickets error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/tickets/send-reminders - Auto-send reminders for departures within 24 hours
+router.post('/send-reminders', requireAuth, async (req, res) => {
+  try {
+    const now = new Date();
+    const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+    const upcoming = await Ticket.find({
+      departureTimeUTC: { $gte: now.toISOString(), $lte: in24Hours.toISOString() },
+      reminderSent: false,
+      email: { $exists: true, $ne: '' },
+    });
+
+    for (const ticket of upcoming) {
+      try {
+        if (ticket.email) {
+          const text = buildReminderText(ticket);
+          await sendEmail({ to: ticket.email, subject: text.subject, text: text.body });
+        }
+        await Ticket.findByIdAndUpdate(ticket._id, { reminderSent: true });
+        audit(req, 'SEND_REMINDER', ticket.pnr,
+          `Sent reminder email to ${ticket.passengerName} · ${ticket.pnr}`);
+      } catch (err) {
+        console.error('Reminder email failed:', err);
+      }
+    }
+
+    return res.json({ success: true, remindedCount: upcoming.length });
+  } catch (err) {
+    console.error('Send reminders error:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

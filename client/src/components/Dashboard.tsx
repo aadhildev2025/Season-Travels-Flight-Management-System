@@ -119,16 +119,20 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
 
   const getSurname = (name: string) => {
     if (!name) return '';
-    const parts = name.trim().split(/[/\s]+/);
-    return parts[0] || '';
+    const parts = name.split('/');
+    if (parts.length > 1) {
+      return parts[0].trim();
+    }
+    const firstPart = name.trim().split(/\s+/);
+    return firstPart[0] || '';
   };
 
   const buildReminderMessage = (ticket: Ticket) => {
     const dep = utcToLocalTime(ticket.departureTimeUTC, ticket.originalTimezone);
     const tzLabel = ticket.originalTimezone.split('/').pop()?.replace('_',' ') || '';
     return {
-      subject: `Reminder - Flight ${ticket.pnr} | ${ticket.departureAirport} → ${ticket.arrivalAirport}`,
-      body: `Dear ${ticket.passengerName},\n\nThis is a reminder for your upcoming flight.\n\nFlight Details:\nPNR: ${ticket.pnr}\nRoute: ${ticket.departureAirport} → ${ticket.arrivalAirport}\nDeparture: ${dep.formatted} (${tzLabel})\n\nPlease ensure you check in at least 3 hours prior to departure.\n\nWe wish you a safe and pleasant journey!\n\nWarm regards,\nSEASON TRAVELS`,
+      subject: 'Travel Reminder from SeasonTravels',
+      body: `Dear ${ticket.passengerName},\n\nThis is a reminder for your upcoming flight.\n\nFlight Details:\nBooking Reference: ${ticket.pnr}\nRoute: ${ticket.departureAirport} → ${ticket.arrivalAirport}\nDeparture: ${dep.formatted} (${tzLabel})\n\nPlease ensure you check in at least 3 hours prior to departure.\n\nWe wish you a safe and pleasant journey!\n\nWarm regards,\nSEASON TRAVELS`,
     };
   };
 
@@ -147,7 +151,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
     }
 
     const bodyText = (customMessage && customMessage.trim()) ? customMessage : buildReminderMessage(ticket).body;
-    const mailSubject = (customMessage && customMessage.trim()) ? `Message from Season Travels` : buildReminderMessage(ticket).subject;
+    const mailSubject = (customMessage && customMessage.trim()) ? `Message From SeasonTravels` : buildReminderMessage(ticket).subject;
     const endpoint = (customMessage && customMessage.trim()) ? '/api/email/send-custom' : '/api/email/send-reminder';
 
     apiFetch(endpoint, {
@@ -476,20 +480,20 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                           style={{
                             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                             width: 24, height: 24, borderRadius: 6, padding: 0,
-                            border: (ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) ? '1.5px solid var(--red)' : '1.5px solid var(--border)',
-                            background: (ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) ? 'rgba(244,63,94,0.15)' : 'transparent',
+                            border: ((ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) || ticket.status === 'Need Further Actions') ? '1.5px solid var(--red)' : '1.5px solid var(--border)',
+                            background: ((ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) || ticket.status === 'Need Further Actions') ? 'rgba(244,63,94,0.15)' : 'transparent',
                             cursor: 'pointer', transition: 'all 0.15s',
                           }}
                           onMouseEnter={e => {
-                            e.currentTarget.style.borderColor = (ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) ? 'var(--red)' : 'rgba(244,63,94,0.5)';
+                            e.currentTarget.style.borderColor = ((ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) || ticket.status === 'Need Further Actions') ? 'var(--red)' : 'rgba(244,63,94,0.5)';
                             e.currentTarget.style.boxShadow = '0 0 8px rgba(244,63,94,0.2)';
                           }}
                           onMouseLeave={e => {
-                            e.currentTarget.style.borderColor = (ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) ? 'var(--red)' : 'var(--border)';
+                            e.currentTarget.style.borderColor = ((ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) || ticket.status === 'Need Further Actions') ? 'var(--red)' : 'var(--border)';
                             e.currentTarget.style.boxShadow = 'none';
                           }}
                         >
-                          {(ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) && (
+                          {((ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) || ticket.status === 'Need Further Actions') && (
                             <span style={{ color: 'var(--red)', fontSize: 14, fontWeight: 900, lineHeight: 1 }}>?</span>
                           )}
                         </button>

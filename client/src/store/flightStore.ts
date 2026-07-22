@@ -82,8 +82,10 @@ interface FlightState {
   updateProfile: (data: { name?: string; email?: string; currentPassword?: string; newPassword?: string }) => Promise<void>;
   checkBackendReady: () => Promise<boolean>;
   expireOldTickets: () => Promise<void>;
-  showToast: (message: string, type?: 'success' | 'error') => void;
 
+  sendUpcomingReminders: () => Promise<void>;
+
+  showToast: (message: string, type?: 'success' | 'error') => void;
   fetchStaff:  () => Promise<{ id: string; name: string; email: string; role: string }[]>;
   createStaff: (data: { name: string; email: string; password: string; role: string }) => Promise<void>;
   updateStaff: (id: string, data: { name?: string; email?: string; password?: string; role?: string }) => Promise<void>;
@@ -166,6 +168,7 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
       const d = await apiFetch('/api/tickets');
       set({ tickets: d.tickets, hasFetched: true });
       setTimeout(() => get().expireOldTickets(), 1000);
+      setTimeout(() => get().sendUpcomingReminders(), 1200);
     } catch {
       console.error('Failed to fetch tickets');
     } finally {
@@ -210,11 +213,19 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
 
     try {
       await apiFetch('/api/tickets/expire-departed', { method: 'POST' });
-    } catch (err) {
-      console.error('Failed to expire tickets on server:', err);
+    } catch {
+      console.error('Failed to expire tickets on server');
     }
 
     set({ tickets: get().tickets.filter(t => !ids.has(t._id)), expiringIds: new Set() });
+  },
+
+  sendUpcomingReminders: async () => {
+    try {
+      await apiFetch('/api/tickets/send-reminders', { method: 'POST' });
+    } catch {
+      console.error('Failed to send upcoming reminders');
+    }
   },
 
   fetchAnalytics: async () => {
@@ -225,3 +236,10 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
     return await apiFetch(`/api/audit-logs?page=${page}&limit=50`);
   },
 }));
+
+if (typeof window !== 'undefined') {
+  setInterval(() => {
+    useFlightStore.getState().expireOldTickets();
+    useFlightStore.getState().sendUpcomingReminders();
+  }, 30000);
+}

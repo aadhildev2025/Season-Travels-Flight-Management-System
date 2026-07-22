@@ -43,9 +43,18 @@
   --sidebar-collapsed-w: 0px;
 }
 
-*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; cursor: default; }
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  cursor: default;
+}
 
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   background: var(--bg);
@@ -57,13 +66,18 @@ html, body, #root {
 }
 
 /* Only allow text selection and text cursor inside actual input fields */
-input, textarea {
+input,
+textarea {
   cursor: text;
   user-select: text;
 }
 
 /* Keep pointer cursor on interactive elements */
-button, a, select, label[for], [role="button"] {
+button,
+a,
+select,
+label[for],
+[role="button"] {
   cursor: pointer;
 }
 
@@ -72,11 +86,18 @@ button, a, select, label[for], [role="button"] {
   cursor: copy !important;
 }
 
-input[type="submit"], input[type="button"], input[type="reset"] {
+input[type="submit"],
+input[type="button"],
+input[type="reset"] {
   cursor: pointer;
 }
 
-input, select, textarea, button { font-family: inherit; }
+input,
+select,
+textarea,
+button {
+  font-family: inherit;
+}
 
 ::selection {
   background: rgba(99, 102, 241, 0.35);
@@ -141,6 +162,7 @@ input, select, textarea, button { font-family: inherit; }
     opacity: 0;
     transform: scale(0.9) translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: scale(1) translateY(0);
@@ -188,18 +210,27 @@ input, select, textarea, button { font-family: inherit; }
 }
 
 @keyframes remarkBlink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.45; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.45;
+  }
 }
 
 @keyframes greenSweep {
   0% {
     background: rgba(52, 211, 153, 0.55);
-    box-shadow: 0 0 12px rgba(52,211,153,0.5);
+    box-shadow: 0 0 12px rgba(52, 211, 153, 0.5);
   }
+
   60% {
     background: rgba(52, 211, 153, 0.2);
   }
+
   100% {
     background: transparent;
     box-shadow: none;
@@ -207,11 +238,14 @@ input, select, textarea, button { font-family: inherit; }
 }
 
 @keyframes pulseGreenLoading {
-  0%, 100% {
+
+  0%,
+  100% {
     color: var(--green);
     text-shadow: 0 0 4px rgba(52, 211, 153, 0.2);
     opacity: 0.7;
   }
+
   50% {
     color: var(--green2);
     text-shadow: 0 0 12px rgba(110, 231, 183, 0.8), 0 0 20px rgba(52, 211, 153, 0.4);
@@ -246,6 +280,7 @@ input, select, textarea, button { font-family: inherit; }
     transform: scale(0.995);
     filter: brightness(0.95);
   }
+
   100% {
     opacity: 1;
     transform: scale(1);
@@ -483,7 +518,7 @@ input, select, textarea, button { font-family: inherit; }
   background: rgba(52, 211, 153, 0.22);
   border-color: var(--green2);
   color: var(--green2);
-  box-shadow: 0 0 8px rgba(52,211,153,0.3);
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.3);
 }
 
 .badge-outline-no {
@@ -503,7 +538,7 @@ input, select, textarea, button { font-family: inherit; }
   background: rgba(255, 255, 255, 0.04);
   border-color: var(--text2);
   color: var(--text);
-  box-shadow: 0 0 8px rgba(255,255,255,0.05);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.05);
 }
 
 /* Remind button - shows "?" with outline style */
@@ -541,8 +576,8 @@ input, select, textarea, button { font-family: inherit; }
 }
 
 .badge-outline-remind-no:hover {
-  background: rgba(255,255,255,0.04);
-  border-color: rgba(255,255,255,0.15);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.15);
   color: var(--text2);
 }
 
@@ -664,8 +699,15 @@ input, select, textarea, button { font-family: inherit; }
 }
 
 @keyframes rowExpire {
-  0% { opacity: 1; transform: translateX(0); }
-  100% { opacity: 0; transform: translateX(40px); }
+  0% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateX(40px);
+  }
 }
 
 .data-table tbody tr.row-expiring {
@@ -780,7 +822,7 @@ input, select, textarea, button { font-family: inherit; }
   overflow-y: auto;
   overflow-x: hidden;
   transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
-              transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Collapsed sidebar: hidden on desktop */
@@ -791,7 +833,7 @@ input, select, textarea, button { font-family: inherit; }
 }
 
 /* When collapsed, hide inner content */
-.sidebar.collapsed > * {
+.sidebar.collapsed>* {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.15s;
@@ -1111,7 +1153,7 @@ input, select, textarea, button { font-family: inherit; }
   .main-content {
     margin-left: 0 !important;
   }
-  
+
   .main-content-area {
     padding: 16px 12px;
   }
@@ -1209,13 +1251,27 @@ input, select, textarea, button { font-family: inherit; }
 }
 
 @keyframes splashFadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes splashFadeOut {
-  from { opacity: 1; transform: scale(1); filter: blur(0); }
-  to   { opacity: 0; transform: scale(1.05); filter: blur(6px); }
+  from {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1.05);
+    filter: blur(6px);
+  }
 }
 
 /* Ambient moving glows */
@@ -1226,23 +1282,39 @@ input, select, textarea, button { font-family: inherit; }
   pointer-events: none;
   will-change: transform, opacity;
 }
+
 .splash-glow-1 {
-  width: 460px; height: 460px;
-  background: radial-gradient(circle, rgba(99,102,241,0.35), transparent 70%);
-  top: 12%; left: 50%;
+  width: 460px;
+  height: 460px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.35), transparent 70%);
+  top: 12%;
+  left: 50%;
   transform: translateX(-50%);
   animation: splashBreathe 3.4s ease-in-out infinite;
 }
+
 .splash-glow-2 {
-  width: 360px; height: 360px;
-  background: radial-gradient(circle, rgba(34,211,238,0.22), transparent 70%);
-  bottom: 6%; left: 46%;
+  width: 360px;
+  height: 360px;
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.22), transparent 70%);
+  bottom: 6%;
+  left: 46%;
   transform: translateX(-50%);
   animation: splashBreathe 4.2s ease-in-out infinite reverse;
 }
+
 @keyframes splashBreathe {
-  0%, 100% { opacity: 0.5; transform: translateX(-50%) scale(0.95); }
-  50%      { opacity: 1;   transform: translateX(-50%) scale(1.08); }
+
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: translateX(-50%) scale(0.95);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.08);
+  }
 }
 
 /* Flying plane accent */
@@ -1251,15 +1323,32 @@ input, select, textarea, button { font-family: inherit; }
   color: rgba(165, 180, 252, 0.35);
   pointer-events: none;
 }
+
 .splash-plane-a {
   top: 30%;
   animation: splashPlaneFly 5s linear infinite;
 }
+
 @keyframes splashPlaneFly {
-  0%   { left: -6%;  transform: translateY(0) rotate(8deg);   opacity: 0; }
-  10%  { opacity: 1; }
-  90%  { opacity: 1; }
-  100% { left: 106%; transform: translateY(-40px) rotate(8deg); opacity: 0; }
+  0% {
+    left: -6%;
+    transform: translateY(0) rotate(8deg);
+    opacity: 0;
+  }
+
+  10% {
+    opacity: 1;
+  }
+
+  90% {
+    opacity: 1;
+  }
+
+  100% {
+    left: 106%;
+    transform: translateY(-40px) rotate(8deg);
+    opacity: 0;
+  }
 }
 
 .splash-content {
@@ -1276,10 +1365,21 @@ input, select, textarea, button { font-family: inherit; }
   border-radius: 20px;
   animation: splashLogoIn 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+
 @keyframes splashLogoIn {
-  0%   { opacity: 0; transform: scale(0.7) translateY(20px); }
-  60%  { opacity: 1; }
-  100% { opacity: 1; transform: scale(1) translateY(0); }
+  0% {
+    opacity: 0;
+    transform: scale(0.7) translateY(20px);
+  }
+
+  60% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 .splash-logo {
@@ -1290,23 +1390,40 @@ input, select, textarea, button { font-family: inherit; }
   filter: drop-shadow(0 12px 40px rgba(99, 102, 241, 0.4));
   animation: splashLogoFloat 3.5s ease-in-out infinite;
 }
+
 @keyframes splashLogoFloat {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-8px); }
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-8px);
+  }
 }
 
 /* Sweeping shimmer across the logo */
 .splash-shimmer {
   position: absolute;
   inset: 0;
-  background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.18) 48%, transparent 66%);
+  background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.18) 48%, transparent 66%);
   transform: translateX(-120%);
   animation: splashShimmer 2.4s ease-in-out 0.6s infinite;
 }
+
 @keyframes splashShimmer {
-  0%   { transform: translateX(-120%); }
-  60%  { transform: translateX(120%); }
-  100% { transform: translateX(120%); }
+  0% {
+    transform: translateX(-120%);
+  }
+
+  60% {
+    transform: translateX(120%);
+  }
+
+  100% {
+    transform: translateX(120%);
+  }
 }
 
 .splash-tagline {
@@ -1328,6 +1445,7 @@ input, select, textarea, button { font-family: inherit; }
   overflow: hidden;
   animation: fadeIn 0.5s ease-out 0.6s both;
 }
+
 .splash-progress-fill {
   height: 100%;
   border-radius: 99px;
@@ -1351,13 +1469,22 @@ input, select, textarea, button { font-family: inherit; }
   animation: viewEnter 0.28s ease-out both;
   will-change: transform, opacity;
 }
+
 @keyframes viewEnter {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Respect reduced-motion preference */
 @media (prefers-reduced-motion: reduce) {
+
   .splash-logo,
   .splash-glow-1,
   .splash-glow-2,
@@ -1395,9 +1522,17 @@ input, select, textarea, button { font-family: inherit; }
   animation: toastPop 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
   will-change: transform, opacity;
 }
+
 @keyframes toastPop {
-  0%   { opacity: 0; transform: translateY(14px) scale(0.94); }
-  100% { opacity: 1; transform: translateY(0) scale(1); }
+  0% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.94);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

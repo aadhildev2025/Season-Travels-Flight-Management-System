@@ -141,7 +141,7 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
   // Reactive two-way sync: whichever field was last edited drives the other
   useEffect(() => {
     if (!autoTime || !dipDate || !departureAirport) return;
-    const tz = AIRPORTS.find(a => a.code === departureAirport)?.timezone || 'Asia/Colombo';
+    const tz = 'Asia/Colombo';
 
     if (lastEditedField.current === 'cet' && cetTime) {
       const utc = localTimeToUTC(dipDate, cetTime, 'Europe/Stockholm');
@@ -150,32 +150,29 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
       const utc = localTimeToUTC(dipDate, dipTime, tz);
       if (utc) setCetTime(utcToLocalTime(utc, 'Europe/Stockholm').time);
     } else if (!lastEditedField.current && cetTime) {
-      // On date change with CET already filled: re-derive local
       const utc = localTimeToUTC(dipDate, cetTime, 'Europe/Stockholm');
       if (utc) setDipTime(utcToLocalTime(utc, tz).time);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dipDate, dipTime, cetTime, departureAirport, autoTime]);
 
-  // Return ticket: CET Time → auto compute local departure time
+  // Return ticket: CET Time → auto compute SLT departure time
   const handleReturnCETChange = (val: string) => {
     setReturnCetTime(val);
     if (returnAutoTime && returnDipDate && val) {
       const utc = localTimeToUTC(returnDipDate, val, 'Europe/Stockholm');
       if (utc) {
-        const tz = AIRPORTS.find(a => a.code === returnDepAirport)?.timezone || 'Asia/Colombo';
-        setReturnDipTime(utcToLocalTime(utc, tz).time);
+        setReturnDipTime(utcToLocalTime(utc, 'Asia/Colombo').time);
       }
     }
   };
 
-  // Return ticket: local departure time → auto compute CET
+  // Return ticket: SLT departure time → auto compute CET
   useEffect(() => {
-    if (!returnAutoTime || !returnDipDate || !returnDipTime || !returnDepAirport) return;
-    const tz  = AIRPORTS.find(a => a.code === returnDepAirport)?.timezone || 'Asia/Colombo';
-    const utc = localTimeToUTC(returnDipDate, returnDipTime, tz);
+    if (!returnAutoTime || !returnDipDate || !returnDipTime) return;
+    const utc = localTimeToUTC(returnDipDate, returnDipTime, 'Asia/Colombo');
     if (utc) setReturnCetTime(utcToLocalTime(utc, 'Europe/Stockholm').time);
-  }, [returnDipDate, returnDipTime, returnDepAirport, returnAutoTime]);
+  }, [returnDipDate, returnDipTime, returnAutoTime]);
 
   // Time diffs
   const depAirportTz = AIRPORTS.find(a => a.code === departureAirport)?.timezone || '';
@@ -249,20 +246,22 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
     };
 
     // The top fields always represent the CURRENT leg being entered.
-    const topTz  = AIRPORTS.find(a => a.code === departureAirport)?.timezone || 'Asia/Colombo';
-    const topDtu = localTimeToUTC(dipDate, dipTime, topTz);
+    const saveTz = autoTime ? 'Asia/Colombo' : (AIRPORTS.find(a => a.code === departureAirport)?.timezone || 'Asia/Colombo');
+    const topDtu = localTimeToUTC(dipDate, dipTime, saveTz);
 
     try {
       if (editingTicket) {
-        // Plain edit: update just this record (preserve its returnLeg flag).
-        await updateTicket(editingTicket._id, {
+        const updateData: any = {
           ...base,
           flightNumber, pnr, departureAirport, arrivalAirport,
-          departureTimeUTC: topDtu, originalTimezone: topTz,
+          departureTimeUTC: topDtu, originalTimezone: saveTz,
           returnLeg: editingTicket.returnLeg,
           returnTicket: returnTicket || !!editingTicket.returnTicket,
-          ...emptyReturnFields,
-        });
+        };
+        if (!editingTicket.returnLeg) {
+          Object.assign(updateData, emptyReturnFields);
+        }
+        await updateTicket(editingTicket._id, updateData);
         onSuccess?.('Ticket Updated Successfully!');
         return;
       }
@@ -274,7 +273,7 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
           flightNumber, pnr,
           departureAirport, arrivalAirport,
           departureTimeUTC: topDtu,
-          originalTimezone: topTz,
+          originalTimezone: saveTz,
           returnTicket: true,
           returnLeg: false,
           ...emptyReturnFields,
@@ -315,7 +314,7 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
       await addTicket({
         ...base,
         flightNumber, pnr, departureAirport, arrivalAirport,
-        departureTimeUTC: topDtu, originalTimezone: topTz,
+        departureTimeUTC: topDtu, originalTimezone: saveTz,
         returnTicket: isReturnLegMode,
         returnLeg: isReturnLegMode,
         ...emptyReturnFields,
@@ -525,7 +524,10 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
               <div>
                 <label style={label}>
                   Local Time *
-                  {depAirportLabel && <span style={{ marginLeft: 6, fontWeight: 500, fontSize: 9, opacity: 0.7 }}>({depAirportLabel})</span>}
+                  {autoTime 
+                    ? <span style={{ marginLeft: 6, fontWeight: 500, fontSize: 9, opacity: 0.7 }}>(SLT)</span>
+                    : depAirportLabel && <span style={{ marginLeft: 6, fontWeight: 500, fontSize: 9, opacity: 0.7 }}>({depAirportLabel})</span>
+                  }
                 </label>
                 <input className="field" style={err('dipTime')} type="time" value={dipTime}
                   onChange={e => handleLocalTimeChange(e.target.value)} />

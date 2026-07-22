@@ -5,16 +5,16 @@ import logoSrc from '../logo/2.png';
 
 export default function Login() {
   const { login } = useFlightStore();
-  const [email, setEmail]         = useState('');
-  const [password, setPassword]   = useState('');
-  const [showPwd, setShowPwd]     = useState(false);
-  const [error, setError]         = useState('');
-  const [loading, setLoading]     = useState(false);
-  const [clock, setClock]         = useState('');
-  const [dateStr, setDateStr]     = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPwd, setShowPwd] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [clock, setClock] = useState('');
+  const [dateStr, setDateStr] = useState('');
 
   const [isLocalTime, setIsLocalTime] = useState(false);
-  const [tzLabel, setTzLabel]     = useState('CET');
+  const [tzLabel, setTzLabel] = useState('CET');
   const [quickAccessUsers, setQuickAccessUsers] = useState<{ name: string; email: string; role: string }[]>([]);
   const [selectedEmail, setSelectedEmail] = useState('');
   const [backendReady, setBackendReady] = useState(false);
@@ -97,7 +97,7 @@ export default function Login() {
         </div>
 
         {/* Live clock pill */}
-        <div 
+        <div
           onClick={() => setIsLocalTime(!isLocalTime)}
           style={{
             display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center',
@@ -191,11 +191,11 @@ export default function Login() {
                       style={{
                         padding: '8px 10px',
                         borderRadius: 8,
-                        border: isSelected 
-                          ? '1px solid var(--indigo2)' 
+                        border: isSelected
+                          ? '1px solid var(--indigo2)'
                           : '1px solid var(--border)',
-                        background: isSelected 
-                          ? 'rgba(99,102,241,0.12)' 
+                        background: isSelected
+                          ? 'rgba(99,102,241,0.12)'
                           : 'var(--surface2)',
                         cursor: 'pointer',
                         textAlign: 'left',

@@ -37,12 +37,10 @@ export async function sendEmail({ to, subject, text, html }) {
         <div>${text.replace(/\n/g, '<br />')}</div>
         <br />
         <div style="border-top: 2px solid #eee; padding-top: 20px; margin-top: 20px; text-align: left;">
-          <img src="cid:season-travels-logo" alt="Season Travels" style="width: 220px; height: auto; display: block;" />
+          <img src="data:image/png;base64,${LOGO_BASE64}" alt="Season Travels" style="width: 220px; height: auto; display: block;" />
         </div>
       </div>
     ` : undefined);
-
-    const logoBuffer = Buffer.from(LOGO_BASE64, 'base64');
 
     const info = await transporter.sendMail({
       from: process.env.SMTP_USER || 'eu@seasontravels.com',
@@ -50,13 +48,6 @@ export async function sendEmail({ to, subject, text, html }) {
       subject,
       text,
       html: mailHtml,
-      attachments: [
-        {
-          filename: 'logo.png',
-          content: logoBuffer,
-          cid: 'season-travels-logo',
-        }
-      ],
     });
     return info;
   } catch (error) {

@@ -54,7 +54,6 @@ export async function sendEmail({ to, subject, text, html }) {
         {
           filename: 'logo.png',
           content: logoBuffer,
-          encoding: 'base64',
           cid: 'season-travels-logo',
         }
       ],

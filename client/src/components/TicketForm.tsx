@@ -395,10 +395,10 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
   const arrAirportLabel = AIRPORTS.find(a => a.code === arrivalAirport)?.city || '';
 
   return (
-    <div className="fade-up" style={{ maxWidth: 860, margin: '40px auto' }}>
+    <div className="fade-up" style={{ maxWidth: 860, margin: '0 auto', height: 'calc(100vh - 130px)', display: 'flex', flexDirection: 'column' }}>
 
-      <form ref={formRef} onSubmit={handleSubmit}>
-        <div className="card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <form ref={formRef} onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+        <div className="card" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12, flex: 1, overflowY: 'auto' }}>
 
           {/* ── 1. Customer Information ── */}
           <div>
@@ -406,8 +406,8 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.5fr 1.5fr', gap: 10 }}>
               <div>
                 <label style={label}>Customer Name *</label>
-                <input className="field" style={err('passengerName')} value={passengerName} placeholder="Surname/FirstName"
-                  onChange={e => setPassengerName(e.target.value)} />
+                <input className="field" style={{ ...err('passengerName'), textTransform: 'uppercase' }} value={passengerName} placeholder="Surname/FirstName"
+                  onChange={e => setPassengerName(e.target.value.toUpperCase())} />
                 {errors.passengerName && <span style={{ fontSize: 11, color: 'var(--red)', marginTop: 4, display: 'block' }}>{errors.passengerName}</span>}
               </div>
               <div>

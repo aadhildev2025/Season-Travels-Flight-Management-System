@@ -25,15 +25,17 @@ export default function HeaderClock() {
   }, []);
 
   return (
-    <div style={{
-      position: 'absolute',
+    <div className="topbar-tz" style={{
+      position: 'fixed',
       left: '50%',
+      top: 0,
+      height: '80px',
       transform: 'translateX(-50%)',
       display: 'flex',
       alignItems: 'center',
       gap: 18,
       pointerEvents: 'none',
-      zIndex: 10,
+      zIndex: 100,
     }}>
       {/* CET */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>

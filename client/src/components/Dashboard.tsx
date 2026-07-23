@@ -385,6 +385,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                             transition: 'all 0.2s ease',
                             userSelect: 'none',
                             color: copiedSurname === ticket.passengerName ? 'var(--green)' : 'var(--text)',
+                            textTransform: 'uppercase',
                           }}
                         >
                           {copiedSurname === ticket.passengerName ? '✓ COPIED' : maskName(ticket.passengerName)}

@@ -199,9 +199,11 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
 
   expireOldTickets: async () => {
     const now = new Date();
+    const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
     const expired = get().tickets.filter(t => {
       if (!t.departureTimeUTC) return false;
-      return new Date(t.departureTimeUTC) <= now;
+      return new Date(t.departureTimeUTC) <= fortyEightHoursAgo;
     });
 
     if (expired.length === 0) return;

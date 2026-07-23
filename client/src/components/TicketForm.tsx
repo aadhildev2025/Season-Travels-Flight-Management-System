@@ -339,7 +339,7 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
   };
 
   // Styles
-  const label: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 3, display: 'block' };
+  const label: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4, display: 'block' };
   const err   = (key: string): React.CSSProperties => errors[key] ? { borderColor: 'var(--red)' } : {};
 
   const dropdownStyle: React.CSSProperties = {
@@ -350,14 +350,14 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
   };
 
   const airportBtn: React.CSSProperties = {
-    width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: 7,
-    background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text)',
+    width: '100%', textAlign: 'left', padding: '9px 12px', borderRadius: 7,
+    background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text)',
     transition: 'background 0.1s',
   };
 
   const sectionTitle = (n: string, color: string) => (
-    <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 6, marginBottom: 10 }}>
-      <h3 style={{ fontSize: 10, fontWeight: 800, color, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{n}</h3>
+    <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 8, marginBottom: 12 }}>
+      <h3 style={{ fontSize: 11, fontWeight: 800, color, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{n}</h3>
     </div>
   );
 
@@ -395,10 +395,10 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
   const arrAirportLabel = AIRPORTS.find(a => a.code === arrivalAirport)?.city || '';
 
   return (
-    <div className="fade-up" style={{ maxWidth: 860, margin: '0 auto' }}>
+    <div className="fade-up" style={{ maxWidth: 860, margin: '40px auto' }}>
 
       <form ref={formRef} onSubmit={handleSubmit}>
-        <div className="card" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div className="card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
 
           {/* ── 1. Customer Information ── */}
           <div>
@@ -408,7 +408,7 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
                 <label style={label}>Customer Name *</label>
                 <input className="field" style={err('passengerName')} value={passengerName} placeholder="Surname/FirstName"
                   onChange={e => setPassengerName(e.target.value)} />
-                {errors.passengerName && <span style={{ fontSize: 10, color: 'var(--red)', marginTop: 3, display: 'block' }}>{errors.passengerName}</span>}
+                {errors.passengerName && <span style={{ fontSize: 11, color: 'var(--red)', marginTop: 4, display: 'block' }}>{errors.passengerName}</span>}
               </div>
               <div>
                 <label style={label}>Email Address</label>
@@ -434,8 +434,8 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
                 <input className="field" style={err('dep')} value={departureAirport} placeholder="e.g. CMB"
                   onChange={e => { setDepAirport(e.target.value.toUpperCase()); setShowDepList(true); }}
                   onFocus={() => setShowDepList(true)} />
-                {depAirportLabel && <span style={{ fontSize: 9, color: 'var(--text2)', marginTop: 2, display: 'block' }}>{depAirportLabel}</span>}
-                {errors.dep && <span style={{ fontSize: 10, color: 'var(--red)', display: 'block' }}>{errors.dep}</span>}
+                {depAirportLabel && <span style={{ fontSize: 10, color: 'var(--text2)', marginTop: 3, display: 'block' }}>{depAirportLabel}</span>}
+                {errors.dep && <span style={{ fontSize: 11, color: 'var(--red)', display: 'block' }}>{errors.dep}</span>}
                 {showDepList && (
                   <div style={dropdownStyle}>
                     {AIRPORTS.filter(a =>
@@ -461,8 +461,8 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
                 <input className="field" style={err('arr')} value={arrivalAirport} placeholder="e.g. ARN"
                   onChange={e => { setArrAirport(e.target.value.toUpperCase()); setShowArrList(true); }}
                   onFocus={() => setShowArrList(true)} />
-                {arrAirportLabel && <span style={{ fontSize: 9, color: 'var(--text2)', marginTop: 2, display: 'block' }}>{arrAirportLabel}</span>}
-                {errors.arr && <span style={{ fontSize: 10, color: 'var(--red)', display: 'block' }}>{errors.arr}</span>}
+                {arrAirportLabel && <span style={{ fontSize: 10, color: 'var(--text2)', marginTop: 3, display: 'block' }}>{arrAirportLabel}</span>}
+                {errors.arr && <span style={{ fontSize: 11, color: 'var(--red)', display: 'block' }}>{errors.arr}</span>}
                 {showArrList && (
                   <div style={dropdownStyle}>
                     {AIRPORTS.filter(a =>
@@ -495,7 +495,7 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
                  <input className="field" style={{ ...err('pnr'), fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', color: 'var(--cyan)' }}
                    value={pnr} placeholder="e.g. X7KQP2"
                    onChange={e => setPnr(e.target.value.toUpperCase())} />
-                 {errors.pnr && <span style={{ fontSize: 10, color: 'var(--red)', marginTop: 3, display: 'block' }}>{errors.pnr}</span>}
+                  {errors.pnr && <span style={{ fontSize: 11, color: 'var(--red)', marginTop: 4, display: 'block' }}>{errors.pnr}</span>}
                </div>
             </div>
 
@@ -504,55 +504,55 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
               <div>
                 <label style={label}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <CalendarDays size={10} /> Departure Date *
+                    <CalendarDays size={11} /> Departure Date *
                   </span>
                 </label>
                 <input className="field" style={err('dipDate')} type="date" value={dipDate}
                   onChange={e => setDipDate(e.target.value)} />
-                {errors.dipDate && <span style={{ fontSize: 10, color: 'var(--red)', marginTop: 3, display: 'block' }}>{errors.dipDate}</span>}
+                {errors.dipDate && <span style={{ fontSize: 11, color: 'var(--red)', marginTop: 4, display: 'block' }}>{errors.dipDate}</span>}
               </div>
               <div>
                 <label style={{ ...label, color: 'var(--indigo2)' }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <Clock3 size={10} /> CET Time * <span style={{ fontSize: 8, opacity: 0.7 }}>(auto-sync)</span>
+                    <Clock3 size={11} /> CET Time * <span style={{ fontSize: 9, opacity: 0.7 }}>(auto-sync)</span>
                   </span>
                 </label>
                 <input className="field" style={{ ...err('cetTime'), borderColor: cetTime ? 'rgba(165,180,252,0.4)' : undefined }} type="time" value={cetTime}
                   onChange={e => handleCETChange(e.target.value)} />
-                {errors.cetTime && <span style={{ fontSize: 10, color: 'var(--red)', marginTop: 3, display: 'block' }}>{errors.cetTime}</span>}
+                {errors.cetTime && <span style={{ fontSize: 11, color: 'var(--red)', marginTop: 4, display: 'block' }}>{errors.cetTime}</span>}
               </div>
               <div>
                 <label style={label}>
                   Local Time *
                   {autoTime 
-                    ? <span style={{ marginLeft: 6, fontWeight: 500, fontSize: 9, opacity: 0.7 }}>(SLT)</span>
-                    : depAirportLabel && <span style={{ marginLeft: 6, fontWeight: 500, fontSize: 9, opacity: 0.7 }}>({depAirportLabel})</span>
+                    ? <span style={{ marginLeft: 6, fontWeight: 500, fontSize: 10, opacity: 0.7 }}>(SLT)</span>
+                    : depAirportLabel && <span style={{ marginLeft: 6, fontWeight: 500, fontSize: 10, opacity: 0.7 }}>({depAirportLabel})</span>
                   }
                 </label>
                 <input className="field" style={err('dipTime')} type="time" value={dipTime}
                   onChange={e => handleLocalTimeChange(e.target.value)} />
-                {errors.dipTime && <span style={{ fontSize: 10, color: 'var(--red)', marginTop: 3, display: 'block' }}>{errors.dipTime}</span>}
+                {errors.dipTime && <span style={{ fontSize: 11, color: 'var(--red)', marginTop: 4, display: 'block' }}>{errors.dipTime}</span>}
               </div>
             </div>
 
             {/* Time difference badges */}
             {(timeDiffDepCET || timeDiffDepArr) && (
                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
-                {timeDiffDepCET && depAirportLabel && (
-                  <span style={{
-                    fontFamily: "'JetBrains Mono', monospace", fontSize: 10, fontWeight: 700,
-                    color: 'var(--indigo2)', background: 'rgba(165,180,252,0.08)',
-                    border: '1px solid rgba(165,180,252,0.2)', borderRadius: 6, padding: '3px 9px',
-                  }}>
+                 {timeDiffDepCET && depAirportLabel && (
+                   <span style={{
+                     fontFamily: "'JetBrains Mono', monospace", fontSize: 11, fontWeight: 700,
+                     color: 'var(--indigo2)', background: 'rgba(165,180,252,0.08)',
+                     border: '1px solid rgba(165,180,252,0.2)', borderRadius: 6, padding: '3px 9px',
+                   }}>
                     {depAirportLabel} ↔ CET: {timeDiffDepCET}
                   </span>
                 )}
                 {timeDiffDepArr && depAirportLabel && arrAirportLabel && depAirportTz !== arrAirportTz && (
-                  <span style={{
-                    fontFamily: "'JetBrains Mono', monospace", fontSize: 10, fontWeight: 700,
-                    color: 'var(--cyan)', background: 'rgba(34,211,238,0.07)',
-                    border: '1px solid rgba(34,211,238,0.2)', borderRadius: 6, padding: '3px 9px',
-                  }}>
+                   <span style={{
+                     fontFamily: "'JetBrains Mono', monospace", fontSize: 11, fontWeight: 700,
+                     color: 'var(--cyan)', background: 'rgba(34,211,238,0.07)',
+                     border: '1px solid rgba(34,211,238,0.2)', borderRadius: 6, padding: '3px 9px',
+                   }}>
                     {depAirportLabel} ↔ {arrAirportLabel}: {timeDiffDepArr}
                   </span>
                 )}
@@ -577,72 +577,72 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
                 <label style={label}>Remarks</label>
                  <textarea ref={remarksRef} className="field" rows={2} value={remarks} placeholder="Any additional notes…"
                    onChange={e => setRemarks(e.target.value)}
-                   style={{ resize: 'vertical', minHeight: 44, ...(focusRemarks ? { borderColor: '#eab308', boxShadow: '0 0 0 3px rgba(234,179,8,0.15)' } : {}) }} />
+                    style={{ resize: 'none', minHeight: 44, ...(focusRemarks ? { borderColor: '#eab308', boxShadow: '0 0 0 3px rgba(234,179,8,0.15)' } : {}) }} />
               </div>
             </div>
           </div>
 
            {/* ── 3. Options ── */}
            <div style={{ paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: 'var(--text)', cursor: 'pointer' }}>
-                <input type="checkbox" checked={autoTime} onChange={e => setAutoTime(e.target.checked)}
-                  style={{ width: 14, height: 14, accentColor: 'var(--indigo)' }} />
-                Auto Time (CET ↔ Local)
-              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14 }}>
+               <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 600, color: 'var(--text)', cursor: 'pointer' }}>
+                 <input type="checkbox" checked={autoTime} onChange={e => setAutoTime(e.target.checked)}
+                   style={{ width: 15, height: 15, accentColor: 'var(--indigo)' }} />
+                 Auto Time (CET ↔ Local)
+               </label>
 
-              {/* Return Ticket checkbox — hidden when editing a return leg or currently in return-leg entry mode */}
-              {!editingTicket?.returnLeg && !isReturnLegMode && (
-                <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: 'var(--text)', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={returnTicket} onChange={e => setReturnTicket(e.target.checked)}
-                    style={{ width: 14, height: 14, accentColor: 'var(--indigo)' }} />
-                  <RotateCcw size={12} style={{ color: 'var(--indigo2)' }} />
-                  Return Ticket
-                </label>
-              )}
+               {/* Return Ticket checkbox — hidden when editing a return leg or currently in return-leg entry mode */}
+               {!editingTicket?.returnLeg && !isReturnLegMode && (
+                 <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 600, color: 'var(--text)', cursor: 'pointer' }}>
+                   <input type="checkbox" checked={returnTicket} onChange={e => setReturnTicket(e.target.checked)}
+                     style={{ width: 15, height: 15, accentColor: 'var(--indigo)' }} />
+                   <RotateCcw size={13} style={{ color: 'var(--indigo2)' }} />
+                   Return Ticket
+                 </label>
+               )}
             </div>
 
              {/* Banner shown while user is filling in the return leg after outbound was saved */}
-             {isReturnLegMode && (
-               <div style={{
-                 marginTop: 8, display: 'flex', alignItems: 'center', gap: 8,
-                 fontSize: 10, color: 'var(--indigo2)', fontWeight: 600,
-                 background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)',
-                 borderRadius: 8, padding: '6px 10px',
-               }}>
-                <RotateCcw size={13} />
-                Outbound saved ✓ — Now fill in the <b style={{ fontWeight: 800 }}>Return leg</b> details ({departureAirport || '—'} → {arrivalAirport || '—'}). Enter the date, CET time &amp; flight number manually.
-              </div>
-            )}
+              {isReturnLegMode && (
+                <div style={{
+                  marginTop: 10, display: 'flex', alignItems: 'center', gap: 8,
+                  fontSize: 11, color: 'var(--indigo2)', fontWeight: 600,
+                  background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)',
+                  borderRadius: 8, padding: '8px 12px',
+                }}>
+                 <RotateCcw size={14} />
+                 Outbound saved ✓ — Now fill in the <b style={{ fontWeight: 800 }}>Return leg</b> details ({departureAirport || '—'} → {arrivalAirport || '—'}). Enter the date, CET time &amp; flight number manually.
+               </div>
+             )}
 
             {/* When editing a return ticket, just show a static mark */}
             {editingTicket?.returnLeg && (
-              <div style={{
-                marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6,
-                fontSize: 10, color: 'var(--indigo2)', fontWeight: 700,
-                background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)',
-                borderRadius: 8, padding: '5px 10px',
-              }}>
-                <RotateCcw size={13} /> This is a Return Ticket
-              </div>
-            )}
+               <div style={{
+                 marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6,
+                 fontSize: 11, color: 'var(--indigo2)', fontWeight: 700,
+                 background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)',
+                 borderRadius: 8, padding: '6px 12px',
+               }}>
+                 <RotateCcw size={14} /> This is a Return Ticket
+               </div>
+             )}
           </div>
 
         </div>
 
         {/* Footer actions */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
-          <button type="button" onClick={onBack} className="btn btn-ghost" style={{ gap: 6 }}>
-            <ArrowLeft size={14} /> Back to List
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }}>
+          <button type="button" onClick={onBack} className="btn btn-ghost" style={{ gap: 6, fontSize: 13 }}>
+            <ArrowLeft size={15} /> Back to List
           </button>
           <div style={{ display: 'flex', gap: 8 }}>
             <button type="button" onClick={clearAll}
               className="btn btn-ghost"
-              style={{ color: '#f87171', borderColor: 'rgba(239,68,68,0.2)' }}>
+              style={{ color: '#f87171', borderColor: 'rgba(239,68,68,0.2)', fontSize: 13 }}>
               Clear All
             </button>
             <button type="submit" className="btn btn-primary"
-              style={{ padding: '8px 28px', fontSize: 13, opacity: submitting ? 0.7 : 1 }}
+              style={{ padding: '10px 30px', fontSize: 14, opacity: submitting ? 0.7 : 1 }}
               disabled={submitting}>
               {submitting ? 'Saving…' : editingTicket ? 'Update Ticket' : isReturnLegMode ? 'Save Return Ticket' : returnTicket ? 'Save Outbound & Continue' : 'Save Ticket'}
             </button>

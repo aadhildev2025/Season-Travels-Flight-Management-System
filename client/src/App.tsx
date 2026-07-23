@@ -76,6 +76,16 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isAuthenticated]);
 
+  // Lock body scroll on ticket form
+  useEffect(() => {
+    if (view === 'ticket-form') {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [view]);
+
   // Reset view and sidebar on login
   useEffect(() => {
     if (isAuthenticated && currentUser) {
@@ -133,7 +143,7 @@ export default function App() {
     <div style={{ display: 'flex', height: '100vh', width: '100vw', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }} className="fade-in">
         <div className="spin" style={{ width: 34, height: 34, borderRadius: '50%', border: '3px solid var(--indigo)', borderTopColor: 'transparent' }} />
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Loading Flight Console…</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text2)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Loading Flight Console…</span>
       </div>
     </div>
   );
@@ -296,10 +306,10 @@ export default function App() {
                 {(currentUser?.name || 'S').charAt(0).toUpperCase()}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {currentUser?.name}
                 </div>
-                <div style={{ fontSize: 9, color: 'var(--text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ fontSize: 10, color: 'var(--text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {currentUser?.role}
                 </div>
               </div>
@@ -364,7 +374,7 @@ export default function App() {
             </button>
           )}
 
-          <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {pageTitle}
           </div>
 
@@ -385,8 +395,8 @@ export default function App() {
                 onChange={e => setSearch(e.target.value)}
                 style={{
                   background: 'var(--bg2)', border: '1px solid var(--border)',
-                  borderRadius: 8, padding: '7px 12px 7px 30px',
-                  fontSize: 12, color: 'var(--text)', outline: 'none',
+                   borderRadius: 8, padding: '7px 12px 7px 30px',
+                  fontSize: 13, color: 'var(--text)', outline: 'none',
                   width: '100%', transition: 'border-color 0.15s, box-shadow 0.15s'
                 }}
                 onFocus={e => { e.currentTarget.style.borderColor = 'var(--indigo)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.12)'; }}
@@ -419,7 +429,7 @@ export default function App() {
         </header>
 
         {/* ════════════════════ MAIN CONTENT AREA ════════════════════ */}
-        <main className="main-content-area" style={{ flex: 1, position: 'relative' }}>
+        <main className="main-content-area" style={{ flex: 1, position: 'relative', overflow: view === 'ticket-form' ? 'hidden' : 'visible' }}>
           <div key={view} className="view-transition" style={{ height: '100%' }}>
           {view === 'dashboard' && (
             <Dashboard 
@@ -479,7 +489,7 @@ export default function App() {
           color: '#fff',
           border: toast.type === 'success' ? '2px solid #10b981' : 'none', borderRadius: 12, padding: '12px 20px',
           boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
-          fontSize: 13, fontWeight: 700, minWidth: 240, maxWidth: 340,
+          fontSize: 14, fontWeight: 700, minWidth: 240, maxWidth: 340,
         }}>
           <CheckCircle size={18} style={{ flexShrink: 0 }} />
           {toast.message}

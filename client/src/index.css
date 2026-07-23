@@ -323,7 +323,7 @@ button {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 10px 14px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text);
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
@@ -349,9 +349,9 @@ button {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 8px 16px;
+  padding: 8px 18px;
   border-radius: 10px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
   border: none;
@@ -452,8 +452,8 @@ button {
 }
 
 .btn-sm {
-  padding: 5px 10px;
-  font-size: 10px;
+  padding: 5px 12px;
+  font-size: 11px;
   border-radius: 7px;
   letter-spacing: 0.04em;
 }
@@ -467,7 +467,7 @@ button {
 .badge-yes {
   background: var(--green);
   color: #05050a;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   padding: 3px 8px;
   border-radius: 6px;
@@ -485,7 +485,7 @@ button {
 .badge-no {
   background: var(--red);
   color: #fff;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   padding: 3px 8px;
   border-radius: 6px;
@@ -504,7 +504,7 @@ button {
 .badge-outline-yes {
   background: rgba(52, 211, 153, 0.12);
   color: var(--green);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 900;
   padding: 2px 10px;
   border-radius: 6px;
@@ -524,7 +524,7 @@ button {
 .badge-outline-no {
   background: transparent;
   color: var(--text2);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 900;
   padding: 2px 10px;
   border-radius: 6px;
@@ -545,7 +545,7 @@ button {
 .badge-outline-remind-yes {
   background: transparent;
   color: var(--red);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 900;
   padding: 2px 9px;
   border-radius: 6px;
@@ -565,7 +565,7 @@ button {
 .badge-outline-remind-no {
   background: transparent;
   color: var(--text3);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 900;
   padding: 2px 9px;
   border-radius: 6px;
@@ -584,7 +584,7 @@ button {
 /* Date column: remark indicator */
 .date-remark {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: #f87171;
@@ -637,7 +637,7 @@ button {
 }
 
 .remark-tooltip-label {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -646,7 +646,7 @@ button {
 }
 
 .remark-tooltip-text {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text);
   line-height: 1.5;
@@ -666,7 +666,7 @@ button {
   animation: greenSweep 3.5s ease-out forwards;
   font-family: 'JetBrains Mono', monospace;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text);
 }
 
@@ -677,7 +677,7 @@ button {
   padding: 2px 7px;
   animation: greenSweep 3.5s ease-out forwards, remarkBlink 1.6s ease-in-out 3.5s infinite;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: #f87171;
@@ -718,7 +718,7 @@ button {
 .role-admin {
   background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(129, 140, 248, 0.1));
   color: var(--indigo2);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
   padding: 2px 8px;
   border-radius: 5px;
@@ -730,7 +730,7 @@ button {
 .role-staff {
   background: rgba(255, 255, 255, 0.04);
   color: var(--text2);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
   padding: 2px 8px;
   border-radius: 5px;
@@ -751,8 +751,8 @@ button {
 }
 
 .data-table thead th {
-  padding: 8px 14px;
-  font-size: 11px;
+  padding: 10px 16px;
+  font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -780,8 +780,8 @@ button {
 }
 
 .data-table tbody td {
-  padding: 6px 14px;
-  font-size: 13px;
+  padding: 7px 16px;
+  font-size: 14px;
 }
 
 .data-table tbody tr.is-today {
@@ -909,7 +909,7 @@ button {
 }
 
 .sidebar-section {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
   color: var(--text3);
   text-transform: uppercase;
@@ -978,10 +978,10 @@ button {
 }
 
 .tz-btn {
-  padding: 5px 16px;
+  padding: 6px 18px;
   border: none;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
   transition: all 0.18s;
@@ -1428,7 +1428,7 @@ button {
 
 .splash-tagline {
   margin-top: -46px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.28em;
   text-transform: uppercase;
@@ -1456,7 +1456,7 @@ button {
 
 .splash-loading-text {
   margin-top: 14px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.14em;
   text-transform: uppercase;

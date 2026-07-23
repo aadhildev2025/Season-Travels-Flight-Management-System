@@ -215,6 +215,8 @@ export default function App() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}>
+      <HeaderClock />
+
       {/* Ambient background glow effects */}
       <div className="ambient-glow" />
 
@@ -380,9 +382,6 @@ export default function App() {
 
           {/* Spacer to push search and actions to the right */}
           <div style={{ flex: 1 }} />
-
-          {/* Sticky clock always shown in topbar (self-contained, ticks without re-rendering App) */}
-          <HeaderClock />
 
           {/* Search bar inside topbar (Only on dashboard) */}
           {view === 'dashboard' && (

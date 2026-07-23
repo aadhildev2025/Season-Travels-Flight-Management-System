@@ -762,7 +762,7 @@ button {
   /* Sticky header needs explicit background to cover rows beneath */
   background: var(--surface);
   position: sticky;
-  top: 60px;
+  top: 80px;
   z-index: 50;
 }
 

@@ -68,6 +68,7 @@ export interface AnalyticsData {
 }
 
 export interface AuditLog {
+  id?: string;
   _id: string;
   userId: string;
   userName: string;

@@ -1,15 +1,16 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
-import User from '../models/User.js';
-import AuditLog from '../models/AuditLog.js';
-import { signToken, requireAuth } from '../middleware/auth.js';
+import prisma from '../config/db.js';
+import * as UserModel from '../models/User.js';
+import * as AuditLogModel from '../models/AuditLog.js';
+import { signToken, verifyToken, requireAuth } from '../middleware/auth.js';
 
 const router = Router();
 
 /** Helper */
 async function audit(req, action, target = '', details = '') {
   try {
-    await AuditLog.create({
+    await AuditLogModel.createAuditLog({
       userId: req.user?.userId || 'system',
       userName: req.user?.name || 'System',
       userEmail: req.user?.email || '',
@@ -24,8 +25,13 @@ async function audit(req, action, target = '', details = '') {
 // GET /api/auth/quick-access
 router.get('/quick-access', async (req, res) => {
   try {
-    const users = await User.find({}, 'name email role');
-    return res.json({ users });
+    const users = await UserModel.findAllUsers();
+    const simplified = users.map(u => ({
+      name: u.name,
+      email: u.email,
+      role: u.role?.name || u.role,
+    }));
+    return res.json({ users: simplified });
   } catch (err) {
     console.error('Quick access users error:', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -42,17 +48,28 @@ router.post('/login', async (req, res) => {
     const input = email.toLowerCase().trim();
     let user;
     if (input.includes('@')) {
-      user = await User.findOne({ email: input });
+      user = await UserModel.findUserByEmail(input);
     } else {
       const escapedInput = input.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-      user = await User.findOne({ email: new RegExp(`^${escapedInput}@`, 'i') });
+      const regex = new RegExp(`^${escapedInput}@`, 'i');
+      const allUsers = await prisma.user.findMany({
+        where: { email: { contains: '@' } },
+        include: { role: true },
+      });
+      user = allUsers.find(u => regex.test(u.email)) || null;
     }
 
     if (!user || !bcrypt.compareSync(password, user.passwordHash))
       return res.status(401).json({ error: 'Invalid credentials' });
 
-    const payload = { userId: user._id.toString(), name: user.name, email: user.email, role: user.role, timezone: user.timezone };
-    const token   = signToken(payload);
+    const payload = {
+      userId: user.id.toString(),
+      name: user.name,
+      email: user.email,
+      role: user.role?.name || user.role,
+      timezone: user.timezone,
+    };
+    const token = signToken(payload);
 
     res.cookie('st-session', token, {
       httpOnly: true,
@@ -64,9 +81,13 @@ router.post('/login', async (req, res) => {
 
     // Inline audit (no req.user yet)
     try {
-      await AuditLog.create({
-        userId: user._id.toString(), userName: user.name, userEmail: user.email,
-        action: 'LOGIN', target: user.email, details: `Logged in as ${user.role}`,
+      await AuditLogModel.createAuditLog({
+        userId: user.id.toString(),
+        userName: user.name,
+        userEmail: user.email,
+        action: 'LOGIN',
+        target: user.email,
+        details: `Logged in as ${user.role?.name || user.role}`,
         ip: req.ip || '',
       });
     } catch { /* ignore */ }
@@ -90,11 +111,18 @@ router.get('/me', async (req, res) => {
   if (!token) return res.status(200).json({ user: null });
 
   try {
-    const { verifyToken } = await import('../middleware/auth.js');
     const decoded = verifyToken(token);
-    const user = await User.findById(decoded.userId).select('-passwordHash');
+    const user = await UserModel.findUserById(decoded.userId);
     if (!user) return res.status(200).json({ user: null });
-    return res.json({ user: { id: user._id.toString(), name: user.name, email: user.email, role: user.role, timezone: user.timezone } });
+    return res.json({
+      user: {
+        id: user.id.toString(),
+        name: user.name,
+        email: user.email,
+        role: user.role?.name || user.role,
+        timezone: user.timezone,
+      }
+    });
   } catch {
     return res.status(200).json({ user: null });
   }
@@ -103,31 +131,34 @@ router.get('/me', async (req, res) => {
 // PUT /api/auth/profile — update own name, email, password
 router.put('/profile', requireAuth, async (req, res) => {
   try {
-    const user = await User.findById(req.user.userId);
+    const user = await UserModel.findUserById(req.user.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const changes = [];
     if (req.body.name && req.body.name.trim() !== user.name) {
       changes.push(`name: "${user.name}" → "${req.body.name.trim()}"`);
-      user.name = req.body.name.trim();
     }
     if (req.body.email && req.body.email.trim().toLowerCase() !== user.email) {
-      const exists = await User.findOne({ email: req.body.email.trim().toLowerCase(), _id: { $ne: user._id } });
+      const exists = await UserModel.findUserByEmailExcludingId(req.body.email.trim().toLowerCase(), req.user.userId);
       if (exists) return res.status(400).json({ error: 'Email already in use' });
       changes.push(`email: "${user.email}" → "${req.body.email.trim().toLowerCase()}"`);
-      user.email = req.body.email.trim().toLowerCase();
     }
     if (req.body.currentPassword && req.body.newPassword) {
       if (!bcrypt.compareSync(req.body.currentPassword, user.passwordHash))
         return res.status(400).json({ error: 'Current password is incorrect' });
-      user.passwordHash = bcrypt.hashSync(req.body.newPassword, 10);
       changes.push('password changed');
     }
 
-    await user.save();
+    const updatedUser = await UserModel.updateUser(req.user.userId, req.body);
 
     // Re-issue token with updated info
-    const newPayload = { userId: user._id.toString(), name: user.name, email: user.email, role: user.role, timezone: user.timezone };
+    const newPayload = {
+      userId: updatedUser.id.toString(),
+      name: updatedUser.name,
+      email: updatedUser.email,
+      role: updatedUser.role?.name || updatedUser.role,
+      timezone: updatedUser.timezone,
+    };
     const token = signToken(newPayload);
     res.cookie('st-session', token, {
       httpOnly: true,
@@ -136,7 +167,7 @@ router.put('/profile', requireAuth, async (req, res) => {
       maxAge: 365 * 24 * 60 * 60 * 1000,
     });
 
-    audit(req, 'UPDATE_PROFILE', user.email, `Profile updated: ${changes.join('; ') || 'no changes'}`);
+    audit(req, 'UPDATE_PROFILE', updatedUser.email, `Profile updated: ${changes.join('; ') || 'no changes'}`);
 
     return res.json({ user: newPayload, success: true });
   } catch (err) {

@@ -18,10 +18,16 @@ const allowedOrigins = [
   'http://localhost:3002',
 ].filter(Boolean);
 
+const localOriginRegex = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-    if (origin.endsWith('.vercel.app') || allowedOrigins.includes(origin)) {
+    if (
+      localOriginRegex.test(origin) ||
+      origin.endsWith('.vercel.app') ||
+      allowedOrigins.includes(origin)
+    ) {
       return callback(null, true);
     }
     callback(new Error('Not allowed by CORS'));
@@ -52,7 +58,10 @@ app.use('/api/staff',      staffRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
 app.use('/api/email',      emailRoutes);
 
-app.get('/api/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
+app.get('/api/health', async (_req, res) => {
+  const ready = await isDBReady();
+  res.json({ status: ready ? 'ok' : 'degraded', timestamp: new Date().toISOString() });
+});
 
 app.use((err, _req, res, _next) => {
   console.error('API Error:', err);

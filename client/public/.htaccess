@@ -1,0 +1,26 @@
+# Disable folder browsing for security
+Options -Indexes -MultiViews
+
+# Client-side routing: redirect all non-file requests to index.html under /tmv2
+RewriteEngine On
+RewriteBase /tmv2/
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ index.html [QSA,L]
+
+# Prevent caching of the main HTML file to ensure users always get the latest version
+<FilesMatch "\.(html|json)$">
+  FileETag None
+  <IfModule mod_headers.c>
+    Header set Cache-Control "max-age=0, no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </IfModule>
+</FilesMatch>
+
+# Enable caching for static bundle assets (JS, CSS, images) which have hashes in filenames
+<FilesMatch "\.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|otf)$">
+  <IfModule mod_headers.c>
+    Header set Cache-Control "max-age=31536000, public, immutable"
+  </IfModule>
+</FilesMatch>

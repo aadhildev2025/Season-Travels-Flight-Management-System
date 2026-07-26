@@ -29,6 +29,7 @@ app.use(cors({
     if (
       localOriginRegex.test(origin) ||
       origin.endsWith('.vercel.app') ||
+      origin.endsWith('.one.com') ||
       allowedOrigins.includes(origin)
     ) {
       return callback(null, true);
@@ -40,18 +41,18 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
-// Connect to MongoDB on demand for serverless, or on startup for local dev
+// Connect to MariaDB on demand for serverless, or on startup for local dev
 let isConnected = false;
 app.use(async (_req, _res, next) => {
-  try {
-    if (!isConnected && process.env.MONGODB_URI) {
+  if (!isConnected && process.env.DATABASE_URL) {
+    try {
       await connectDB();
       isConnected = true;
+    } catch (err) {
+      console.error('Database connection attempt failed in middleware:', err.message);
     }
-    next();
-  } catch (err) {
-    next(err);
   }
+  next();
 });
 
 // Group all routes under a single API router
@@ -72,37 +73,33 @@ app.use('/', apiRouter);
 
 // Global JSON Error Handler with CORS headers support
 app.use((err, req, res, _next) => {
-  console.error('API Error:', err);
+  const status = err.status || 500;
+  if (status >= 500) {
+    console.error('API Error:', err);
+  }
   res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
   res.header('Access-Control-Allow-Credentials', 'true');
-  res.status(err.status || 500).json({
+  res.status(status).json({
     error: err.message || 'Internal Server Error'
   });
 });
 
 // For local running
 if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
-  const MAX_RETRIES = 5;
-  const RETRY_DELAY = 3000;
-  let retries = 0;
-
-  const startServer = async () => {
+  const tryConnect = async (attempt = 1) => {
     try {
       await connectDB();
       isConnected = true;
-      app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
     } catch (err) {
-      console.error(`Failed to start server (attempt ${retries + 1}/${MAX_RETRIES}):`, err.message);
-      retries++;
-      if (retries < MAX_RETRIES) {
-        setTimeout(startServer, RETRY_DELAY);
-      } else {
-        console.error('Max retries reached. Server could not start. Please check MONGODB_URI.');
-      }
+      console.error(`DB connection retry ${attempt} failed:`, err.message);
+      setTimeout(() => tryConnect(attempt + 1), 5000);
     }
   };
 
-  startServer();
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    tryConnect();
+  });
 }
 
 export default app;

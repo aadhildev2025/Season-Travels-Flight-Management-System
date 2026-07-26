@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import User from '../models/User.js';
+import * as UserModel from '../models/User.js';
 
 const SECRET = process.env.JWT_SECRET || 'season-travels-secret-key-change-in-production';
 
@@ -19,15 +19,15 @@ export async function requireAuth(req, res, next) {
 
   try {
     const decoded = verifyToken(token);
-    const user = await User.findById(decoded.userId).select('-passwordHash');
+    const user = await UserModel.findUserById(decoded.userId);
     if (!user) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
     req.user = {
-      userId: user._id.toString(),
+      userId: user.id.toString(),
       name: user.name,
       email: user.email,
-      role: user.role,
+      role: user.role?.name || user.role,
       timezone: user.timezone,
     };
     next();

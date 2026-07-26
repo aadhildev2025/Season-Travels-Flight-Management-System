@@ -44,6 +44,16 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
     return () => clearInterval(id);
   }, []);
 
+  // Real-time tick to trigger immediate removal animation when departure time is reached
+  useEffect(() => {
+    const checkDepartures = () => {
+      useFlightStore.getState().expireOldTickets();
+    };
+    checkDepartures();
+    const interval = setInterval(checkDepartures, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Detect newly added ticket
   useEffect(() => {
     const currentIds = new Set(tickets.map(t => t._id));
@@ -70,7 +80,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
     if (t.departureTimeUTC) {
       const depTime = new Date(t.departureTimeUTC);
       const now = new Date();
-      if (now.getTime() > depTime.getTime()) {
+      if (depTime <= now) {
         if (!expiringIds.has(t._id)) {
           return false;
         }
@@ -331,10 +341,12 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                   const isNotDepartedYet = depTime ? (new Date().getTime() < depTime.getTime()) : false;
                   const isLoadingToday = isToday && isNotDepartedYet;
 
+                  const ticketId = ticket._id;
+
                   return (
                     <tr
-                      key={ticket._id}
-                      className={`${isToday ? 'is-today' : ''} ${isNew ? 'is-new-ticket' : ''} ${expiringIds.has(ticket._id) ? 'row-expiring' : ''}`}
+                      key={ticketId}
+                      className={`${isToday ? 'is-today' : ''} ${isNew ? 'is-new-ticket' : ''} ${expiringIds.has(ticket._id) || expiringIds.has(ticketId) ? 'row-expiring' : ''}`}
                     >
                       {/* Date column */}
                       <td style={{ ...td, paddingRight: 6, whiteSpace:'nowrap' }}>

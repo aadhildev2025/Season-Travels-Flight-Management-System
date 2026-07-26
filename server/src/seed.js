@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import { connectDB } from './config/db.js';
-import User from './models/User.js';
+import * as UserModel from './models/User.js';
 
 const SEED_USERS = [
   {
@@ -31,22 +31,21 @@ async function seed() {
   try {
     await connectDB();
 
-    const count = await User.countDocuments();
+    const count = await UserModel.countUsers();
     if (count > 0) {
       console.log(`Database already has ${count} users. Skipping seed.`);
       process.exit(0);
     }
 
     for (const u of SEED_USERS) {
-      const passwordHash = bcrypt.hashSync(u.password, 10);
-      await User.create({
+      const user = await UserModel.createUser({
         name: u.name,
         email: u.email,
-        passwordHash,
+        password: u.password,
         role: u.role,
         timezone: u.timezone,
       });
-      console.log(`Created user: ${u.name} (${u.role})`);
+      console.log(`Created user: ${user.name} (${user.role?.name || user.role})`);
     }
 
     console.log('Seed complete.');

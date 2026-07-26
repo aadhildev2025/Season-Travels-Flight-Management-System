@@ -199,19 +199,26 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
 
   expireOldTickets: async () => {
     const now = new Date();
-    const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
 
     const expired = get().tickets.filter(t => {
       if (!t.departureTimeUTC) return false;
-      return new Date(t.departureTimeUTC) <= fortyEightHoursAgo;
+      return new Date(t.departureTimeUTC) <= now;
     });
 
     if (expired.length === 0) return;
 
-    const ids = new Set(expired.map(t => t._id));
-    set({ expiringIds: ids });
+    const currentExpiring = get().expiringIds;
+    const newExpiredIds = expired
+      .map(t => t._id)
+      .filter(id => !currentExpiring.has(id));
 
-    await new Promise(r => setTimeout(r, 600));
+    if (newExpiredIds.length === 0) return;
+
+    const updatedExpiring = new Set([...currentExpiring, ...newExpiredIds]);
+    set({ expiringIds: updatedExpiring });
+
+    // Allow 750ms for smooth exit animation to complete in the UI
+    await new Promise(r => setTimeout(r, 750));
 
     try {
       await apiFetch('/api/tickets/expire-departed', { method: 'POST' });
@@ -219,7 +226,10 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
       console.error('Failed to expire tickets on server');
     }
 
-    set({ tickets: get().tickets.filter(t => !ids.has(t._id)), expiringIds: new Set() });
+    set((state) => ({
+      tickets: state.tickets.filter(t => !updatedExpiring.has(t._id)),
+      expiringIds: new Set([...state.expiringIds].filter(id => !updatedExpiring.has(id))),
+    }));
   },
 
   sendUpcomingReminders: async () => {
@@ -242,6 +252,9 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
 if (typeof window !== 'undefined') {
   setInterval(() => {
     useFlightStore.getState().expireOldTickets();
+  }, 1000);
+
+  setInterval(() => {
     useFlightStore.getState().sendUpcomingReminders();
   }, 30000);
 }

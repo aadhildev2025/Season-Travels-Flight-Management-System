@@ -72,7 +72,7 @@ export default function App() {
     if (!isAuthenticated) return;
     const check = () => useFlightStore.getState().expireOldTickets();
     check();
-    const interval = setInterval(check, 30000);
+    const interval = setInterval(check, 1000);
     return () => clearInterval(interval);
   }, [isAuthenticated]);
 

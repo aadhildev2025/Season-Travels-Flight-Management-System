@@ -1,21 +1,28 @@
-import mongoose from 'mongoose';
+import prisma from '../config/db.js';
 
-const auditLogSchema = new mongoose.Schema({
-  userId:     { type: String, required: true },
-  userName:   { type: String, required: true },
-  userEmail:  { type: String, required: true },
-  action:     { type: String, required: true }, // 'CREATE_TICKET' | 'UPDATE_TICKET' | 'DELETE_TICKET' | 'LOGIN' | 'UPDATE_PROFILE' | 'CREATE_STAFF' | 'DELETE_STAFF'
-  target:     { type: String, default: '' },    // ticket PNR or user email
-  details:    { type: String, default: '' },    // human-readable summary
-  ip:         { type: String, default: '' },
-}, { timestamps: true });
+export async function createAuditLog(data) {
+  return prisma.auditLog.create({
+    data: {
+      userId: String(data.userId || ''),
+      userName: String(data.userName || ''),
+      userEmail: String(data.userEmail || ''),
+      action: String(data.action || ''),
+      target: String(data.target || ''),
+      details: String(data.details || ''),
+      ip: String(data.ip || ''),
+    },
+  });
+}
 
-// Index for fast pagination sorting
-auditLogSchema.index({ createdAt: -1 });
+export async function findAllAuditLogs(skip, take) {
+  const [logs, total] = await Promise.all([
+    prisma.auditLog.findMany({
+      skip: skip || 0,
+      take: take || 50,
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.auditLog.count(),
+  ]);
 
-// TTL Index: Auto-delete logs older than 30 days (30 days * 24h * 60m * 60s)
-auditLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
-
-auditLogSchema.index({ action: 1 });
-
-export default mongoose.model('AuditLog', auditLogSchema);
+  return { logs, total };
+}

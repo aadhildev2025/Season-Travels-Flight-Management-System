@@ -167,7 +167,7 @@ export default function Analytics({ slClockTime, slClockDate }: AnalyticsProps) 
             const initials = t.passengerName ? t.passengerName.trim().split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'ST';
             return (
               <div 
-                key={i} 
+                key={t._id || i} 
                 style={{ 
                   display: 'flex', 
                   alignItems: 'center', 

@@ -321,8 +321,9 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
       });
       onSuccess?.(isReturnLegMode ? 'Return ticket saved successfully!' : 'Ticket Saved Successfully!');
       setIsReturnLegMode(false);
-    } catch {
-      onBack();
+    } catch (err) {
+      console.error('Failed to save ticket:', err);
+      onSuccess?.('Failed to save ticket. Please try again.', true);
     } finally {
       setSubmitting(false);
     }

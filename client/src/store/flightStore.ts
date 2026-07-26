@@ -197,7 +197,8 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
   },
 
   addTicket: async (ticketData) => {
-    await apiFetch('/api/tickets', { method: 'POST', body: JSON.stringify(ticketData) });
+    const res = await apiFetch('/api/tickets', { method: 'POST', body: JSON.stringify(ticketData) });
+    if (res.error) throw new Error(res.error);
     await get().fetchTickets();
   },
 

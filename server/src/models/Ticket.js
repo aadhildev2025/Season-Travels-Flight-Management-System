@@ -38,7 +38,8 @@ ticketSchema.index({ createdAt: -1 });
 export const Ticket = mongoose.models.Ticket || mongoose.model('Ticket', ticketSchema);
 
 export async function findAllTickets() {
-  const docs = await Ticket.find().sort({ departureTimeUTC: 1 });
+  // Exclude tickets already marked as departed (they wait for thank-you email in background)
+  const docs = await Ticket.find({ departed: { $ne: true } }).sort({ departureTimeUTC: 1 });
   return docs.map(formatTicket);
 }
 

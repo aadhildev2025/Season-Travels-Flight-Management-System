@@ -25,6 +25,8 @@ const ticketSchema = new mongoose.Schema({
   returnOriginalTimezone: { type: String, default: '' },
   thankYouSent: { type: Boolean, default: false },
   reminderSent: { type: Boolean, default: false },
+  departed: { type: Boolean, default: false },
+  departedAt: { type: Date, default: null },
   createdBy: { type: String, default: null },
 }, { timestamps: true });
 
@@ -164,8 +166,11 @@ export async function findRecentTickets(limit = 5) {
 
 export async function findTicketsToThank() {
   const now = new Date();
+  const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+  // Find tickets marked as departed at least 48 hours ago, thank-you not yet sent
   const docs = await Ticket.find({
-    departureTimeUTC: { $lte: now.toISOString() },
+    departed: true,
+    departedAt: { $lte: fortyEightHoursAgo },
     thankYouSent: false,
     email: { $ne: '' },
   });
@@ -181,6 +186,15 @@ export async function findUpcomingReminders() {
     email: { $ne: '' },
   });
   return docs.map(formatTicket);
+}
+
+export async function markDeparted(id) {
+  const doc = await Ticket.findByIdAndUpdate(
+    id,
+    { departed: true, departedAt: new Date() },
+    { returnDocument: 'after' }
+  );
+  return doc ? formatTicket(doc) : null;
 }
 
 export async function markThankYouSent(id) {
@@ -252,6 +266,8 @@ function formatTicket(doc) {
     returnOriginalTimezone: obj.returnOriginalTimezone || '',
     thankYouSent: obj.thankYouSent || false,
     reminderSent: obj.reminderSent || false,
+    departed: obj.departed || false,
+    departedAt: obj.departedAt || null,
     createdBy: obj.createdBy || null,
     createdAt: obj.createdAt,
     updatedAt: obj.updatedAt,

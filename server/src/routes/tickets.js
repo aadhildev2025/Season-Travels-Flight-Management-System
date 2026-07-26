@@ -131,20 +131,32 @@ router.put('/:id', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/tickets/expire-departed - Mark departed tickets as thanked, then remove them
+// POST /api/tickets/expire-departed
+// Phase 1: At departure time → mark as departed (UI removes them immediately)
+// Phase 2: 48h after departure → send thank-you email, then delete
 router.post('/expire-departed', requireAuth, async (req, res) => {
   try {
     const now = new Date();
 
-    const toThank = await TicketModel.findTicketsToThank();
+    // --- Phase 1: Mark newly-departed tickets ---
+    // Find tickets whose departure time has passed but are not yet marked as departed
+    const allTickets = await TicketModel.findAllTickets();
+    const newlyDeparted = allTickets.filter(t =>
+      t.departureTimeUTC && new Date(t.departureTimeUTC) <= now && !t.departed
+    );
+    for (const ticket of newlyDeparted) {
+      await TicketModel.markDeparted(ticket.id || ticket._id);
+    }
 
+    // --- Phase 2: Send thank-you emails and delete tickets departed 48h+ ago ---
+    const toThank = await TicketModel.findTicketsToThank();
     for (const ticket of toThank) {
       try {
         if (ticket.email) {
           const { subject, body } = buildThankYouMessage(ticket);
           await sendEmail({ to: ticket.email, subject, text: body });
         }
-        await TicketModel.markThankYouSent(ticket.id);
+        await TicketModel.markThankYouSent(ticket.id || ticket._id);
         audit(req, 'SEND_THANK_YOU', ticket.pnr,
           `Sent thank-you email to ${ticket.passengerName} · ${ticket.pnr}`);
       } catch (err) {
@@ -152,10 +164,15 @@ router.post('/expire-departed', requireAuth, async (req, res) => {
       }
     }
 
-    const result = await TicketModel.deleteManyTickets({
-      departureTimeUTC: { lte: now.toISOString() },
+    // Delete tickets after thank-you has been sent
+    const result = await TicketModel.deleteManyTickets({ thankYouSent: { not: false } });
+
+    return res.json({
+      success: true,
+      markedDepartedCount: newlyDeparted.length,
+      thankedCount: toThank.length,
+      deletedCount: result?.deletedCount || 0,
     });
-    return res.json({ success: true, deletedCount: result?.deletedCount || 0, thankedCount: toThank.length });
   } catch (err) {
     console.error('Expire departed tickets error:', err);
     return res.status(500).json({ error: 'Internal server error' });

@@ -71,6 +71,10 @@ apiRouter.get('/health', async (_req, res) => {
 app.use('/api', apiRouter);
 app.use('/', apiRouter);
 
+app.get('/', (_req, res) => {
+  res.json({ message: 'Season Travels API is running smoothly!', health: '/api/health' });
+});
+
 // Global JSON Error Handler with CORS headers support
 app.use((err, req, res, _next) => {
   const status = err.status || 500;

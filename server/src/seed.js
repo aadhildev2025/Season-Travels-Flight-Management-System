@@ -1,59 +1,53 @@
 import 'dotenv/config';
-import bcrypt from 'bcryptjs';
 import { connectDB } from './config/db.js';
-import * as UserModel from './models/User.js';
+import { User, createUser } from './models/User.js';
+import { Ticket } from './models/Ticket.js';
+import { AuditLog } from './models/AuditLog.js';
 
-const SEED_USERS = [
-  {
-    name: 'Lars Svensson',
-    email: 'lars.s@seasontravels.se',
-    password: 'admin123',
-    role: 'Admin',
-    timezone: 'Europe/Stockholm',
-  },
-  {
-    name: 'Anura Perera',
-    email: 'anura.p@seasontravels.lk',
-    password: 'staff123',
-    role: 'Staff',
-    timezone: 'Asia/Colombo',
-  },
-  {
-    name: 'Sofia Andersson',
-    email: 'sofia.a@seasontravels.se',
-    password: 'staff123',
-    role: 'Staff',
-    timezone: 'Europe/Stockholm',
-  },
-];
+export const ADMIN_USER = {
+  name: 'Lars Svensson',
+  email: 'lars.s@seasontravels.se',
+  password: 'admin123',
+  role: 'Admin',
+  timezone: 'Europe/Stockholm',
+};
 
-async function seed() {
+export async function clearAndSeedAdmin() {
   try {
-    await connectDB();
+    console.log('Clearing database collections...');
+    await User.deleteMany({});
+    await Ticket.deleteMany({});
+    await AuditLog.deleteMany({});
 
-    const count = await UserModel.countUsers();
-    if (count > 0) {
-      console.log(`Database already has ${count} users. Skipping seed.`);
-      process.exit(0);
-    }
-
-    for (const u of SEED_USERS) {
-      const user = await UserModel.createUser({
-        name: u.name,
-        email: u.email,
-        password: u.password,
-        role: u.role,
-        timezone: u.timezone,
-      });
-      console.log(`Created user: ${user.name} (${user.role?.name || user.role})`);
-    }
-
-    console.log('Seed complete.');
-    process.exit(0);
+    console.log('Creating Admin user...');
+    const admin = await createUser(ADMIN_USER);
+    console.log(`Database reset successfully! Created Admin user: ${admin.email} (${admin.name})`);
+    return admin;
   } catch (err) {
-    console.error('Seed failed:', err);
-    process.exit(1);
+    console.error('Reset database failed:', err.message);
+    throw err;
   }
 }
 
-seed();
+export async function seedUsers() {
+  try {
+    const count = await User.countDocuments();
+    if (count > 0) {
+      console.log(`Database already initialized with ${count} user(s).`);
+      return;
+    }
+
+    console.log('Initializing database with default Admin user...');
+    await createUser(ADMIN_USER);
+    console.log('Admin user seeded successfully.');
+  } catch (err) {
+    console.error('Seed error:', err.message);
+  }
+}
+
+if (process.argv[1] && (process.argv[1].endsWith('seed.js') || process.argv[1].endsWith('seed'))) {
+  connectDB().then(async () => {
+    await clearAndSeedAdmin();
+    process.exit(0);
+  });
+}

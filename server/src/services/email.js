@@ -18,7 +18,7 @@ const transporter = nodemailer.createTransport({
 export function buildReminderMessage(ticket) {
   const dep = new Date(ticket.departureTimeUTC);
   const tzLabel = ticket.originalTimezone.split('/').pop()?.replace('_',' ') || '';
-  const formatted = dep.toLocaleString('en-GB', { timeZone: ticket.originalTimezone, dateStyle: 'medium', timeStyle: 'short' });
+  const formatted = dep.toLocaleString('en-GB', { timeZone: ticket.originalTimezone, day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
   return {
     subject: 'Travel Reminder from SeasonTravels',
     body: `Dear ${ticket.passengerName},\n\nThis is a reminder for your upcoming flight.\n\nFlight Details:\nBooking Reference: ${ticket.pnr}\nRoute: ${ticket.departureAirport} → ${ticket.arrivalAirport}\nDeparture: ${formatted} (${tzLabel})\n\nPlease ensure you check in at least 3 hours prior to departure.\n\nWe wish you a safe and pleasant journey!\n\nWarm regards,\nSEASON TRAVELS`,
@@ -33,7 +33,7 @@ export function buildReminderText(ticket) {
 export function buildThankYouMessage(ticket) {
   const dep = new Date(ticket.departureTimeUTC);
   const tzLabel = ticket.originalTimezone.split('/').pop()?.replace('_',' ') || '';
-  const formatted = dep.toLocaleString('en-GB', { timeZone: ticket.originalTimezone, dateStyle: 'medium', timeStyle: 'short' });
+  const formatted = dep.toLocaleString('en-GB', { timeZone: ticket.originalTimezone, day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
   return {
     subject: 'Thank You for Flying with SeasonTravels',
     body: `Dear ${ticket.passengerName},\n\nThank you for choosing SeasonTravels. It was a pleasure having you on board.\n\nFlight Summary:\nBooking Reference: ${ticket.pnr}\nRoute: ${ticket.departureAirport} → ${ticket.arrivalAirport}\nDeparture: ${formatted} (${tzLabel})\n\nWe would love to serve you again. Safe travels!\n\nWarm regards,\nSEASON TRAVELS`,

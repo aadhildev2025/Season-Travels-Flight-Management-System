@@ -4,6 +4,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import compression from 'compression';
 import { connectDB, isDBReady } from './config/db.js';
+import { seedUsers } from './seed.js';
 import authRoutes     from './routes/auth.js';
 import ticketRoutes   from './routes/tickets.js';
 import staffRoutes    from './routes/staff.js';
@@ -45,12 +46,13 @@ app.options('*', cors());
 app.use(express.json());
 app.use(cookieParser());
 
-// Connect to MariaDB on demand for serverless, or on startup for local dev
+// Connect to MongoDB on demand for serverless, or on startup for local dev
 let isConnected = false;
 app.use(async (_req, _res, next) => {
-  if (!isConnected && process.env.DATABASE_URL) {
+  if (!isConnected) {
     try {
       await connectDB();
+      await seedUsers();
       isConnected = true;
     } catch (err) {
       console.error('Database connection attempt failed in middleware:', err.message);
@@ -97,6 +99,7 @@ if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
   const tryConnect = async (attempt = 1) => {
     try {
       await connectDB();
+      await seedUsers();
       isConnected = true;
     } catch (err) {
       console.error(`DB connection retry ${attempt} failed:`, err.message);

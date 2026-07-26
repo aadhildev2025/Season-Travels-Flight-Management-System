@@ -237,15 +237,15 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
     });
   };
 
-  const th: React.CSSProperties = { padding:'6px 12px', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.10em', color:'var(--text2)', whiteSpace:'nowrap', textAlign:'left' };
-  const td: React.CSSProperties = { padding:'6px 12px', fontSize:13 };
+  const th: React.CSSProperties = { padding:'6px 12px', fontSize:13, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.10em', color:'var(--text2)', whiteSpace:'nowrap', textAlign:'left' };
+  const td: React.CSSProperties = { padding:'6px 12px', fontSize:15 };
 
   return (
     <div className="fade-up" style={{ display:'flex', flexDirection:'column', gap:14 }}>
 
       {/* Count row & clock */}
       <div className="page-header" style={{ marginBottom: 4 }}>
-        <span style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.08em', display:'inline-block', alignSelf:'center' }}>
+        <span style={{ fontSize:13, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.08em', display:'inline-block', alignSelf:'center' }}>
           {sorted.length} Departure{sorted.length !== 1 ? 's' : ''}
           {search && <span style={{ marginLeft:8, color:'var(--text3)', fontWeight:500 }}>· filtered</span>}
         </span>
@@ -357,7 +357,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                             style={{
                               fontFamily:"'JetBrains Mono',monospace", 
                               fontWeight:700, 
-                              fontSize:13,
+                              fontSize:14,
                               cursor: 'pointer',
                             }}
                           >
@@ -376,7 +376,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                               fontFamily:"'JetBrains Mono',monospace", 
                               fontWeight:700, 
                               color: isLoadingToday ? 'var(--green)' : 'var(--text)', 
-                              fontSize:13 
+                              fontSize:14 
                             }}
                           >
                             {formatDate(ticket.departureTimeUTC)}
@@ -418,21 +418,21 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
 
                       {/* CET Time */}
                       <td style={td}>
-                        <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, color:'var(--indigo2)', fontSize:14 }}>
+                        <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, color:'var(--indigo2)', fontSize:16 }}>
                           {getCETTime(ticket.departureTimeUTC)}
                         </span>
                       </td>
 
                       {/* SLT Time */}
                       <td style={td}>
-                        <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, color:'var(--cyan)', fontSize:14 }}>
+                        <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, color:'var(--cyan)', fontSize:16 }}>
                           {getSLTime(ticket.departureTimeUTC)}
                         </span>
                       </td>
 
                       {/* Flight Number */}
                       <td style={td}>
-                        <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, color:'#fff', fontSize:12, letterSpacing:'0.04em' }}>
+                        <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, color:'#fff', fontSize:13, letterSpacing:'0.04em' }}>
                           {ticket.flightNumber || '—'}
                         </span>
                       </td>

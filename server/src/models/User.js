@@ -1,106 +1,95 @@
+import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
-import prisma from '../config/db.js';
+
+const userSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+  passwordHash: { type: String, required: true },
+  role: { type: String, default: 'Staff' },
+  timezone: { type: String, default: 'Europe/Stockholm' },
+}, { timestamps: true });
+
+export const User = mongoose.models.User || mongoose.model('User', userSchema);
 
 export async function findUserByEmail(email) {
-  return prisma.user.findFirst({
-    where: { email },
-    include: { role: true },
-  });
+  const user = await User.findOne({ email: email.toLowerCase().trim() });
+  return user ? formatUser(user) : null;
 }
 
 export async function findUserById(id) {
-  return prisma.user.findUnique({
-    where: { id: Number(id) },
-    include: { role: true },
-  });
+  try {
+    const user = await User.findById(id);
+    return user ? formatUser(user) : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function createUser(data) {
-  const passwordHash = bcrypt.hashSync(data.password || 'staff123', 10);
-  let roleId = null;
-
-  if (data.role) {
-    let role = await prisma.role.findFirst({
-      where: { name: data.role },
-    });
-    if (!role) {
-      role = await prisma.role.create({
-        data: { name: data.role },
-      });
-    }
-    roleId = role.id;
-  }
-
-  return prisma.user.create({
-    data: {
-      name: data.name,
-      email: data.email.toLowerCase().trim(),
-      passwordHash,
-      roleId: roleId || 1,
-      timezone: data.timezone || 'Europe/Stockholm',
-    },
-    include: { role: true },
+  const passwordHash = await bcrypt.hash(data.password || 'staff123', 10);
+  const user = await User.create({
+    name: data.name,
+    email: data.email.toLowerCase().trim(),
+    passwordHash,
+    role: data.role || 'Staff',
+    timezone: data.timezone || 'Europe/Stockholm',
   });
+  return formatUser(user);
 }
 
 export async function updateUser(id, data) {
-  const updateData = {
-    ...(data.name && { name: data.name.trim() }),
-    ...(data.email && { email: data.email.toLowerCase().trim() }),
-    ...(data.timezone && { timezone: data.timezone }),
-  };
-
+  const updateData = {};
+  if (data.name) updateData.name = data.name.trim();
+  if (data.email) updateData.email = data.email.toLowerCase().trim();
+  if (data.timezone) updateData.timezone = data.timezone;
+  if (data.role) updateData.role = data.role;
   if (data.password) {
-    updateData.passwordHash = bcrypt.hashSync(data.password, 10);
+    updateData.passwordHash = await bcrypt.hash(data.password, 10);
   }
 
-  if (data.role) {
-    let role = await prisma.role.findFirst({
-      where: { name: data.role },
-    });
-    if (!role) {
-      role = await prisma.role.create({
-        data: { name: data.role },
-      });
-    }
-    updateData.roleId = role.id;
-  }
-
-  return prisma.user.update({
-    where: { id: Number(id) },
-    data: updateData,
-    include: { role: true },
-  });
+  const user = await User.findByIdAndUpdate(id, updateData, { returnDocument: 'after' });
+  return user ? formatUser(user) : null;
 }
 
 export async function deleteUser(id) {
-  return prisma.user.delete({
-    where: { id: Number(id) },
-  });
+  return User.findByIdAndDelete(id);
 }
 
 export async function countUsers() {
-  return prisma.user.count();
+  return User.countDocuments();
 }
 
 export async function findAllUsers() {
-  return prisma.user.findMany({
-    orderBy: { name: 'asc' },
-    include: { role: true },
-  });
+  const users = await User.find().sort({ name: 1 });
+  return users.map(formatUser);
 }
 
 export async function findUserByEmailExcludingId(email, excludeId) {
-  return prisma.user.findFirst({
-    where: {
-      email,
-      id: { not: Number(excludeId) },
-    },
+  const user = await User.findOne({
+    email: email.toLowerCase().trim(),
+    _id: { $ne: excludeId },
   });
+  return user ? formatUser(user) : null;
 }
 
 export async function findUsersByEmails(emails) {
-  return prisma.user.findMany({
-    where: { email: { in: emails } },
-  });
+  const users = await User.find({ email: { $in: emails } });
+  return users.map(formatUser);
+}
+
+function formatUser(doc) {
+  const obj = doc.toObject ? doc.toObject() : doc;
+  const idStr = obj._id ? obj._id.toString() : (obj.id ? String(obj.id) : '');
+  const roleName = typeof obj.role === 'object' && obj.role ? (obj.role.name || 'Staff') : (obj.role || 'Staff');
+  return {
+    id: idStr,
+    _id: idStr,
+    name: obj.name,
+    email: obj.email,
+    passwordHash: obj.passwordHash,
+    role: roleName,
+    timezone: obj.timezone || 'Europe/Stockholm',
+    createdAt: obj.createdAt,
+    updatedAt: obj.updatedAt,
+  };
 }

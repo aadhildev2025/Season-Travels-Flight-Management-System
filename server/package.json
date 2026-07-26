@@ -11,7 +11,7 @@
     "vercel-build": "prisma generate",
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:push": "prisma db push"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
@@ -22,7 +22,7 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.0",
     "jsonwebtoken": "^9.0.2",
-    "mysql2": "^3.14.5",
+    "mongoose": "^9.8.0",
     "nodemailer": "^9.0.3",
     "prisma": "^5.22.0"
   }

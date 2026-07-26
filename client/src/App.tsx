@@ -161,8 +161,11 @@ export default function App() {
     if (!keepFormOpen) {
       setEditingTicket(null);
       setView('dashboard');
+      // Reload page so all users across different countries see fresh data
+      window.location.reload();
+    } else {
+      fetchTickets();
     }
-    fetchTickets();
   };
 
   const handlePDF = async () => {
@@ -173,7 +176,7 @@ export default function App() {
       doc.setFontSize(16);
       doc.text('Season Travels Scandic - Flight Departures', 14, 15);
       doc.setFontSize(10);
-      doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 22);
+      doc.text(`Generated: ${new Date().toLocaleString('en-GB', { hour12: false })}`, 14, 22);
       const rows = tickets.map(t => {
         const cetTime = t.departureTimeUTC ? new Date(t.departureTimeUTC).toLocaleTimeString('en-GB', { timeZone: 'Europe/Stockholm', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
         const sltTime = t.departureTimeUTC ? new Date(t.departureTimeUTC).toLocaleTimeString('en-GB', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
@@ -394,13 +397,30 @@ export default function App() {
                 onChange={e => setSearch(e.target.value)}
                 style={{
                   background: 'var(--bg2)', border: '1px solid var(--border)',
-                   borderRadius: 8, padding: '7px 12px 7px 30px',
+                   borderRadius: 8, padding: search ? '7px 28px 7px 30px' : '7px 12px 7px 30px',
                   fontSize: 13, color: 'var(--text)', outline: 'none',
                   width: '100%', transition: 'border-color 0.15s, box-shadow 0.15s'
                 }}
                 onFocus={e => { e.currentTarget.style.borderColor = 'var(--indigo)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.12)'; }}
                 onBlur={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.boxShadow = 'none'; }}
               />
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  title="Clear search"
+                  style={{
+                    position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--text3)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    padding: 2, borderRadius: 4, transition: 'color 0.15s',
+                    lineHeight: 1,
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.color = 'var(--text)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = 'var(--text3)'; }}
+                >
+                  <X size={13} />
+                </button>
+              )}
             </div>
           )}
 

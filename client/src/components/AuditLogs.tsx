@@ -38,7 +38,7 @@ export default function AuditLogs({ tz }: AuditLogsProps) {
 
   const fmtDate = (iso: string) => {
     const d = new Date(iso);
-    return d.toLocaleString('en-GB', { timeZone: 'Europe/Stockholm', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return d.toLocaleString('en-GB', { timeZone: 'Europe/Stockholm', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
   };
 
   return (
@@ -73,10 +73,11 @@ export default function AuditLogs({ tz }: AuditLogsProps) {
                 </tr>
               </thead>
               <tbody>
-                {logs.map(log => {
+                {logs.map((log, index) => {
                   const badge = ACTION_COLORS[log.action] || { bg: 'rgba(255,255,255,0.06)', color: 'var(--text2)', label: log.action };
+                  const itemKey = log.id || log._id || `log-${index}`;
                   return (
-                    <tr key={log._id}>
+                    <tr key={itemKey}>
                       <td style={{ padding: '6px 14px', fontSize: 11, whiteSpace: 'nowrap', fontFamily: "'JetBrains Mono', monospace", color: 'var(--text2)' }}>
                         {fmtDate(log.createdAt)}
                       </td>

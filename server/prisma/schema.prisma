@@ -4,14 +4,14 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
 model Role {
-  id          Int      @id @default(autoincrement())
-  name        String   @unique @db.VarChar(50)
-  description String?  @db.Text
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String   @unique
+  description String?
   users       User[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -20,13 +20,13 @@ model Role {
 }
 
 model User {
-  id           Int      @id @default(autoincrement())
-  name         String   @db.VarChar(255)
-  email        String   @unique @db.VarChar(255)
-  passwordHash String   @db.VarChar(255)
-  roleId       Int
-  role         Role     @relation(fields: [roleId], references: [id])
-  timezone     String   @default("Europe/Stockholm") @db.VarChar(100)
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  name         String
+  email        String   @unique
+  passwordHash String
+  roleId       String?  @db.ObjectId
+  role         Role?    @relation(fields: [roleId], references: [id])
+  timezone     String   @default("Europe/Stockholm")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -36,68 +36,68 @@ model User {
 }
 
 model Customer {
-  id           Int      @id @default(autoincrement())
-  firstName    String   @db.VarChar(255)
-  lastName     String   @db.VarChar(255)
-  email        String?  @unique @db.VarChar(255)
-  phone        String?  @db.VarChar(50)
-  passport     String?  @unique @db.VarChar(100)
-  nationality  String?  @db.VarChar(100)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  firstName   String
+  lastName    String
+  email       String?   @unique
+  phone       String?
+  passport    String?   @unique
+  nationality String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  bookings     Booking[]
+  bookings    Booking[]
 
   @@map("customers")
 }
 
 model Airline {
-  id           Int      @id @default(autoincrement())
-  name         String   @unique @db.VarChar(255)
-  code         String   @unique @db.VarChar(10)
-  country      String?  @db.VarChar(100)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  name      String    @unique
+  code      String    @unique
+  country   String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
-  tickets      Ticket[]
-  bookings     Booking[]
+  tickets   Ticket[]
+  bookings  Booking[]
 
   @@map("airlines")
 }
 
 model Ticket {
-  id                      Int      @id @default(autoincrement())
-  passengerName           String   @db.VarChar(255)
-  email                   String   @default("") @db.VarChar(255)
-  phone                   String   @default("") @db.VarChar(50)
-  airlineId               Int?
-  airline                 Airline? @relation(fields: [airlineId], references: [id])
-  flightNumber            String   @default("") @db.VarChar(50)
-  pnr                     String   @default("") @db.VarChar(100)
-  departureAirport        String   @default("") @db.VarChar(10)
-  arrivalAirport          String   @default("") @db.VarChar(10)
-  departureTimeUTC        String   @default("") @db.VarChar(50)
-  originalTimezone        String   @default("Asia/Colombo") @db.VarChar(100)
-  remarks                 String?  @db.Text
-  status                  String   @default("No Need Further Actions") @db.VarChar(100)
-  checkin                 Boolean  @default(false)
-  remind                  Boolean  @default(false)
-  returnTicket            Boolean  @default(false)
-  returnLeg               Boolean  @default(false)
-  returnDepartureAirport  String   @default("") @db.VarChar(10)
-  returnArrivalAirport    String   @default("") @db.VarChar(10)
-  returnFlightNumber      String   @default("") @db.VarChar(50)
-  returnPnr               String   @default("") @db.VarChar(100)
-  returnDepartureTimeUTC  String   @default("") @db.VarChar(50)
-  returnOriginalTimezone  String   @default("") @db.VarChar(100)
-  thankYouSent            Boolean  @default(false)
-  reminderSent            Boolean  @default(false)
-  createdById             Int?
-  createdBy               User?    @relation("TicketCreator", fields: [createdById], references: [id])
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  id                     String   @id @default(auto()) @map("_id") @db.ObjectId
+  passengerName          String
+  email                  String   @default("")
+  phone                  String   @default("")
+  airlineId              String?  @db.ObjectId
+  airline                Airline? @relation(fields: [airlineId], references: [id])
+  flightNumber           String   @default("")
+  pnr                    String   @default("")
+  departureAirport       String   @default("")
+  arrivalAirport         String   @default("")
+  departureTimeUTC       String   @default("")
+  originalTimezone       String   @default("Asia/Colombo")
+  remarks                String?
+  status                 String   @default("No Need Further Actions")
+  checkin                Boolean  @default(false)
+  remind                 Boolean  @default(false)
+  returnTicket           Boolean  @default(false)
+  returnLeg              Boolean  @default(false)
+  returnDepartureAirport String   @default("")
+  returnArrivalAirport   String   @default("")
+  returnFlightNumber     String   @default("")
+  returnPnr              String   @default("")
+  returnDepartureTimeUTC String   @default("")
+  returnOriginalTimezone String   @default("")
+  thankYouSent           Boolean  @default(false)
+  reminderSent           Boolean  @default(false)
+  createdById            String?  @db.ObjectId
+  createdBy              User?    @relation("TicketCreator", fields: [createdById], references: [id])
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
-  bookings                 Booking[]
+  bookings               Booking[]
 
   @@index([pnr])
   @@index([passengerName])
@@ -107,45 +107,45 @@ model Ticket {
 }
 
 model Booking {
-  id           Int      @id @default(autoincrement())
-  ticketId     Int?
-  ticket       Ticket?  @relation(fields: [ticketId], references: [id])
-  customerId   Int?
-  customer     Customer? @relation(fields: [customerId], references: [id])
-  airlineId    Int?
-  airline      Airline? @relation(fields: [airlineId], references: [id])
-  bookingRef   String?  @db.VarChar(100)
-  amount       Decimal? @db.Decimal(10, 2)
-  currency     String?  @default("EUR") @db.VarChar(10)
-  paymentId    Int?     @unique
-  payment      Payment? @relation("BookingPayment", fields: [paymentId], references: [id])
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  ticketId   String?   @db.ObjectId
+  ticket     Ticket?   @relation(fields: [ticketId], references: [id])
+  customerId String?   @db.ObjectId
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  airlineId  String?   @db.ObjectId
+  airline    Airline?  @relation(fields: [airlineId], references: [id])
+  bookingRef String?
+  amount     Float?
+  currency   String?   @default("EUR")
+  paymentId  String?   @unique @db.ObjectId
+  payment    Payment?  @relation("BookingPayment", fields: [paymentId], references: [id])
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@map("bookings")
 }
 
 model Payment {
-  id           Int      @id @default(autoincrement())
-  booking      Booking? @relation("BookingPayment")
-  amount       Decimal  @db.Decimal(10, 2)
-  currency     String   @default("EUR") @db.VarChar(10)
-  method       String?  @db.VarChar(50)
-  status       String?  @default("pending") @db.VarChar(50)
-  paidAt       DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  booking   Booking?  @relation("BookingPayment")
+  amount    Float
+  currency  String    @default("EUR")
+  method    String?
+  status    String?   @default("pending")
+  paidAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   @@map("payments")
 }
 
 model Supplier {
-  id           Int      @id @default(autoincrement())
-  name         String   @unique @db.VarChar(255)
-  contactEmail String?  @db.VarChar(255)
-  phone        String?  @db.VarChar(50)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  name         String    @unique
+  contactEmail String?
+  phone        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   expenses     Expense[]
 
@@ -153,44 +153,44 @@ model Supplier {
 }
 
 model Expense {
-  id           Int      @id @default(autoincrement())
-  supplierId   Int?
-  supplier     Supplier? @relation(fields: [supplierId], references: [id])
-  category     String?  @db.VarChar(100)
-  amount       Decimal  @db.Decimal(10, 2)
-  currency     String   @default("EUR") @db.VarChar(10)
-  description  String?  @db.Text
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  supplierId  String?   @db.ObjectId
+  supplier    Supplier? @relation(fields: [supplierId], references: [id])
+  category    String?
+  amount      Float
+  currency    String    @default("EUR")
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@map("expenses")
 }
 
 model Invoice {
-  id            Int      @id @default(autoincrement())
-  invoiceNumber String   @unique @db.VarChar(100)
-  customerName  String   @db.VarChar(255)
-  customerEmail String?  @db.VarChar(255)
-  amount        Decimal  @db.Decimal(10, 2)
-  currency      String   @default("EUR") @db.VarChar(10)
-  status        String?  @default("pending") @db.VarChar(50)
-  issuedAt      DateTime @default(now())
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  invoiceNumber String    @unique
+  customerName  String
+  customerEmail String?
+  amount        Float
+  currency      String    @default("EUR")
+  status        String?   @default("pending")
+  issuedAt      DateTime  @default(now())
   dueAt         DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@map("invoices")
 }
 
 model AuditLog {
-  id        Int      @id @default(autoincrement())
-  userId    String   @db.VarChar(255)
-  userName  String   @db.VarChar(255)
-  userEmail String   @db.VarChar(255)
-  action    String   @db.VarChar(100)
-  target    String   @default("") @db.VarChar(255)
-  details   String?  @db.Text
-  ip        String   @default("") @db.VarChar(50)
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String
+  userName  String
+  userEmail String
+  action    String
+  target    String   @default("")
+  details   String?
+  ip        String   @default("")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -6,13 +6,13 @@ import { sendEmail, buildThankYouMessage, buildReminderMessage } from '../servic
 
 const router = Router();
 
-/** Helper to write an audit entry */
+/** Helper */
 async function audit(req, action, target = '', details = '') {
   try {
     await AuditLogModel.createAuditLog({
-      userId: req.user.userId,
-      userName: req.user.name,
-      userEmail: req.user.email,
+      userId: req.user?.userId || 'system',
+      userName: req.user?.name || 'System',
+      userEmail: req.user?.email || '',
       action, target, details,
       ip: req.ip || '',
     });
@@ -21,14 +21,10 @@ async function audit(req, action, target = '', details = '') {
   }
 }
 
-// GET /api/tickets
+// GET /api/tickets - List all tickets
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const rawTickets = await TicketModel.findAllTickets();
-    const tickets = rawTickets.map(t => ({
-      ...t,
-      _id: t.id.toString(),
-    }));
+    const tickets = await TicketModel.findAllTickets();
     return res.json({ tickets });
   } catch (err) {
     console.error('Get tickets error:', err);
@@ -36,18 +32,37 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
-// GET /api/tickets/analytics — Admin only
-router.get('/analytics', requireAuth, requireAdmin, async (req, res) => {
+// GET /api/tickets/analytics - Summary metrics for dashboard
+router.get('/analytics', requireAuth, async (req, res) => {
   try {
-    const now = new Date();
-    const startOfDay = new Date(now);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(now);
-    endOfDay.setHours(23, 59, 59, 999);
-    const in7Days = new Date(now);
-    in7Days.setDate(now.getDate() + 7);
+    const total = await TicketModel.countTickets();
 
-    const [
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
+    const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+
+    const todayCount = await TicketModel.countTicketsWhere({
+      departureTimeUTC: { gte: startOfDay, lte: endOfDay },
+    });
+
+    const upcomingCount = await TicketModel.countTicketsWhere({
+      departureTimeUTC: { gte: now.toISOString(), lte: in24Hours },
+    });
+
+    const checkinCount = await TicketModel.countTicketsWhere({ checkin: true });
+    const remindCount = await TicketModel.countTicketsWhere({ remind: true });
+
+    const statusGroups = await TicketModel.groupByStatus();
+    const routeRaw = await TicketModel.groupByRoute(5);
+    const routeGroups = routeRaw.map(r => ({
+      _id: { from: r.from, to: r.to },
+      count: Number(r.count),
+    }));
+
+    const recentTickets = await TicketModel.findRecentTickets(5);
+
+    return res.json({
       total,
       todayCount,
       upcomingCount,
@@ -56,46 +71,6 @@ router.get('/analytics', requireAuth, requireAdmin, async (req, res) => {
       statusGroups,
       routeGroups,
       recentTickets,
-    ] = await Promise.all([
-      TicketModel.countTickets(),
-      TicketModel.countTicketsWhere({
-        departureTimeUTC: { gte: startOfDay.toISOString(), lte: endOfDay.toISOString() },
-      }),
-      TicketModel.countTicketsWhere({
-        departureTimeUTC: { gte: now.toISOString(), lte: in7Days.toISOString() },
-      }),
-      TicketModel.countTicketsWhere({ checkin: true }),
-      TicketModel.countTicketsWhere({ remind: true }),
-      TicketModel.groupByStatus(),
-      TicketModel.groupByRoute(5),
-      TicketModel.findRecentTickets(5),
-    ]);
-
-    const formattedStatusGroups = statusGroups.map(item => ({
-      _id: item.status,
-      count: item._count.status,
-    }));
-
-    const formattedRouteGroups = routeGroups.map(item => ({
-      _id: { from: item.from, to: item.to },
-      count: Number(item.count),
-    }));
-
-    const formattedRecentTickets = recentTickets.map(t => ({
-      _id: t.id.toString(),
-      passengerName: t.passengerName,
-      pnr: t.pnr,
-      departureAirport: t.departureAirport,
-      arrivalAirport: t.arrivalAirport,
-      departureTimeUTC: t.departureTimeUTC,
-      createdAt: t.createdAt,
-    }));
-
-    return res.json({
-      total, todayCount, upcomingCount, checkinCount, remindCount,
-      statusGroups: formattedStatusGroups,
-      routeGroups: formattedRouteGroups,
-      recentTickets: formattedRecentTickets,
     });
   } catch (err) {
     console.error('Analytics error:', err);
@@ -103,41 +78,37 @@ router.get('/analytics', requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
-// POST /api/tickets
+// POST /api/tickets - Create ticket
 router.post('/', requireAuth, async (req, res) => {
   try {
-    const ticket = await TicketModel.createTicket({
-      passengerName: req.body.passengerName || '',
-      email: req.body.email || '',
-      phone: req.body.phone || '',
-      airline: req.body.airline || '',
-      flightNumber: req.body.flightNumber || '',
-      pnr: req.body.pnr || '',
-      departureAirport: req.body.departureAirport || '',
-      arrivalAirport: req.body.arrivalAirport || '',
-      departureTimeUTC: req.body.departureTimeUTC || '',
-      originalTimezone: req.body.originalTimezone || 'Asia/Colombo',
-      remarks: req.body.remarks || '',
-      status: req.body.status || 'No Need Further Actions',
-      checkin: req.body.checkin || false,
-      remind: req.body.remind || false,
-      returnTicket: req.body.returnTicket || false,
-      returnLeg: req.body.returnLeg || false,
-      returnDepartureAirport: req.body.returnDepartureAirport || '',
-      returnArrivalAirport: req.body.returnArrivalAirport || '',
-      returnFlightNumber: req.body.returnFlightNumber || '',
-      returnPnr: req.body.returnPnr || '',
-      returnDepartureTimeUTC: req.body.returnDepartureTimeUTC || '',
-      returnOriginalTimezone: req.body.returnOriginalTimezone || '',
+    const data = req.body;
+    if (!data.passengerName) {
+      return res.status(400).json({ error: 'passengerName is required' });
+    }
+
+    const newTicket = await TicketModel.createTicket({
+      ...data,
       createdBy: req.user.userId,
     });
 
-    audit(req, 'CREATE_TICKET', ticket.pnr,
-      `Created ticket for ${ticket.passengerName} · ${ticket.departureAirport}→${ticket.arrivalAirport} · PNR: ${ticket.pnr}`);
+    audit(req, 'CREATE_TICKET', newTicket.pnr || newTicket.passengerName,
+      `Created ticket for ${newTicket.passengerName} · PNR: ${newTicket.pnr || 'N/A'}`);
 
-    return res.json({ id: ticket.id.toString(), success: true });
+    return res.json({ ticket: newTicket });
   } catch (err) {
     console.error('Create ticket error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/tickets/:id
+router.get('/:id', requireAuth, async (req, res) => {
+  try {
+    const ticket = await TicketModel.findTicketById(req.params.id);
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+    return res.json({ ticket });
+  } catch (err) {
+    console.error('Get ticket error:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -145,22 +116,15 @@ router.post('/', requireAuth, async (req, res) => {
 // PUT /api/tickets/:id
 router.put('/:id', requireAuth, async (req, res) => {
   try {
-    const before = await TicketModel.findTicketById(req.params.id);
-    const ticket = await TicketModel.updateTicket(req.params.id, req.body);
-    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+    const existing = await TicketModel.findTicketById(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Ticket not found' });
 
-    // Describe what changed
-    const changes = [];
-    if (req.body.checkin !== undefined) changes.push(`checkin→${req.body.checkin ? 'YES' : 'NO'}`);
-    if (req.body.remind !== undefined) changes.push(`remind→${req.body.remind ? 'YES' : 'NO'}`);
-    if (req.body.status !== undefined && before?.status !== req.body.status) changes.push(`status→"${req.body.status}"`);
-    if (req.body.passengerName) changes.push('name updated');
-    const detail = changes.length ? changes.join(', ') : 'ticket updated';
+    const updated = await TicketModel.updateTicket(req.params.id, req.body);
 
-    audit(req, 'UPDATE_TICKET', ticket.pnr,
-      `Updated ticket PNR: ${ticket.pnr} · ${detail}`);
+    audit(req, 'UPDATE_TICKET', updated.pnr || updated.passengerName,
+      `Updated ticket for ${updated.passengerName} · PNR: ${updated.pnr || 'N/A'}`);
 
-    return res.json({ success: true, ticket });
+    return res.json({ ticket: updated });
   } catch (err) {
     console.error('Update ticket error:', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -191,7 +155,7 @@ router.post('/expire-departed', requireAuth, async (req, res) => {
     const result = await TicketModel.deleteManyTickets({
       departureTimeUTC: { lte: now.toISOString() },
     });
-    return res.json({ success: true, deletedCount: result.count, thankedCount: toThank.length });
+    return res.json({ success: true, deletedCount: result?.deletedCount || 0, thankedCount: toThank.length });
   } catch (err) {
     console.error('Expire departed tickets error:', err);
     return res.status(500).json({ error: 'Internal server error' });

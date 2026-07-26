@@ -1,15 +1,21 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
-import prisma from '../config/db.js';
 import * as UserModel from '../models/User.js';
+import * as AuditLogModel from '../models/AuditLog.js';
+import { signToken, verifyToken, requireAuth } from '../middleware/auth.js';
+
 const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production' || !!process.env.VERCEL,
   sameSite: process.env.NODE_ENV === 'production' || !!process.env.VERCEL ? 'none' : 'lax',
   maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
 };
-import * as AuditLogModel from '../models/AuditLog.js';
-import { signToken, verifyToken, requireAuth } from '../middleware/auth.js';
+
+const CLEAR_COOKIE_OPTIONS = {
+  httpOnly: COOKIE_OPTIONS.httpOnly,
+  secure: COOKIE_OPTIONS.secure,
+  sameSite: COOKIE_OPTIONS.sameSite,
+};
 
 const router = Router();
 
@@ -36,7 +42,7 @@ router.get('/quick-access', async (req, res) => {
       id: u.id,
       name: u.name,
       email: u.email,
-      role: u.role?.name || 'Staff'
+      role: u.role || 'Staff'
     }));
     return res.json({ users: formatted });
   } catch (err) {
@@ -57,23 +63,18 @@ router.post('/login', async (req, res) => {
     if (input.includes('@')) {
       user = await UserModel.findUserByEmail(input);
     } else {
-      const escapedInput = input.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-      const regex = new RegExp(`^${escapedInput}@`, 'i');
-      const allUsers = await prisma.user.findMany({
-        where: { email: { contains: '@' } },
-        include: { role: true },
-      });
-      user = allUsers.find(u => regex.test(u.email)) || null;
+      const allUsers = await UserModel.findAllUsers();
+      user = allUsers.find(u => u.email.toLowerCase().startsWith(input)) || null;
     }
 
-    if (!user || !bcrypt.compareSync(password, user.passwordHash))
+    if (!user || !await bcrypt.compare(password, user.passwordHash))
       return res.status(401).json({ error: 'Invalid credentials' });
 
     const payload = {
       userId: user.id.toString(),
       name: user.name,
       email: user.email,
-      role: user.role?.name || user.role,
+      role: user.role || 'Staff',
       timezone: user.timezone,
     };
     const token = signToken(payload);
@@ -81,19 +82,7 @@ router.post('/login', async (req, res) => {
     res.cookie('st-session', token, COOKIE_OPTIONS);
     res.cookie('token', token, COOKIE_OPTIONS);
 
-    return res.json({
-      success: true,
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role.name,
-        timezone: user.timezone
-      }
-    });
-
-    // Inline audit (no req.user yet)
+    // Audit login safely
     try {
       await AuditLogModel.createAuditLog({
         userId: user.id.toString(),
@@ -101,12 +90,22 @@ router.post('/login', async (req, res) => {
         userEmail: user.email,
         action: 'LOGIN',
         target: user.email,
-        details: `Logged in as ${user.role?.name || user.role}`,
+        details: `Logged in as ${user.role || 'Staff'}`,
         ip: req.ip || '',
       });
     } catch { /* ignore */ }
 
-    return res.json({ user: payload });
+    return res.json({
+      success: true,
+      token,
+      user: {
+        id: user.id.toString(),
+        name: user.name,
+        email: user.email,
+        role: user.role || 'Staff',
+        timezone: user.timezone
+      }
+    });
   } catch (err) {
     console.error('Login error:', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -115,8 +114,8 @@ router.post('/login', async (req, res) => {
 
 // POST /api/auth/logout
 router.post('/logout', (req, res) => {
-  res.clearCookie('token', COOKIE_OPTIONS);
-  res.clearCookie('st-session', COOKIE_OPTIONS);
+  res.clearCookie('token', CLEAR_COOKIE_OPTIONS);
+  res.clearCookie('st-session', CLEAR_COOKIE_OPTIONS);
   return res.json({ success: true });
 });
 
@@ -134,7 +133,7 @@ router.get('/me', async (req, res) => {
         id: user.id.toString(),
         name: user.name,
         email: user.email,
-        role: user.role?.name || user.role,
+        role: user.role || 'Staff',
         timezone: user.timezone,
       }
     });
@@ -159,7 +158,7 @@ router.put('/profile', requireAuth, async (req, res) => {
       changes.push(`email: "${user.email}" → "${req.body.email.trim().toLowerCase()}"`);
     }
     if (req.body.currentPassword && req.body.newPassword) {
-      if (!bcrypt.compareSync(req.body.currentPassword, user.passwordHash))
+      if (!await bcrypt.compare(req.body.currentPassword, user.passwordHash))
         return res.status(400).json({ error: 'Current password is incorrect' });
       changes.push('password changed');
     }
@@ -171,16 +170,11 @@ router.put('/profile', requireAuth, async (req, res) => {
       userId: updatedUser.id.toString(),
       name: updatedUser.name,
       email: updatedUser.email,
-      role: updatedUser.role?.name || updatedUser.role,
+      role: updatedUser.role || 'Staff',
       timezone: updatedUser.timezone,
     };
     const token = signToken(newPayload);
-    res.cookie('st-session', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax', path: '/',
-      maxAge: 365 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie('st-session', token, COOKIE_OPTIONS);
 
     audit(req, 'UPDATE_PROFILE', updatedUser.email, `Profile updated: ${changes.join('; ') || 'no changes'}`);
 

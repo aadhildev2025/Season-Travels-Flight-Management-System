@@ -9,7 +9,20 @@ const API_BASE = (import.meta.env.VITE_API_URL || '')
   .replace(/\/api$/, '');
 
 export async function apiFetch(url: string, options?: RequestInit) {
-  const res  = await fetch(`${API_BASE}${url}`, { ...options, headers: { 'Content-Type': 'application/json', ...options?.headers }, credentials: 'include' });
+  const token = typeof window !== 'undefined' ? localStorage.getItem('st_token') : null;
+  const authHeaders: Record<string, string> = {};
+  if (token) {
+    authHeaders['Authorization'] = `Bearer ${token}`;
+  }
+  const res = await fetch(`${API_BASE}${url}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders,
+      ...options?.headers
+    },
+    credentials: 'include'
+  });
   if (res.status === 401 && !url.includes('/api/auth/login')) {
     useFlightStore.setState({ currentUser: null, isAuthenticated: false });
   }
@@ -138,6 +151,9 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
   login: async (email, password) => {
     try {
       const data = await apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+      if (data.token) {
+        localStorage.setItem('st_token', data.token);
+      }
       set({ currentUser: data.user, isAuthenticated: true });
       await get().fetchTickets();
       return true;
@@ -146,7 +162,10 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
 
   logout: async () => {
     try { await apiFetch('/api/auth/logout', { method: 'POST' }); }
-    finally { set({ currentUser: null, isAuthenticated: false, tickets: [] }); }
+    finally {
+      localStorage.removeItem('st_token');
+      set({ currentUser: null, isAuthenticated: false, tickets: [] });
+    }
   },
 
   updateProfile: async (data) => {

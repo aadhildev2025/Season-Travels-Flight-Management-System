@@ -78,10 +78,12 @@ router.post('/login', async (req, res) => {
     };
     const token = signToken(payload);
 
+    res.cookie('st-session', token, COOKIE_OPTIONS);
     res.cookie('token', token, COOKIE_OPTIONS);
 
     return res.json({
       success: true,
+      token,
       user: {
         id: user.id,
         name: user.name,

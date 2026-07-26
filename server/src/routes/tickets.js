@@ -2,7 +2,7 @@ import { Router } from 'express';
 import * as TicketModel from '../models/Ticket.js';
 import * as AuditLogModel from '../models/AuditLog.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
-import { sendEmail, buildThankYouText, buildReminderText } from '../services/email.js';
+import { sendEmail, buildThankYouMessage, buildReminderMessage } from '../services/email.js';
 
 const router = Router();
 
@@ -177,8 +177,8 @@ router.post('/expire-departed', requireAuth, async (req, res) => {
     for (const ticket of toThank) {
       try {
         if (ticket.email) {
-          const text = buildThankYouText(ticket);
-          await sendEmail({ to: ticket.email, subject: text.subject, text: text.body });
+          const { subject, body } = buildThankYouMessage(ticket);
+          await sendEmail({ to: ticket.email, subject, text: body });
         }
         await TicketModel.markThankYouSent(ticket.id);
         audit(req, 'SEND_THANK_YOU', ticket.pnr,
@@ -209,8 +209,8 @@ router.post('/send-reminders', requireAuth, async (req, res) => {
     for (const ticket of upcoming) {
       try {
         if (ticket.email) {
-          const text = buildReminderText(ticket);
-          await sendEmail({ to: ticket.email, subject: text.subject, text: text.body });
+          const { subject, body } = buildReminderMessage(ticket);
+          await sendEmail({ to: ticket.email, subject, text: body });
         }
         await TicketModel.markReminderSent(ticket.id);
         audit(req, 'SEND_REMINDER', ticket.pnr,

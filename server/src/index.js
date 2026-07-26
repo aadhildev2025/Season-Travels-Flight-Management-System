@@ -16,6 +16,7 @@ const PORT = process.env.PORT || 5000;
 
 const allowedOrigins = [
   process.env.CLIENT_URL,
+  'https://seasontravels.com',
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:3002',
@@ -30,6 +31,7 @@ app.use(cors({
       localOriginRegex.test(origin) ||
       origin.endsWith('.vercel.app') ||
       origin.endsWith('.one.com') ||
+      origin.endsWith('seasontravels.com') ||
       allowedOrigins.includes(origin)
     ) {
       return callback(null, true);
@@ -38,6 +40,8 @@ app.use(cors({
   },
   credentials: true,
 }));
+
+app.options('*', cors());
 app.use(express.json());
 app.use(cookieParser());
 

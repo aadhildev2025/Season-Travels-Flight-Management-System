@@ -161,10 +161,6 @@ export default function App() {
     if (!keepFormOpen) {
       setEditingTicket(null);
       setView('dashboard');
-      // Reload page so all users across different countries see fresh data
-      window.location.reload();
-    } else {
-      fetchTickets();
     }
   };
 
@@ -508,10 +504,12 @@ export default function App() {
           color: '#fff',
           border: toast.type === 'success' ? '2px solid #10b981' : 'none', borderRadius: 12, padding: '12px 20px',
           boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
-          fontSize: 14, fontWeight: 700, minWidth: 240, maxWidth: 340,
+          fontSize: 13, fontWeight: 700, maxWidth: 260,
         }}>
           <CheckCircle size={18} style={{ flexShrink: 0 }} />
-          {toast.message}
+          <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+            {toast.message}
+          </span>
         </div>
       )}
     </div>

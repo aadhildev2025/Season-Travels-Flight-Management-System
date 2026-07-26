@@ -56,6 +56,7 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
   const returnArrRef = useRef<HTMLDivElement>(null);
   const remarksRef = useRef<HTMLTextAreaElement>(null);
   const prevReturnTicket = useRef(false);
+  const savedOutboundId = useRef<string | null>(null);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -126,32 +127,72 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
     }
   }, [focusRemarks, editingTicket]);
 
-  // CET Time → mark last edited as 'cet' and update state
+  // ─── Time sync constants ───────────────────────────────────────────────────
+  // "Local Time" field ALWAYS shows SLT (Asia/Colombo), regardless of departure airport.
+  // When FROM = CMB: SLT is primary → auto-computes CET
+  // When FROM ≠ CMB: CET is primary → auto-computes SLT
+  const SLT = 'Asia/Colombo';
+  const CET = 'Europe/Stockholm';
+  const isCMBDeparture = departureAirport === 'CMB';
+
+  // CET Time → always compute SLT from it
   const handleCETChange = (val: string) => {
     lastEditedField.current = 'cet';
     setCetTime(val);
+    if (autoTime && dipDate && val) {
+      const utc = localTimeToUTC(dipDate, val, CET);
+      if (utc) setDipTime(utcToLocalTime(utc, SLT).time);
+    }
   };
 
-  // Local Time → mark last edited as 'local' and update state
+  // Local Time (SLT) → always compute CET from it
   const handleLocalTimeChange = (val: string) => {
     lastEditedField.current = 'local';
     setDipTime(val);
+    if (autoTime && dipDate && val) {
+      const utc = localTimeToUTC(dipDate, val, SLT);
+      if (utc) setCetTime(utcToLocalTime(utc, CET).time);
+    }
   };
 
-  // Reactive two-way sync: whichever field was last edited drives the other
-  useEffect(() => {
-    if (!autoTime || !dipDate || !departureAirport) return;
-    const tz = 'Asia/Colombo';
+  // Departure Date → re-sync whichever field is primary
+  const handleDateChange = (val: string) => {
+    setDipDate(val);
+    if (!autoTime || !val) return;
+    const primaryIsLocal = isCMBDeparture || lastEditedField.current === 'local';
+    if (primaryIsLocal && dipTime) {
+      const utc = localTimeToUTC(val, dipTime, SLT);
+      if (utc) setCetTime(utcToLocalTime(utc, CET).time);
+    } else if (!primaryIsLocal && cetTime) {
+      const utc = localTimeToUTC(val, cetTime, CET);
+      if (utc) setDipTime(utcToLocalTime(utc, SLT).time);
+    } else if (dipTime) {
+      // fallback: whatever we have in local, compute CET
+      const utc = localTimeToUTC(val, dipTime, SLT);
+      if (utc) setCetTime(utcToLocalTime(utc, CET).time);
+    } else if (cetTime) {
+      const utc = localTimeToUTC(val, cetTime, CET);
+      if (utc) setDipTime(utcToLocalTime(utc, SLT).time);
+    }
+  };
 
-    if (lastEditedField.current === 'cet' && cetTime) {
-      const utc = localTimeToUTC(dipDate, cetTime, 'Europe/Stockholm');
-      if (utc) setDipTime(utcToLocalTime(utc, tz).time);
-    } else if (lastEditedField.current === 'local' && dipTime) {
-      const utc = localTimeToUTC(dipDate, dipTime, tz);
-      if (utc) setCetTime(utcToLocalTime(utc, 'Europe/Stockholm').time);
-    } else if (!lastEditedField.current && cetTime) {
-      const utc = localTimeToUTC(dipDate, cetTime, 'Europe/Stockholm');
-      if (utc) setDipTime(utcToLocalTime(utc, tz).time);
+  // Reactive guard: ensure both fields stay in sync whenever deps change
+  // (handles programmatic updates, e.g. editing existing ticket)
+  useEffect(() => {
+    if (!autoTime || !dipDate) return;
+    const primaryIsLocal = isCMBDeparture || lastEditedField.current === 'local';
+    if (primaryIsLocal && dipTime) {
+      const utc = localTimeToUTC(dipDate, dipTime, SLT);
+      if (utc) {
+        const c = utcToLocalTime(utc, CET).time;
+        if (c !== cetTime) setCetTime(c);
+      }
+    } else if (!primaryIsLocal && cetTime) {
+      const utc = localTimeToUTC(dipDate, cetTime, CET);
+      if (utc) {
+        const s = utcToLocalTime(utc, SLT).time;
+        if (s !== dipTime) setDipTime(s);
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dipDate, dipTime, cetTime, departureAirport, autoTime]);
@@ -245,39 +286,97 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
       returnDepartureTimeUTC: '', returnOriginalTimezone: '',
     };
 
-    // The top fields always represent the CURRENT leg being entered.
-    const saveTz = autoTime ? 'Asia/Colombo' : (AIRPORTS.find(a => a.code === departureAirport)?.timezone || 'Asia/Colombo');
-    const topDtu = localTimeToUTC(dipDate, dipTime, saveTz);
+    // When autoTime is on:
+    //   FROM = CMB → local (SLT) is primary; save as Asia/Colombo
+    //   FROM ≠ CMB → CET is primary; save as Europe/Stockholm using cetTime directly
+    // When autoTime is off → use manual dep airport tz
+    let saveTz: string;
+    let topDtu: string | null;
+    if (autoTime) {
+      if (isCMBDeparture) {
+        saveTz = SLT;
+        topDtu = localTimeToUTC(dipDate, dipTime, SLT);
+      } else {
+        saveTz = CET;
+        topDtu = localTimeToUTC(dipDate, cetTime, CET);
+      }
+    } else {
+      saveTz = AIRPORTS.find(a => a.code === departureAirport)?.timezone || 'Asia/Colombo';
+      topDtu = localTimeToUTC(dipDate, dipTime, saveTz);
+    }
 
     try {
       if (editingTicket) {
+        const isNewlyCheckingReturn = returnTicket && !editingTicket.returnTicket && !editingTicket.returnLeg && !isReturnLegMode;
+
         const updateData: any = {
           ...base,
           flightNumber, pnr, departureAirport, arrivalAirport,
           departureTimeUTC: topDtu, originalTimezone: saveTz,
           returnLeg: editingTicket.returnLeg,
-          returnTicket: returnTicket || !!editingTicket.returnTicket,
+          returnTicket: isNewlyCheckingReturn ? false : (returnTicket || !!editingTicket.returnTicket),
         };
         if (!editingTicket.returnLeg) {
           Object.assign(updateData, emptyReturnFields);
         }
+
         await updateTicket(editingTicket._id, updateData);
+
+        if (isNewlyCheckingReturn) {
+          // Store ID of outbound ticket to update returnTicket: true once return leg is saved
+          savedOutboundId.current = editingTicket._id;
+
+          // Pre-fill form for return leg
+          const savedName   = passengerName;
+          const savedEmail  = email;
+          const savedPhone  = phone;
+          const savedPnr    = pnr;
+          const savedRemarks = remarks;
+          const savedStatus  = status;
+          const swappedDep  = arrivalAirport;   // ARN → becomes new From
+          const swappedArr  = departureAirport; // CMB → becomes new To
+
+          setPassengerName(savedName);
+          setEmail(savedEmail);
+          setPhone(savedPhone);
+          setPnr(savedPnr);
+          setRemarks(savedRemarks);
+          setStatus(savedStatus);
+          setDepAirport(swappedDep);
+          setArrAirport(swappedArr);
+          setFlightNumber('');
+          setDipDate('');
+          setDipTime('');
+          setCetTime('');
+          setReturnTicket(false);
+          lastEditedField.current = null;
+          setIsReturnLegMode(true);
+          setErrors({});
+
+          onSuccess?.('Outbound updated! Fill in return details.', true);
+          return;
+        }
+
         onSuccess?.('Ticket Updated Successfully!');
         return;
       }
 
       if (returnTicket) {
-        // Step 1: Save the outbound ticket first
-        await addTicket({
+        // Step 1: Save the outbound ticket first immediately into the table
+        const savedOutbound = await addTicket({
           ...base,
           flightNumber, pnr,
           departureAirport, arrivalAirport,
           departureTimeUTC: topDtu,
           originalTimezone: saveTz,
-          returnTicket: true,
+          returnTicket: false, // Recorded as normal ticket until return leg is saved
           returnLeg: false,
           ...emptyReturnFields,
         });
+
+        if (savedOutbound && savedOutbound._id) {
+          savedOutboundId.current = savedOutbound._id;
+        }
 
         // Step 2: Pre-fill form for the return leg (swapped airports, same passenger info & PNR)
         const savedName   = passengerName;
@@ -289,7 +388,7 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
         const swappedDep  = arrivalAirport;   // ARN → becomes new From
         const swappedArr  = departureAirport; // CMB → becomes new To
 
-        // Reset everything
+        // Reset inputs for return leg entry
         setPassengerName(savedName);
         setEmail(savedEmail);
         setPhone(savedPhone);
@@ -303,10 +402,11 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
         setDipTime('');
         setCetTime('');
         setReturnTicket(false);
+        lastEditedField.current = null;
         setIsReturnLegMode(true);
         setErrors({});
 
-        onSuccess?.('Outbound ticket saved! Now fill in the return leg details.', true);
+        onSuccess?.('Outbound saved! Fill in return details.', true);
         return;
       }
 
@@ -319,6 +419,12 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
         returnLeg: isReturnLegMode,
         ...emptyReturnFields,
       });
+
+      if (isReturnLegMode && savedOutboundId.current) {
+        await updateTicket(savedOutboundId.current, { returnTicket: true });
+        savedOutboundId.current = null;
+      }
+
       onSuccess?.(isReturnLegMode ? 'Return ticket saved successfully!' : 'Ticket Saved Successfully!');
       setIsReturnLegMode(false);
     } catch (err) {
@@ -509,7 +615,7 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
                   </span>
                 </label>
                 <input className="field" style={err('dipDate')} type="date" value={dipDate}
-                  onChange={e => setDipDate(e.target.value)} />
+                  onChange={e => handleDateChange(e.target.value)} />
                 {errors.dipDate && <span style={{ fontSize: 11, color: 'var(--red)', marginTop: 4, display: 'block' }}>{errors.dipDate}</span>}
               </div>
               <div>
@@ -612,7 +718,7 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
                   borderRadius: 8, padding: '8px 12px',
                 }}>
                  <RotateCcw size={14} />
-                 Outbound saved ✓ — Now fill in the <b style={{ fontWeight: 800 }}>Return leg</b> details ({departureAirport || '—'} → {arrivalAirport || '—'}). Enter the date, CET time &amp; flight number manually.
+                 Outbound saved ✓ — Enter return leg details ({departureAirport || '—'} → {arrivalAirport || '—'}).
                </div>
              )}
 
@@ -645,7 +751,7 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
             <button type="submit" className="btn btn-primary"
               style={{ padding: '10px 30px', fontSize: 14, opacity: submitting ? 0.7 : 1 }}
               disabled={submitting}>
-              {submitting ? 'Saving…' : editingTicket ? 'Update Ticket' : isReturnLegMode ? 'Save Return Ticket' : returnTicket ? 'Save Outbound & Continue' : 'Save Ticket'}
+              {submitting ? 'Saving…' : isReturnLegMode ? 'Save Return Ticket' : editingTicket ? (returnTicket && !editingTicket.returnTicket ? 'Update & Continue to Return Leg' : 'Update Ticket') : returnTicket ? 'Save Outbound & Continue' : 'Save Ticket'}
             </button>
           </div>
         </div>

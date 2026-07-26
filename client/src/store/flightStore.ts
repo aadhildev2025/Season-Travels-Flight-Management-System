@@ -105,8 +105,9 @@ interface FlightState {
   updateStaff: (id: string, data: { name?: string; email?: string; password?: string; role?: string }) => Promise<void>;
   deleteStaff: (id: string) => Promise<void>;
 
-  fetchTickets:  () => Promise<void>;
-  addTicket:     (data: Partial<Ticket>) => Promise<void>;
+  fetchTickets:        () => Promise<void>;
+  fetchTicketsSilent:  () => Promise<void>;
+  addTicket:           (data: Partial<Ticket>) => Promise<Ticket>;
   updateTicket:  (id: string, updates: Partial<Ticket>) => Promise<void>;
   deleteTicket:  (id: string) => Promise<void>;
 
@@ -196,17 +197,41 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
     }
   },
 
+  fetchTicketsSilent: async () => {
+    try {
+      const d = await apiFetch('/api/tickets');
+      set({ tickets: d.tickets, hasFetched: true });
+      setTimeout(() => get().expireOldTickets(), 1000);
+      setTimeout(() => get().sendUpcomingReminders(), 1200);
+    } catch {
+      console.error('Failed to fetch tickets silently');
+    }
+  },
+
   addTicket: async (ticketData) => {
     const res = await apiFetch('/api/tickets', { method: 'POST', body: JSON.stringify(ticketData) });
     if (res.error) throw new Error(res.error);
-    await get().fetchTickets();
+    if (res.ticket) {
+      const newTicket = res.ticket;
+      set(state => ({
+        tickets: [newTicket, ...state.tickets.filter(t => t._id !== newTicket._id)]
+      }));
+    }
+    // Perform background sync without triggering full page loading state
+    get().fetchTicketsSilent();
+    return res.ticket;
   },
 
   updateTicket: async (id, updates) => {
     const prev = get().tickets;
     set({ tickets: prev.map(t => t._id === id ? { ...t, ...updates } : t) });
     try {
-      await apiFetch(`/api/tickets/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
+      const res = await apiFetch(`/api/tickets/${id}`, { method: 'PUT', body: JSON.stringify(updates) });
+      if (res.ticket) {
+        set(state => ({
+          tickets: state.tickets.map(t => t._id === id ? res.ticket : t)
+        }));
+      }
     } catch (err) {
       set({ tickets: prev });
       console.error('Failed to update ticket:', err);

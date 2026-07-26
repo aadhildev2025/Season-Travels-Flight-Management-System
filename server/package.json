@@ -8,6 +8,8 @@
     "start": "node src/index.js",
     "seed": "node src/seed.js",
     "build": "prisma generate",
+    "vercel-build": "prisma generate",
+    "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },

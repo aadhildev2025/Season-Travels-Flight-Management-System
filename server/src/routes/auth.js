@@ -2,6 +2,12 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import prisma from '../config/db.js';
 import * as UserModel from '../models/User.js';
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production' || !!process.env.VERCEL,
+  sameSite: process.env.NODE_ENV === 'production' || !!process.env.VERCEL ? 'none' : 'lax',
+  maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+};
 import * as AuditLogModel from '../models/AuditLog.js';
 import { signToken, verifyToken, requireAuth } from '../middleware/auth.js';
 
@@ -72,12 +78,17 @@ router.post('/login', async (req, res) => {
     };
     const token = signToken(payload);
 
-    res.cookie('st-session', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 365 * 24 * 60 * 60 * 1000,
+    res.cookie('token', token, COOKIE_OPTIONS);
+
+    return res.json({
+      success: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role.name,
+        timezone: user.timezone
+      }
     });
 
     // Inline audit (no req.user yet)
@@ -102,7 +113,8 @@ router.post('/login', async (req, res) => {
 
 // POST /api/auth/logout
 router.post('/logout', (req, res) => {
-  res.clearCookie('st-session', { path: '/' });
+  res.clearCookie('token', COOKIE_OPTIONS);
+  res.clearCookie('st-session', COOKIE_OPTIONS);
   return res.json({ success: true });
 });
 

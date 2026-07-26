@@ -22,19 +22,20 @@ async function audit(req, action, target = '', details = '') {
   }
 }
 
-// GET /api/auth/quick-access
+// GET /api/auth/quick-access — Return list of active users for fast login
 router.get('/quick-access', async (req, res) => {
   try {
     const users = await UserModel.findAllUsers();
-    const simplified = users.map(u => ({
+    const formatted = users.map(u => ({
+      id: u.id,
       name: u.name,
       email: u.email,
-      role: u.role?.name || u.role,
+      role: u.role?.name || 'Staff'
     }));
-    return res.json({ users: simplified });
+    return res.json({ users: formatted });
   } catch (err) {
-    console.error('Quick access users error:', err);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error('Quick access error:', err);
+    return res.status(200).json({ users: [], error: err.message });
   }
 });
 

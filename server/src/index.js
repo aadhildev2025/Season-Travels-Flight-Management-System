@@ -70,7 +70,12 @@ apiRouter.use('/audit-logs', auditLogRoutes);
 apiRouter.use('/email',      emailRoutes);
 apiRouter.get('/health', async (_req, res) => {
   const ready = await isDBReady();
-  res.json({ status: ready ? 'ok' : 'degraded', timestamp: new Date().toISOString(), db: ready ? 'connected' : 'disconnected' });
+  res.json({ 
+    status: ready ? 'ok' : 'degraded', 
+    timestamp: new Date().toISOString(), 
+    db: ready ? 'connected' : 'disconnected',
+    isUriSet: !!process.env.MONGODB_URI
+  });
 });
 
 // Mount the router under both /api (for local dev) and / (for Vercel serverless stripping)

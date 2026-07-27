@@ -833,7 +833,8 @@ button {
 /* ═══ DATA TABLE ═══ */
 .data-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0 6px;
 }
 
 .data-table thead tr {
@@ -850,15 +851,19 @@ button {
   color: var(--text2);
   white-space: nowrap;
   text-align: left;
-  /* Sticky header needs explicit background to cover rows beneath */
   background: var(--surface);
   position: sticky;
   top: 80px;
   z-index: 50;
+  border-right: 1px solid var(--border);
+}
+
+.data-table thead th:last-child {
+  border-right: none;
 }
 
 .data-table tbody tr {
-  border-bottom: 1px solid var(--border2);
+  background: var(--surface);
   transition: background 0.15s;
 }
 
@@ -873,6 +878,13 @@ button {
 .data-table tbody td {
   padding: 7px 16px;
   font-size: 14px;
+  background: transparent;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+
+.data-table tbody td:last-child {
+  border-right: none;
 }
 
 .data-table tbody tr.is-today {

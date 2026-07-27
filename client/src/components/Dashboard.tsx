@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useFlightStore, apiFetch } from '../store/flightStore';
 import { utcToLocalTime, formatCETTime } from '../utils/timezone';
 import ConfirmDialog from './ConfirmDialog';
-import { Plane, Search, Plus, RefreshCw, Download, RotateCcw } from 'lucide-react';
+import { Plane, Search, Plus, RefreshCw, Download } from 'lucide-react';
 import type { Ticket } from '../types';
 import type { TZ } from '../App';
 
@@ -109,7 +109,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
     if (!utcStr) return '';
     const d = new Date(utcStr);
     const m = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-    return `${String(d.getUTCDate()).padStart(2,'0')}-${m[d.getUTCMonth()]}-${String(d.getUTCFullYear()).slice(2)}`;
+    return `${String(d.getDate()).padStart(2,'0')}-${m[d.getMonth()]}-${String(d.getFullYear()).slice(2)}`;
   }
 
   const getCETTime = (utcStr: string) => {
@@ -318,17 +318,16 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
               <thead>
                 <tr>
                   <th style={{ ...th, width: 90, paddingRight: 4, whiteSpace:'nowrap' }}>Date</th>
-                  <th style={{ ...th, paddingLeft: 6, width: 320, whiteSpace:'nowrap' }}>Name</th>
+                  <th style={{ ...th, paddingLeft: 6, width: 300, whiteSpace:'nowrap' }}>Name</th>
                   <th style={{ ...th, width: 68, padding:'4px 6px', whiteSpace:'nowrap' }}>From</th>
                   <th style={{ ...th, width: 64, padding:'4px 6px', whiteSpace:'nowrap' }}>To</th>
-                  <th style={{ ...th, width: 24, padding:'4px 1px', textAlign:'center', whiteSpace:'nowrap' }}></th>
                   <th style={{ ...th, width: 40, padding:'4px 2px', color:'var(--indigo2)', whiteSpace:'nowrap' }}>CET</th>
-                  <th style={{ ...th, width: 40, padding:'4px 2px', color:'var(--cyan)', whiteSpace:'nowrap' }}>SLT</th>
-                  <th style={{ ...th, width: 60, padding:'4px 4px', whiteSpace:'nowrap' }}>FN</th>
-                  <th style={{ ...th, width: 76, padding:'4px 2px', whiteSpace:'nowrap' }}>PNR</th>
-                  <th style={{ ...th, width: 32, padding:'4px 2px', textAlign:'center', whiteSpace:'nowrap' }}>Checkin</th>
-                  <th style={{ ...th, width: 32, padding:'4px 2px', textAlign:'center', whiteSpace:'nowrap' }}>Remind</th>
-                  <th style={{ ...th, width: 72, padding:'4px 4px', textAlign:'center', whiteSpace:'nowrap' }}>Actions</th>
+                  <th style={{ ...th, width: 60, padding:'4px 2px', color:'var(--cyan)', whiteSpace:'nowrap' }}>SLT</th>
+                  <th style={{ ...th, width: 52, padding:'4px 2px', whiteSpace:'nowrap' }}>FN</th>
+                  <th style={{ ...th, width: 52, padding:'4px 2px', whiteSpace:'nowrap' }}>PNR</th>
+                  <th style={{ ...th, width: 18, padding:'4px 2px', textAlign:'center', whiteSpace:'nowrap' }}>Checkin</th>
+                  <th style={{ ...th, width: 18, padding:'4px 2px', textAlign:'center', whiteSpace:'nowrap' }}>Remind</th>
+                  <th style={{ ...th, width: 48, padding:'4px 4px', textAlign:'center', whiteSpace:'nowrap' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -384,19 +383,19 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                         )}
                       </td>
 
-                      <td style={{ ...td, paddingLeft: 8, paddingRight: 24, color:'var(--name-text)', minWidth:260, maxWidth:340, overflow:'visible', whiteSpace:'nowrap' }}>
+                      <td style={{ ...td, paddingLeft: 5, paddingRight: 24, color:'var(--name-text)', minWidth:260, maxWidth:340, overflow:'visible', whiteSpace:'nowrap' }}>
                         <span
                           onClick={() => handleCopySurname(ticket.passengerName)}
                           title="Click to copy surname"
                           style={{
                             cursor: 'pointer',
-                            padding: '2px 10px',
+                            padding: '2px 10px 2px 1px',
                             borderRadius: 5,
                             background: copiedSurname === ticket.passengerName ? 'rgba(52,211,153,0.12)' : 'transparent',
                             border: copiedSurname === ticket.passengerName ? '1px solid rgba(52,211,153,0.3)' : '1px solid transparent',
                             transition: 'all 0.2s ease',
                             userSelect: 'none',
-                             color: copiedSurname === ticket.passengerName ? 'var(--green)' : 'var(--name-text)',
+                            color: copiedSurname === ticket.passengerName ? 'var(--green)' : 'var(--name-text)',
                             textTransform: 'uppercase',
                           }}
                         >
@@ -406,15 +405,6 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
 
                       <td style={{ ...td, fontWeight:800, color:'var(--text)', letterSpacing:'0.04em', padding:'4px 2px 4px 8px' }}>{ticket.departureAirport}</td>
                       <td style={{ ...td, fontWeight:800, color:'var(--text)', letterSpacing:'0.04em', padding:'4px 2px' }}>{ticket.arrivalAirport}</td>
-
-                      {/* Return flight symbol */}
-                      <td style={{ ...td, textAlign:'center', padding:'4px 1px' }}>
-                        {ticket.returnLeg && (
-                          <span title="Return flight" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', color:'var(--indigo2)' }}>
-                            <RotateCcw size={13} />
-                          </span>
-                        )}
-                      </td>
 
                       {/* CET Time */}
                       <td style={{ ...td, padding:'4px 2px' }}>
@@ -432,7 +422,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
 
                       {/* Flight Number */}
                       <td style={{ ...td, padding:'4px 2px' }}>
-                        <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, color:'#fff', fontSize:15, letterSpacing:'0.04em' }}>
+                        <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, color:'var(--text)', fontSize:15, letterSpacing:'0.04em' }}>
                           {ticket.flightNumber || '—'}
                         </span>
                       </td>
@@ -447,8 +437,8 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                               color: copiedPnr === ticket.pnr ? 'var(--green)' : '#ec4899',
                                fontSize:15, letterSpacing:'0.04em',
                               cursor: 'copy',
-                              padding: '2px 6px',
-                              borderRadius: 5,
+                               padding: '2px 4px',
+                               borderRadius: 5,
                               background: copiedPnr === ticket.pnr ? 'rgba(52,211,153,0.12)' : 'transparent',
                               border: copiedPnr === ticket.pnr ? '1px solid rgba(52,211,153,0.3)' : '1px solid transparent',
                               transition: 'all 0.2s ease',
@@ -466,7 +456,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                           onClick={() => updateTicket(ticket._id, { checkin: !ticket.checkin })}
                           style={{
                             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                            width: 22, height: 22, borderRadius: 5, padding: 0,
+                            width: 20, height: 20, borderRadius: 4, padding: 0,
                             border: ticket.checkin ? '1.5px solid var(--green)' : '1.5px solid var(--border)',
                             background: ticket.checkin ? 'rgba(52,211,153,0.15)' : 'transparent',
                             cursor: 'pointer', transition: 'all 0.15s',
@@ -481,7 +471,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                           }}
                         >
                           {ticket.checkin && (
-                            <span style={{ color: 'var(--green)', fontSize: 13, fontWeight: 900, lineHeight: 1 }}>✓</span>
+                            <span style={{ color: 'var(--green)', fontSize: 12, fontWeight: 900, lineHeight: 1 }}>✓</span>
                           )}
                         </button>
                       </td>
@@ -492,7 +482,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                           onClick={() => onEdit(ticket, true)}
                           style={{
                             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                            width: 22, height: 22, borderRadius: 5, padding: 0,
+                            width: 20, height: 20, borderRadius: 4, padding: 0,
                             border: ((ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) || ticket.status === 'Need Further Actions') ? '1.5px solid var(--red)' : '1.5px solid var(--border)',
                             background: ((ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) || ticket.status === 'Need Further Actions') ? 'rgba(244,63,94,0.15)' : 'transparent',
                             cursor: 'pointer', transition: 'all 0.15s',
@@ -507,13 +497,13 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                           }}
                         >
                           {((ticket.status === 'No Need Further Actions' && ticket.remarks?.trim()) || ticket.status === 'Need Further Actions') && (
-                            <span style={{ color: 'var(--red)', fontSize: 13, fontWeight: 900, lineHeight: 1 }}>?</span>
+                            <span style={{ color: 'var(--red)', fontSize: 12, fontWeight: 900, lineHeight: 1 }}>?</span>
                           )}
                         </button>
                       </td>
 
                       <td style={{ ...td, textAlign:'center', whiteSpace:'nowrap', padding:'4px 2px' }}>
-                        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:3 }}>
+                        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:2 }}>
                           <button onClick={() => setMailTicket(ticket)} className="btn btn-blue btn-sm" title="Send reminder">MAIL</button>
                           <button onClick={() => onEdit(ticket)} className="btn btn-cyan btn-sm">EDIT</button>
                           {canDelete(ticket) && (

@@ -178,11 +178,11 @@ export async function findTicketsToThank() {
   return docs.map(formatTicket);
 }
 
-export async function findUpcomingReminders() {
+export async function findUpcomingReminders(until) {
   const now = new Date();
-  const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const in48Hours = until ? new Date(until) : new Date(now.getTime() + 48 * 60 * 60 * 1000);
   const docs = await Ticket.find({
-    departureTimeUTC: { $gte: now.toISOString(), $lte: in24Hours.toISOString() },
+    departureTimeUTC: { $gte: now.toISOString(), $lte: in48Hours.toISOString() },
     reminderSent: false,
     email: { $ne: '' },
   });

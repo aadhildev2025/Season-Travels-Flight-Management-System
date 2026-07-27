@@ -179,13 +179,13 @@ router.post('/expire-departed', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/tickets/send-reminders - Auto-send reminders for departures within 24 hours
+// POST /api/tickets/send-reminders - Auto-send reminders for departures within 48 hours
 router.post('/send-reminders', requireAuth, async (req, res) => {
   try {
     const now = new Date();
-    const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const in48Hours = new Date(now.getTime() + 48 * 60 * 60 * 1000);
 
-    const upcoming = await TicketModel.findUpcomingReminders();
+    const upcoming = await TicketModel.findUpcomingReminders(in48Hours.toISOString());
 
     for (const ticket of upcoming) {
       try {

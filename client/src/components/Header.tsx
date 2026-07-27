@@ -97,7 +97,7 @@ export default function Header({ tz, onTzChange, search, onSearchChange, showSea
             {/* Big clock — colour and time change with TZ */}
             <div style={{
               fontFamily: "'JetBrains Mono', monospace",
-              fontSize: 40, fontWeight: 700, color: clockColor,
+              fontSize: 48, fontWeight: 700, color: clockColor,
               letterSpacing: '0.06em', lineHeight: 1,
               textShadow: `0 0 24px ${clockColor === 'var(--indigo2)' ? 'rgba(165,180,252,0.3)' : 'rgba(34,211,238,0.25)'}`,
             }}>

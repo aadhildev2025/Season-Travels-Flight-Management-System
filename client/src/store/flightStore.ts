@@ -89,6 +89,7 @@ interface FlightState {
   backendReady:    boolean;
   expiringIds:     Set<string>;
   toast:           { message: string; type: 'success' | 'error' } | null;
+  theme:           'dark' | 'light';
 
   fetchSession:  () => Promise<void>;
   login:         (email: string, password: string) => Promise<boolean>;
@@ -109,10 +110,11 @@ interface FlightState {
   fetchTicketsSilent:  () => Promise<void>;
   addTicket:           (data: Partial<Ticket>) => Promise<Ticket>;
   updateTicket:  (id: string, updates: Partial<Ticket>) => Promise<void>;
-  deleteTicket:  (id: string) => Promise<void>;
+  deleteTicket: (id: string) => Promise<void>;
 
   fetchAnalytics: () => Promise<AnalyticsData>;
   fetchAuditLogs: (page?: number) => Promise<{ logs: AuditLog[]; total: number; pages: number }>;
+  toggleTheme: () => void;
 }
 
 export const useFlightStore = create<FlightState>()((set, get) => ({
@@ -124,6 +126,16 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
   backendReady:    false,
   expiringIds:     new Set<string>(),
   toast:           null,
+  theme:           typeof window !== 'undefined' ? (localStorage.getItem('theme') as 'dark' | 'light') || 'dark' : 'dark',
+
+  toggleTheme: () => {
+    const next = get().theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('theme', next);
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', next);
+    }
+    set({ theme: next });
+  },
 
   showToast: (message, type = 'success') => {
     set({ toast: { message, type } });

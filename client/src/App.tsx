@@ -20,7 +20,9 @@ import {
   ChevronDown,
   Menu,
   X,
-  CheckCircle
+  CheckCircle,
+  Sun,
+  Moon
 } from 'lucide-react';
 import logoSrc from './logo/2.png';
 import dashboardLogoSrc from './logo/3.png';
@@ -29,7 +31,7 @@ export type View = 'dashboard' | 'ticket-form' | 'audit-logs' | 'profile' | 'sta
 export type TZ = 'CET' | 'SLT';
 
 export default function App() {
-  const { isAuthenticated, fetchSession, currentUser, tickets, fetchTickets, logout, loading, toast, showToast } = useFlightStore();
+  const { isAuthenticated, fetchSession, currentUser, tickets, fetchTickets, logout, loading, toast, showToast, theme, toggleTheme } = useFlightStore();
   const [view, setView] = useState<View>(() => {
     const saved = localStorage.getItem('currentView');
     return (saved as View) || 'dashboard';
@@ -106,6 +108,11 @@ export default function App() {
       setSidebarCollapsed(true);
     }
   }, [isAuthenticated, currentUser]);
+
+  // Sync theme to DOM
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
 
   // Always sync both CET and SL clocks
   // (Clock now lives in the self-contained <HeaderClock/> so ticking does not
@@ -237,13 +244,13 @@ export default function App() {
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             style={{
-              background: 'none', border: '1px solid var(--border)', color: 'var(--text2)',
+              background: 'none', border: '1px solid rgba(255, 255, 255, 0.06)', color: '#6b6b94',
               cursor: 'pointer', padding: 4, borderRadius: 6,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               transition: 'all 0.15s', flexShrink: 0
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface2)'; e.currentTarget.style.color = 'var(--text)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text2)'; }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#16162a'; e.currentTarget.style.color = '#eaeaf5'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = '#6b6b94'; }}
           >
             <X size={14} />
           </button>
@@ -252,7 +259,7 @@ export default function App() {
             className="mobile-close-btn"
             onClick={() => setSidebarOpen(false)}
             style={{ 
-              background: 'none', border: 'none', color: 'var(--text2)', 
+              background: 'none', border: 'none', color: '#6b6b94', 
               cursor: 'pointer', display: 'none', padding: 4, borderRadius: 6,
               alignItems: 'center', justifyContent: 'center'
             }}
@@ -293,8 +300,8 @@ export default function App() {
               onClick={() => setUserDropdownOpen(!userDropdownOpen)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 10, width: '100%',
-                padding: '8px 10px', borderRadius: 10, border: '1px solid var(--border)',
-                background: userDropdownOpen ? 'var(--surface2)' : 'var(--surface)',
+                padding: '8px 10px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)',
+                background: userDropdownOpen ? '#16162a' : '#111120',
                 cursor: 'pointer', transition: 'all 0.15s ease', textAlign: 'left'
               }}
             >
@@ -307,38 +314,38 @@ export default function App() {
                 {(currentUser?.name || 'S').charAt(0).toUpperCase()}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#eaeaf5', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {currentUser?.name}
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ fontSize: 10, color: '#6b6b94', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {currentUser?.role}
                 </div>
               </div>
-              <ChevronDown size={12} style={{ color: 'var(--text2)', transform: userDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+              <ChevronDown size={12} style={{ color: '#6b6b94', transform: userDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
             </button>
 
              {userDropdownOpen && (
-               <div style={{
-                 position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, right: 0,
-                 background: 'var(--surface2)', border: '1px solid var(--border)',
-                 borderRadius: 10, padding: 4, zIndex: 100,
-                 boxShadow: '0 -8px 24px rgba(0,0,0,0.5)'
-                }}>
-                  <button
-                    onClick={() => { setUserDropdownOpen(false); setLogoutOpen(true); setSidebarOpen(false); }}
-                    style={{
-                      width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '8px 10px', borderRadius: 7, border: 'none', background: 'none',
-                      cursor: 'pointer', color: 'var(--red)', fontSize: 11, fontWeight: 600,
-                      textAlign: 'left'
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(244,63,94,0.08)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
-                  >
-                    <LogOut size={14} /> Sign Out
-                  </button>
-                </div>
-             )}
+                <div style={{
+                  position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, right: 0,
+                  background: '#16162a', border: '1px solid rgba(255,255,255,0.06)',
+                  borderRadius: 10, padding: 4, zIndex: 100,
+                  boxShadow: '0 -8px 24px rgba(0,0,0,0.5)'
+                 }}>
+                   <button
+                     onClick={() => { setUserDropdownOpen(false); setLogoutOpen(true); setSidebarOpen(false); }}
+                     style={{
+                       width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                       padding: '8px 10px', borderRadius: 7, border: 'none', background: 'none',
+                       cursor: 'pointer', color: '#f43f5e', fontSize: 11, fontWeight: 600,
+                       textAlign: 'left'
+                     }}
+                     onMouseEnter={e => { e.currentTarget.style.background = 'rgba(244,63,94,0.08)'; }}
+                     onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
+                   >
+                     <LogOut size={14} /> Sign Out
+                   </button>
+                 </div>
+              )}
           </div>
         </div>
       </aside>
@@ -362,22 +369,38 @@ export default function App() {
               className="desktop-only"
               onClick={() => setSidebarCollapsed(false)}
               title="Expand sidebar"
-              style={{
-                background: 'none', border: '1px solid var(--border)', color: 'var(--text2)',
-                cursor: 'pointer', padding: '5px 6px', borderRadius: 7, marginRight: 8,
-                display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700,
-                transition: 'all 0.15s'
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface2)'; e.currentTarget.style.color = 'var(--text)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text2)'; }}
+            style={{
+              background: 'none', border: '1px solid rgba(255,255,255,0.06)', color: '#6b6b94',
+              cursor: 'pointer', padding: '5px 6px', borderRadius: 7, marginRight: 8,
+              display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700,
+              transition: 'all 0.15s'
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#16162a'; e.currentTarget.style.color = '#eaeaf5'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = '#6b6b94'; }}
             >
               <Menu size={14} />
             </button>
           )}
 
-          <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: '#eaeaf5', letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {pageTitle}
           </div>
+
+          <button
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: 36, height: 36, borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)',
+              background: theme === 'dark' ? 'rgba(34,211,238,0.12)' : 'rgba(15,23,42,0.08)',
+              color: theme === 'dark' ? '#22d3ee' : '#4f46e5',
+              cursor: 'pointer', transition: 'all 0.2s', marginLeft: 10, flexShrink: 0,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.background = theme === 'dark' ? 'rgba(34,211,238,0.22)' : 'rgba(15,23,42,0.14)'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = theme === 'dark' ? 'rgba(34,211,238,0.12)' : 'rgba(15,23,42,0.08)'; }}
+          >
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
 
           {/* Spacer to push search and actions to the right */}
           <div style={{ flex: 1 }} />
@@ -385,20 +408,20 @@ export default function App() {
           {/* Search bar inside topbar (Only on dashboard) */}
           {view === 'dashboard' && (
             <div className="topbar-search" style={{ position: 'relative', width: 220 }}>
-              <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)', pointerEvents: 'none' }} />
+              <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#3d3d5c', pointerEvents: 'none' }} />
               <input
                 type="text"
                 placeholder="Search passengers or PNR..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 style={{
-                  background: 'var(--bg2)', border: '1px solid var(--border)',
+                  background: '#0a0a14', border: '1px solid rgba(255,255,255,0.06)',
                    borderRadius: 8, padding: search ? '7px 28px 7px 30px' : '7px 12px 7px 30px',
-                  fontSize: 13, color: 'var(--text)', outline: 'none',
+                  fontSize: 13, color: '#eaeaf5', outline: 'none',
                   width: '100%', transition: 'border-color 0.15s, box-shadow 0.15s'
                 }}
-                onFocus={e => { e.currentTarget.style.borderColor = 'var(--indigo)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.12)'; }}
-                onBlur={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.boxShadow = 'none'; }}
+                onFocus={e => { e.currentTarget.style.borderColor = '#6366f1'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.12)'; }}
+                onBlur={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; e.currentTarget.style.boxShadow = 'none'; }}
               />
               {search && (
                 <button
@@ -407,12 +430,12 @@ export default function App() {
                   style={{
                     position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
                     background: 'none', border: 'none', cursor: 'pointer',
-                    color: 'var(--text3)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#3d3d5c', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     padding: 2, borderRadius: 4, transition: 'color 0.15s',
                     lineHeight: 1,
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.color = 'var(--text)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.color = 'var(--text3)'; }}
+                  onMouseEnter={e => { e.currentTarget.style.color = '#eaeaf5'; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = '#3d3d5c'; }}
                 >
                   <X size={13} />
                 </button>

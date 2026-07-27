@@ -205,7 +205,7 @@ export default function Analytics({ slClockTime, slClockDate }: AnalyticsProps) 
                     <h4 style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.01em' }}>
                       {t.passengerName}
                     </h4>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
+                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
                       <span style={{ fontSize: 10, color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 4 }}>
                         <Clock size={10} style={{ color: 'var(--text3)' }} />
                         {getRelativeTime(t.createdAt)}
@@ -228,7 +228,7 @@ export default function Analytics({ slClockTime, slClockDate }: AnalyticsProps) 
                       {t.arrivalAirport}
                     </span>
                   </div>
-                  <span style={{ fontSize: 9, color: 'var(--text2)', marginTop: 4, fontWeight: 600 }}>
+                   <span style={{ fontSize: 9, color: 'var(--text2)', marginTop: 2, fontWeight: 600 }}>
                     {formatDeparture(t.departureTimeUTC)}
                   </span>
                 </div>

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const LOGO_PATH = path.join(__dirname, '../../client/src/logo/1.png');
+const LOGO_PATH = path.join(__dirname, '../../../client/src/logo/footer.png');
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'send.one.com',
@@ -54,12 +54,13 @@ export async function sendEmail({ to, subject, text, html }) {
     const plainBody = text || (html ? html.replace(/<br\s*\/>/g, '\n').replace(/<[^>]+>/g, '') : '');
 
     const mailHtml = html || (plainBody ? `
-      <div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #f0f0f0; border-radius: 8px; background-color: #ffffff;">
-        <div style="font-weight: bold;">${plainBody.replace(/\n/g, '<br />')}</div>
+      <div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #f0f0f0; border-radius: 8px; background-color: #ffffff; box-sizing: border-box;">
+        <div style="font-weight: bold; white-space: pre-wrap;">${plainBody.replace(/\n/g, '<br />')}</div>
         <br />
         <div style="border-top: 2px solid #eee; padding-top: 20px; margin-top: 20px; text-align: center;">
-          <a href="https://www.seasontravels.com" target="_blank" style="text-decoration: none;">
-            <img src="cid:mail-footer" alt="Season Travels" style="width: 100%; max-width: 600px; height: auto; display: block;" />
+          <a href="https://www.seasontravels.com" target="_blank" style="text-decoration: none; color: #333;">
+            <img src="cid:mail-footer" alt="Season Travels" style="width: 100%; max-width: 600px; height: auto; display: block; margin: 0 auto;" />
+            <div style="margin-top: 8px; font-size: 12px; color: #666;">www.seasontravels.com</div>
           </a>
         </div>
       </div>
@@ -73,7 +74,7 @@ export async function sendEmail({ to, subject, text, html }) {
       html: mailHtml,
       attachments: [
         {
-          filename: 'logo.png',
+          filename: 'footer.png',
           path: LOGO_PATH,
           cid: 'mail-footer',
           contentDisposition: 'inline'

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useFlightStore, apiFetch } from '../store/flightStore';
-import { utcToLocalTime, formatCETTime, formatCETDate } from '../utils/timezone';
+import { utcToLocalTime, formatCETTime, formatDateInZone, getTodayISOInZone } from '../utils/timezone';
 import ConfirmDialog from './ConfirmDialog';
 import { Plane, Search, Plus, RefreshCw, Download } from 'lucide-react';
 import type { Ticket } from '../types';
@@ -22,7 +22,6 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [mailTicket, setMailTicket]           = useState<Ticket | null>(null);
   const [composeMessage, setComposeMessage]   = useState('');
-  const [todayStr, setTodayStr]               = useState('');
   const [copiedPnr, setCopiedPnr]             = useState<string | null>(null);
   const [copiedSurname, setCopiedSurname]     = useState<string | null>(null);
   const [newTicketId, setNewTicketId]         = useState<string | null>(null);
@@ -36,13 +35,6 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
     const timer = setTimeout(() => setDebouncedSearch(search), 250);
     return () => clearTimeout(timer);
   }, [search]);
-
-  useEffect(() => {
-    const tick = () => setTodayStr(formatCETDate(new Date().toISOString()));
-    tick();
-    const id = setInterval(tick, 1_000);
-    return () => clearInterval(id);
-  }, []);
 
   // Real-time tick to trigger immediate removal animation when departure time is reached
   useEffect(() => {
@@ -94,23 +86,17 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
 
   // Sort: today's tickets first (newest added at top), then by departure time
   const sorted = [...filtered].sort((a, b) => {
-    const aToday = formatCETDate(a.departureTimeUTC) === todayStr;
-    const bToday = formatCETDate(b.departureTimeUTC) === todayStr;
+    const aLocal = utcToLocalTime(a.departureTimeUTC, a.originalTimezone);
+    const bLocal = utcToLocalTime(b.departureTimeUTC, b.originalTimezone);
+    const aToday = aLocal.date === getTodayISOInZone(a.originalTimezone);
+    const bToday = bLocal.date === getTodayISOInZone(b.originalTimezone);
     if (aToday && !bToday) return -1;
     if (!aToday && bToday) return 1;
-    // Within today, most recently created first
     if (aToday && bToday) {
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     }
     return new Date(a.departureTimeUTC).getTime() - new Date(b.departureTimeUTC).getTime();
   });
-
-  function formatDate(utcStr: string) {
-    if (!utcStr) return '';
-    const d = new Date(utcStr);
-    const m = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-    return `${String(d.getDate()).padStart(2,'0')}-${m[d.getMonth()]}-${String(d.getFullYear()).slice(2)}`;
-  }
 
   const getCETTime = (utcStr: string) => {
     if (!utcStr) return '—';
@@ -142,7 +128,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
     const tzLabel = ticket.originalTimezone.split('/').pop()?.replace('_',' ') || '';
     return {
       subject: 'Travel Reminder from SeasonTravels',
-      body: `Dear Passenger,\n\nThis is a reminder for your upcoming flight.\n\nFlight Details:\nBooking Reference: ${ticket.pnr}\nRoute: ${ticket.departureAirport} → ${ticket.arrivalAirport}\nDeparture: ${dep.formatted} (${tzLabel})\n\nPlease ensure you check in at least 3 hours prior to departure.\n\nWe wish you a safe and pleasant journey!\n\nWarm regards,\nSEASON TRAVELS`,
+      body: `Dear Passenger,\n\nThis is a reminder for your upcoming flight.\n\nFlight Details:\nBooking Reference: ${ticket.pnr}\nRoute: ${ticket.departureAirport} → ${ticket.arrivalAirport}\nDeparture: ${dep.formatted} (${tzLabel})\n\nPlease ensure you check in at least 4 hours prior to departure.\n\nWe wish you a safe and pleasant journey!\n\nWarm regards,\nSEASON TRAVELS`,
     };
   };
 
@@ -200,7 +186,8 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
     const createdDate = ticket.createdAt
       ? new Date(ticket.createdAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' })
       : '';
-    return createdDate === todayStr;
+    const todayDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' });
+    return createdDate === todayDate;
   };
 
   const handleCopyPnr = (pnr: string) => {
@@ -332,20 +319,24 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
               </thead>
               <tbody>
                 {sorted.map(ticket => {
-                   const isToday = formatCETDate(ticket.departureTimeUTC) === todayStr;
+                   const todayCET = getTodayISOInZone('Europe/Stockholm');
+                   const ticketDateCET = utcToLocalTime(ticket.departureTimeUTC, 'Europe/Stockholm').date;
+                   const isCETToday = todayCET === ticketDateCET;
+                   const cetTime = new Date().toLocaleTimeString('en-GB', { timeZone: 'Europe/Stockholm', hour: '2-digit', minute: '2-digit', hour12: false });
+                   const isCETMidnightHour = cetTime.startsWith('00:');
                   const isNew = newTicketId === ticket._id;
                   const hasRemark = ticket.status === 'Need Further Actions';
 
                   const depTime = ticket.departureTimeUTC ? new Date(ticket.departureTimeUTC) : null;
                   const isNotDepartedYet = depTime ? (new Date().getTime() < depTime.getTime()) : false;
-                  const isLoadingToday = isToday && isNotDepartedYet;
+                  const isLoadingToday = isCETToday && isCETMidnightHour && isNotDepartedYet;
 
                   const ticketId = ticket._id;
 
                   return (
                     <tr
                       key={ticketId}
-                      className={`${isToday ? 'is-today' : ''} ${isNew ? 'is-new-ticket' : ''} ${expiringIds.has(ticket._id) || expiringIds.has(ticketId) ? 'row-expiring' : ''}`}
+                      className={`${isCETToday ? 'is-today' : ''} ${isNew ? 'is-new-ticket' : ''} ${expiringIds.has(ticket._id) || expiringIds.has(ticketId) ? 'row-expiring' : ''}`}
                     >
                       {/* Date column */}
                       <td style={{ ...td, paddingRight: 6, whiteSpace:'nowrap' }}>
@@ -360,7 +351,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                               cursor: 'pointer',
                             }}
                           >
-                             {formatCETDate(ticket.departureTimeUTC)}
+                              {formatDateInZone(ticket.departureTimeUTC, ticket.originalTimezone)}
                             {ticket.remarks && ticket.remarks.trim() && (
                               <span className="remark-tooltip">
                                 <div className="remark-tooltip-label">Remark</div>
@@ -378,7 +369,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                               fontSize:14 
                             }}
                           >
-                             {formatCETDate(ticket.departureTimeUTC)}
+                              {formatDateInZone(ticket.departureTimeUTC, ticket.originalTimezone)}
                           </span>
                         )}
                       </td>

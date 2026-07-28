@@ -1,10 +1,29 @@
-import { toZonedTime, fromZonedTime, format } from 'date-fns-tz';
-
 export function localTimeToUTC(dateStr: string, timeStr: string, timezone: string): string {
   if (!dateStr || !timeStr) return '';
   try {
-    const localDateTimeStr = `${dateStr}T${timeStr}:00`;
-    const utcDate = fromZonedTime(localDateTimeStr, timezone);
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const [hours, minutes] = timeStr.split(':').map(Number);
+
+    const targetDate = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0));
+
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      timeZoneName: 'longOffset',
+    });
+
+    const parts = formatter.formatToParts(targetDate);
+    const tzName = parts.find(p => p.type === 'timeZoneName');
+    const offsetStr = tzName ? tzName.value : 'UTC';
+
+    const match = offsetStr.match(/[UC]?GMT?([+-])(\d+):?(\d+)?/);
+    if (!match) return '';
+
+    const sign = match[1] === '+' ? -1 : 1;
+    const h = parseInt(match[2], 10);
+    const m = parseInt(match[3] || '0', 10);
+    const offsetMs = sign * (h * 60 + m) * 60 * 1000;
+
+    const utcDate = new Date(targetDate.getTime() + offsetMs);
     return utcDate.toISOString();
   } catch {
     return '';
@@ -15,16 +34,38 @@ export function utcToLocalTime(utcIsoStr: string, targetTimezone: string) {
   if (!utcIsoStr) return { date: '', time: '', formatted: '', offset: '', isDst: false };
   try {
     const utcDate = new Date(utcIsoStr);
-    const zonedDate = toZonedTime(utcDate, targetTimezone);
 
-    const datePart = format(zonedDate, 'yyyy-MM-dd', { timeZone: targetTimezone });
-    const timePart = format(zonedDate, 'HH:mm', { timeZone: targetTimezone });
-    const formatted = format(zonedDate, 'dd MMM yyyy, HH:mm', { timeZone: targetTimezone });
+    const dateParts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: targetTimezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(utcDate).split('-');
+
+    const timeParts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: targetTimezone,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(utcDate).split(':');
+
+    const date = dateParts.join('-');
+    const time = timeParts.join(':');
+
+    const formatted = new Intl.DateTimeFormat('en-GB', {
+      timeZone: targetTimezone,
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(utcDate);
 
     const offset = getTimezoneOffsetString(utcDate, targetTimezone);
     const isDst = checkIfDst(utcDate, targetTimezone);
 
-    return { date: datePart, time: timePart, formatted, offset, isDst };
+    return { date, time, formatted, offset, isDst };
   } catch {
     return { date: '', time: '', formatted: 'Invalid Date', offset: '', isDst: false };
   }
@@ -81,11 +122,11 @@ export function getTimezoneDiff(date: Date, tzA: string, tzB: string): string {
     const getOffsetMs = (d: Date, fmt: Intl.DateTimeFormat) => {
       const parts = fmt.formatToParts(d);
       const val = parts.find(p => p.type === 'timeZoneName')?.value || '';
-      const match = val.match(/GMT([+-])(\d+):?(\d+)?/);
+      const match = val.match(/GMT?([+-])(\d+):?(\d+)?/);
       if (!match) return 0;
       const sign = match[1] === '+' ? 1 : -1;
       const hours = parseInt(match[2], 10);
-      const minutes = match[3] ? parseInt(match[3], 10) : 0;
+      const minutes = parseInt(match[3] || '0', 10);
       return sign * (hours * 60 + minutes) * 60 * 1000;
     };
 
@@ -122,18 +163,53 @@ export function formatCETDate(utcIsoStr: string): string {
   if (!utcIsoStr) return '';
   try {
     const utcDate = new Date(utcIsoStr);
-    const formatter = new Intl.DateTimeFormat('en-US', {
+    const parts = new Intl.DateTimeFormat('en-US', {
       timeZone: 'Europe/Stockholm',
       day: '2-digit',
       month: 'short',
       year: '2-digit',
-    });
-    const parts = formatter.formatToParts(utcDate);
+    }).formatToParts(utcDate);
+
     const day = parts.find(p => p.type === 'day')?.value || '';
     const month = parts.find(p => p.type === 'month')?.value || '';
     const year = parts.find(p => p.type === 'year')?.value || '';
-    const monthUpper = month.toUpperCase();
-    return `${day}-${monthUpper}-${year}`;
+
+    return `${day}-${month.toUpperCase()}-${year}`;
+  } catch {
+    return '';
+  }
+}
+
+export function formatDateInZone(utcIsoStr: string, timezone: string): string {
+  if (!utcIsoStr || !timezone) return '';
+  try {
+    const utcDate = new Date(utcIsoStr);
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      day: '2-digit',
+      month: 'short',
+      year: '2-digit',
+    }).formatToParts(utcDate);
+
+    const day = parts.find(p => p.type === 'day')?.value || '';
+    const month = parts.find(p => p.type === 'month')?.value || '';
+    const year = parts.find(p => p.type === 'year')?.value || '';
+
+    return `${day}-${month.toUpperCase()}-${year}`;
+  } catch {
+    return '';
+  }
+}
+
+export function getTodayISOInZone(timezone: string): string {
+  if (!timezone) return '';
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
   } catch {
     return '';
   }

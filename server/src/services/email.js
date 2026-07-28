@@ -1,11 +1,16 @@
 import nodemailer from 'nodemailer';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const LOGO_PATH = path.join(__dirname, '../../../client/src/logo/footer.png');
+let logoExists = false;
+try {
+  logoExists = fs.existsSync(LOGO_PATH) && fs.statSync(LOGO_PATH).isFile();
+} catch {}
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'send.one.com',
@@ -15,8 +20,15 @@ const transporter = nodemailer.createTransport({
     user: process.env.SMTP_USER || 'eu@seasontravels.com',
     pass: process.env.SMTP_PASS || 'Nord@scandic',
   },
-  connectionTimeout: 30000,
-  socketTimeout: 60000,
+  connectionTimeout: 10000,
+  socketTimeout: 15000,
+  greetingTimeout: 10000,
+  tls: {
+    rejectUnauthorized: false,
+  },
+  pool: true,
+  maxConnections: 5,
+  maxMessages: 10,
 });
 
 export function buildReminderMessage(ticket) {
@@ -25,7 +37,7 @@ export function buildReminderMessage(ticket) {
   const formatted = dep.toLocaleString('en-GB', { timeZone: ticket.originalTimezone, day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
   return {
     subject: 'Travel Reminder from SeasonTravels',
-    body: `Dear Passenger,\n\nThis is a reminder for your upcoming flight.\n\nFlight Details:\nBooking Reference: ${ticket.pnr}\nRoute: ${ticket.departureAirport} → ${ticket.arrivalAirport}\nDeparture: ${formatted} (${tzLabel})\n\nPlease ensure you check in at least 3 hours prior to departure.\n\nWe wish you a safe and pleasant journey!\n\nWarm regards,\nSEASON TRAVELS`,
+    body: `Dear Passenger,\n\nThis is a reminder for your upcoming flight.\n\nFlight Details:\nBooking Reference: ${ticket.pnr}\nRoute: ${ticket.departureAirport} → ${ticket.arrivalAirport}\nDeparture: ${formatted} (${tzLabel})\n\nPlease ensure you check in at least 4 hours prior to departure.\n\nWe wish you a safe and pleasant journey!\n\nWarm regards,\nSEASON TRAVELS`,
   };
 }
 
@@ -50,8 +62,21 @@ export function buildThankYouText(ticket) {
 }
 
 export async function sendEmail({ to, subject, text, html }) {
+  const timeoutMs = 20000;
+  const withTimeout = (promise) => Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Email send timed out')), timeoutMs))
+  ]);
+
   try {
     const plainBody = text || (html ? html.replace(/<br\s*\/>/g, '\n').replace(/<[^>]+>/g, '') : '');
+
+    const attachments = logoExists ? [{
+      filename: 'footer.png',
+      path: LOGO_PATH,
+      cid: 'mail-footer',
+      contentDisposition: 'inline'
+    }] : [];
 
     const mailHtml = html || (plainBody ? `
       <div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #f0f0f0; border-radius: 8px; background-color: #ffffff; box-sizing: border-box;">
@@ -59,28 +84,21 @@ export async function sendEmail({ to, subject, text, html }) {
         <br />
         <div style="border-top: 2px solid #eee; padding-top: 20px; margin-top: 20px; text-align: center;">
           <a href="https://www.seasontravels.com" target="_blank" style="text-decoration: none; color: #333;">
-            <img src="cid:mail-footer" alt="Season Travels" style="width: 100%; max-width: 600px; height: auto; display: block; margin: 0 auto;" />
+            ${logoExists ? `<img src="cid:mail-footer" alt="Season Travels" style="width: 100%; max-width: 600px; height: auto; display: block; margin: 0 auto;" />` : ''}
             <div style="margin-top: 8px; font-size: 12px; color: #666;">www.seasontravels.com</div>
           </a>
         </div>
       </div>
     ` : undefined);
 
-    const info = await transporter.sendMail({
+    const info = await withTimeout(transporter.sendMail({
       from: process.env.SMTP_USER || 'eu@seasontravels.com',
       to,
       subject,
       text: plainBody,
       html: mailHtml,
-      attachments: [
-        {
-          filename: 'footer.png',
-          path: LOGO_PATH,
-          cid: 'mail-footer',
-          contentDisposition: 'inline'
-        }
-      ]
-    });
+      attachments,
+    }));
     return info;
   } catch (error) {
     console.error('Nodemailer error details:', error);

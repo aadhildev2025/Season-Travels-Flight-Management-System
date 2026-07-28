@@ -117,3 +117,24 @@ export function formatCETTime(utcIsoStr: string): string {
     return '';
   }
 }
+
+export function formatCETDate(utcIsoStr: string): string {
+  if (!utcIsoStr) return '';
+  try {
+    const utcDate = new Date(utcIsoStr);
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Europe/Stockholm',
+      day: '2-digit',
+      month: 'short',
+      year: '2-digit',
+    });
+    const parts = formatter.formatToParts(utcDate);
+    const day = parts.find(p => p.type === 'day')?.value || '';
+    const month = parts.find(p => p.type === 'month')?.value || '';
+    const year = parts.find(p => p.type === 'year')?.value || '';
+    const monthUpper = month.toUpperCase();
+    return `${day}-${monthUpper}-${year}`;
+  } catch {
+    return '';
+  }
+}

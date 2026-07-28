@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useFlightStore, apiFetch } from '../store/flightStore';
-import { utcToLocalTime, formatCETTime } from '../utils/timezone';
+import { utcToLocalTime, formatCETTime, formatCETDate } from '../utils/timezone';
 import ConfirmDialog from './ConfirmDialog';
 import { Plane, Search, Plus, RefreshCw, Download } from 'lucide-react';
 import type { Ticket } from '../types';
@@ -38,9 +38,9 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
   }, [search]);
 
   useEffect(() => {
-    const tick = () => setTodayStr(formatDate(new Date().toISOString()));
+    const tick = () => setTodayStr(formatCETDate(new Date().toISOString()));
     tick();
-    const id = setInterval(tick, 60_000);
+    const id = setInterval(tick, 1_000);
     return () => clearInterval(id);
   }, []);
 
@@ -94,8 +94,8 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
 
   // Sort: today's tickets first (newest added at top), then by departure time
   const sorted = [...filtered].sort((a, b) => {
-    const aToday = formatDate(a.departureTimeUTC) === todayStr;
-    const bToday = formatDate(b.departureTimeUTC) === todayStr;
+    const aToday = formatCETDate(a.departureTimeUTC) === todayStr;
+    const bToday = formatCETDate(b.departureTimeUTC) === todayStr;
     if (aToday && !bToday) return -1;
     if (!aToday && bToday) return 1;
     // Within today, most recently created first
@@ -332,7 +332,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
               </thead>
               <tbody>
                 {sorted.map(ticket => {
-                  const isToday = formatDate(ticket.departureTimeUTC) === todayStr;
+                   const isToday = formatCETDate(ticket.departureTimeUTC) === todayStr;
                   const isNew = newTicketId === ticket._id;
                   const hasRemark = ticket.status === 'Need Further Actions';
 
@@ -360,7 +360,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                               cursor: 'pointer',
                             }}
                           >
-                            {formatDate(ticket.departureTimeUTC)}
+                             {formatCETDate(ticket.departureTimeUTC)}
                             {ticket.remarks && ticket.remarks.trim() && (
                               <span className="remark-tooltip">
                                 <div className="remark-tooltip-label">Remark</div>
@@ -378,7 +378,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                               fontSize:14 
                             }}
                           >
-                            {formatDate(ticket.departureTimeUTC)}
+                             {formatCETDate(ticket.departureTimeUTC)}
                           </span>
                         )}
                       </td>

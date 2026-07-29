@@ -179,38 +179,3 @@ export function formatCETDate(utcIsoStr: string): string {
     return '';
   }
 }
-
-export function formatDateInZone(utcIsoStr: string, timezone: string): string {
-  if (!utcIsoStr || !timezone) return '';
-  try {
-    const utcDate = new Date(utcIsoStr);
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      day: '2-digit',
-      month: 'short',
-      year: '2-digit',
-    }).formatToParts(utcDate);
-
-    const day = parts.find(p => p.type === 'day')?.value || '';
-    const month = parts.find(p => p.type === 'month')?.value || '';
-    const year = parts.find(p => p.type === 'year')?.value || '';
-
-    return `${day}-${month.toUpperCase()}-${year}`;
-  } catch {
-    return '';
-  }
-}
-
-export function getTodayISOInZone(timezone: string): string {
-  if (!timezone) return '';
-  try {
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(new Date());
-  } catch {
-    return '';
-  }
-}

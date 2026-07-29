@@ -288,6 +288,7 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
       tickets: state.tickets.filter(t => !updatedExpiring.has(t._id)),
       expiringIds: new Set([...state.expiringIds].filter(id => !updatedExpiring.has(id))),
     }));
+    setTimeout(() => get().fetchTicketsSilent(), 100);
   },
 
   sendUpcomingReminders: async () => {

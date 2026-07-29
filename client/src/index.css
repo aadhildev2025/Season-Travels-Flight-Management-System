@@ -291,9 +291,60 @@ button {
   }
 }
 
+@keyframes pulseRedLoading {
+
+  0%,
+  100% {
+    color: var(--red);
+    text-shadow: 0 0 4px rgba(244, 63, 94, 0.2);
+    opacity: 0.7;
+  }
+
+  50% {
+    color: #ff8a9e;
+    text-shadow: 0 0 12px rgba(244, 63, 94, 0.8), 0 0 20px rgba(244, 63, 94, 0.4);
+    opacity: 1;
+  }
+}
+
 .date-loading-green {
   animation: pulseGreenLoading 1.5s infinite ease-in-out;
   font-weight: 800 !important;
+}
+
+.date-loading-red {
+  animation: pulseRedLoading 1.5s infinite ease-in-out;
+  font-weight: 800 !important;
+}
+
+.date-remark.date-loading-green {
+  animation: pulseGreenLoading 1.5s infinite ease-in-out;
+  color: var(--green);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+  cursor: default;
+}
+
+.date-remark.date-loading-green:hover {
+  animation: pulseGreenLoading 1.5s infinite ease-in-out;
+  color: var(--green);
+  background: transparent;
+  border: 1px solid transparent;
+  box-shadow: none;
+}
+
+.date-remark.date-loading-red {
+  animation: pulseGreenLoading 1.5s infinite ease-in-out;
+  color: var(--green) !important;
+  background: rgba(244, 63, 94, 0.12);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  border-radius: 5px;
+  padding: 2px 7px;
+  box-shadow: 0 0 12px rgba(244, 63, 94, 0.25);
+  cursor: pointer;
 }
 
 .fade-in {

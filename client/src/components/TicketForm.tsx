@@ -25,7 +25,7 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
   const [dipDate, setDipDate]             = useState('');
   const [dipTime, setDipTime]             = useState('');
   const [cetTime, setCetTime]             = useState('');
-  const [status, setStatus]               = useState('None');
+  const [status, setStatus]               = useState('No Need Further Actions');
   const [remarks, setRemarks]             = useState('');
   const [autoTime, setAutoTime]           = useState(true);
   const [submitting, setSubmitting]       = useState(false);
@@ -438,7 +438,7 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
   const clearAll = () => {
     setPassengerName(''); setEmail(''); setPhone(''); setPnr(''); setFlightNumber('');
     setDepAirport(''); setArrAirport(''); setDipDate(''); setDipTime('');
-    setCetTime(''); setRemarks(''); setStatus('None'); setErrors({});
+    setCetTime(''); setRemarks(''); setStatus('No Need Further Actions'); setErrors({});
     setReturnTicket(false); setIsReturnLegMode(false);
     setReturnDepAirport(''); setReturnArrAirport('');
     setReturnFlightNumber(''); setReturnPnr('');
@@ -670,21 +670,19 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10 }}>
               <div>
                 <label style={label}>Status</label>
-                <select className="field" value={status} onChange={e => {
-                  const val = e.target.value;
-                  setStatus(val);
-                  if (val === 'None') setRemarks('');
-                }}>
-                  <option>None</option>
-                  <option>No Need Further Actions</option>
-                  <option>Need Further Actions</option>
-                </select>
+                 <select className="field" value={status} onChange={e => {
+                   const val = e.target.value;
+                   setStatus(val);
+                 }}>
+                   <option>No Need Further Actions</option>
+                   <option>Need Further Actions</option>
+                 </select>
               </div>
               <div>
                 <label style={label}>Remarks</label>
-                 <textarea ref={remarksRef} className="field" rows={2} value={remarks} placeholder="Any additional notes…"
-                   onChange={e => setRemarks(e.target.value)}
-                    style={{ resize: 'none', minHeight: 44, ...(focusRemarks ? { borderColor: '#eab308', boxShadow: '0 0 0 3px rgba(234,179,8,0.15)' } : {}) }} />
+                <textarea ref={remarksRef} className="field" rows={2} value={remarks} placeholder="Any additional notes…"
+                    onChange={e => setRemarks(e.target.value)}
+                     style={{ resize: 'none', minHeight: 44, ...(focusRemarks ? { borderColor: '#eab308', boxShadow: '0 0 0 3px rgba(234,179,8,0.15)' } : {}) }} />
               </div>
             </div>
           </div>

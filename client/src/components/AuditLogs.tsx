@@ -90,7 +90,7 @@ export default function AuditLogs({ tz }: AuditLogsProps) {
                         <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>{log.userName}</p>
                         <p style={{ fontSize: 10, color: 'var(--text2)', marginTop: 1 }}>{log.userEmail}</p>
                       </td>
-                      <td style={{ padding: '6px 14px', fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: 'var(--cyan)', fontWeight: 700 }}>
+                      <td style={{ padding: '6px 14px', fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: 'var(--cyan)', fontWeight: 500 }}>
                         {log.target || '—'}
                       </td>
                       <td style={{ padding: '6px 14px', fontSize: 11, color: 'var(--text2)', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

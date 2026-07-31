@@ -243,7 +243,7 @@ export default function Analytics({ slClockTime, slClockDate }: AnalyticsProps) 
                     gap: 6,
                     fontFamily: "'JetBrains Mono', monospace",
                     fontSize: 12,
-                    fontWeight: 700,
+                    fontWeight: 500,
                     color: copiedPnr === t.pnr ? 'var(--green)' : 'var(--cyan)',
                     background: copiedPnr === t.pnr ? 'rgba(52,211,153,0.08)' : 'rgba(34,211,238,0.05)',
                     border: copiedPnr === t.pnr ? '1px solid rgba(52,211,153,0.3)' : '1px solid rgba(34,211,238,0.2)',

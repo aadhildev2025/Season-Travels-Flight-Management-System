@@ -337,6 +337,17 @@ button {
 }
 
 .date-remark.date-loading-red {
+  animation: pulseRedLoading 1.5s infinite ease-in-out;
+  color: var(--red) !important;
+  background: rgba(244, 63, 94, 0.12);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  border-radius: 5px;
+  padding: 2px 7px;
+  box-shadow: 0 0 12px rgba(244, 63, 94, 0.25);
+  cursor: pointer;
+}
+
+.date-remark.date-loading-green-red-box {
   animation: pulseGreenLoading 1.5s infinite ease-in-out;
   color: var(--green) !important;
   background: rgba(244, 63, 94, 0.12);

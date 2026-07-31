@@ -43,6 +43,13 @@ export async function findAllTickets() {
   return docs.map(formatTicket);
 }
 
+// Used exclusively by Phase 1 of expire-departed to find tickets that just crossed departure time
+// Must include departed:false tickets that haven't been marked yet
+export async function findAllTicketsIncludingDeparted() {
+  const docs = await Ticket.find({ thankYouSent: false }).sort({ departureTimeUTC: 1 });
+  return docs.map(formatTicket);
+}
+
 export async function findTicketById(id) {
   try {
     const doc = await Ticket.findById(id);

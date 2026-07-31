@@ -325,11 +325,10 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
               </thead>
               <tbody>
                 {sorted.map(ticket => {
-                   const isToday = formatCETDate(ticket.departureTimeUTC) === todayStr;
+                  const isToday = formatCETDate(ticket.departureTimeUTC) === todayStr;
                   const isNew = newTicketId === ticket._id;
-                   const hasRemark = !!ticket.remarks?.trim();
-                   const isNeedFurtherActions = ticket.status === 'Need Further Actions' && hasRemark;
-                   const isRedBlink = isNeedFurtherActions;
+                  const hasRemark = !!ticket.remarks?.trim();
+                  const isNeedFurtherActions = ticket.status === 'Need Further Actions' && hasRemark;
 
                   const depTime = ticket.departureTimeUTC ? new Date(ticket.departureTimeUTC) : null;
                   const isNotDepartedYet = depTime ? (new Date().getTime() < depTime.getTime()) : false;
@@ -344,26 +343,48 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                     >
                       {/* Date column */}
                       <td style={{ ...td, paddingRight: 6, whiteSpace:'nowrap' }}>
-                        {isRedBlink ? (
-                          <span
-                            className={`date-remark${isNew ? ' date-new-remark' : ''} date-loading-red`}
-                            onClick={() => onEdit(ticket, true)}
-                            style={{
-                              fontFamily:"'JetBrains Mono',monospace", 
-                              fontWeight:700, 
-                              fontSize:14,
-                              cursor: 'pointer',
-                              color: 'var(--green)',
-                            }}
-                          >
-                             {formatCETDate(ticket.departureTimeUTC)}
-                            {hasRemark && (
-                              <span className="remark-tooltip">
-                                <div className="remark-tooltip-label">Remark</div>
-                                <div className="remark-tooltip-text">{ticket.remarks}</div>
-                              </span>
-                            )}
-                          </span>
+                        {isNeedFurtherActions ? (
+                          isLoadingToday ? (
+                            <span
+                              className={`date-remark${isNew ? ' date-new-remark' : ''} date-loading-green-red-box`}
+                              onClick={() => onEdit(ticket, true)}
+                              style={{
+                                fontFamily:"'JetBrains Mono',monospace", 
+                                fontWeight:700, 
+                                fontSize:14,
+                                cursor: 'pointer',
+                                color: 'var(--green)',
+                              }}
+                            >
+                                {formatCETDate(ticket.departureTimeUTC)}
+                              {hasRemark && (
+                                <span className="remark-tooltip">
+                                  <div className="remark-tooltip-label">Remark</div>
+                                  <div className="remark-tooltip-text">{ticket.remarks}</div>
+                                </span>
+                              )}
+                            </span>
+                          ) : (
+                            <span
+                              className={`date-remark${isNew ? ' date-new-remark' : ''} date-loading-red`}
+                              onClick={() => onEdit(ticket, true)}
+                              style={{
+                                fontFamily:"'JetBrains Mono',monospace", 
+                                fontWeight:700, 
+                                fontSize:14,
+                                cursor: 'pointer',
+                                color: 'var(--red)',
+                              }}
+                            >
+                                {formatCETDate(ticket.departureTimeUTC)}
+                              {hasRemark && (
+                                <span className="remark-tooltip">
+                                  <div className="remark-tooltip-label">Remark</div>
+                                  <div className="remark-tooltip-text">{ticket.remarks}</div>
+                                </span>
+                              )}
+                            </span>
+                          )
                         ) : isLoadingToday ? (
                           <span
                             className={`date-remark${isNew ? ' date-new-remark' : ''} date-loading-green`}
@@ -430,7 +451,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
 
                       {/* Flight Number */}
                       <td style={{ ...td, padding:'4px 2px' }}>
-                        <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, color:'var(--text)', fontSize:15, letterSpacing:'0.04em' }}>
+                        <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:500, color:'var(--text)', fontSize:15, letterSpacing:'0.04em' }}>
                           {ticket.flightNumber || '—'}
                         </span>
                       </td>
@@ -441,7 +462,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                             onClick={() => handleCopyPnr(ticket.pnr)}
                             title="Click to copy PNR"
                             style={{
-                              fontFamily:"'JetBrains Mono',monospace", fontWeight:700,
+                              fontFamily:"'JetBrains Mono',monospace", fontWeight:500,
                               color: copiedPnr === ticket.pnr ? 'var(--green)' : '#ec4899',
                                fontSize:15, letterSpacing:'0.04em',
                               cursor: 'copy',

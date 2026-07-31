@@ -3,6 +3,7 @@ import * as TicketModel from '../models/Ticket.js';
 import * as AuditLogModel from '../models/AuditLog.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { sendEmail, buildThankYouMessage, buildReminderMessage } from '../services/email.js';
+import { findAllTicketsIncludingDeparted } from '../models/Ticket.js';
 
 const router = Router();
 
@@ -101,35 +102,7 @@ router.post('/', requireAuth, async (req, res) => {
   }
 });
 
-// GET /api/tickets/:id
-router.get('/:id', requireAuth, async (req, res) => {
-  try {
-    const ticket = await TicketModel.findTicketById(req.params.id);
-    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
-    return res.json({ ticket });
-  } catch (err) {
-    console.error('Get ticket error:', err);
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// PUT /api/tickets/:id
-router.put('/:id', requireAuth, async (req, res) => {
-  try {
-    const existing = await TicketModel.findTicketById(req.params.id);
-    if (!existing) return res.status(404).json({ error: 'Ticket not found' });
-
-    const updated = await TicketModel.updateTicket(req.params.id, req.body);
-
-    audit(req, 'UPDATE_TICKET', updated.pnr || updated.passengerName,
-      `Updated ticket for ${updated.passengerName} · PNR: ${updated.pnr || 'N/A'}`);
-
-    return res.json({ ticket: updated });
-  } catch (err) {
-    console.error('Update ticket error:', err);
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
+// ─── Special named routes MUST come before /:id to prevent route shadowing ───
 
 // POST /api/tickets/expire-departed
 // Phase 1: At departure time → mark as departed (UI removes them immediately)
@@ -139,8 +112,8 @@ router.post('/expire-departed', requireAuth, async (req, res) => {
     const now = new Date();
 
     // --- Phase 1: Mark newly-departed tickets ---
-    // Find tickets whose departure time has passed but are not yet marked as departed
-    const allTickets = await TicketModel.findAllTickets();
+    // Use findAllTicketsIncludingDeparted to see tickets not yet marked, even if departureTime has passed
+    const allTickets = await findAllTicketsIncludingDeparted();
     const newlyDeparted = allTickets.filter(t =>
       t.departureTimeUTC && new Date(t.departureTimeUTC) <= now && !t.departed
     );
@@ -164,8 +137,8 @@ router.post('/expire-departed', requireAuth, async (req, res) => {
       }
     }
 
-    // Delete tickets after thank-you has been sent
-    const result = await TicketModel.deleteManyTickets({ thankYouSent: { not: false } });
+    // Delete tickets where thank-you has been confirmed sent (explicit true only)
+    const result = await TicketModel.deleteManyTickets({ thankYouSent: true });
 
     return res.json({
       success: true,
@@ -204,6 +177,38 @@ router.post('/send-reminders', requireAuth, async (req, res) => {
     return res.json({ success: true, remindedCount: upcoming.length });
   } catch (err) {
     console.error('Send reminders error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── Parameterised routes ───
+
+// GET /api/tickets/:id
+router.get('/:id', requireAuth, async (req, res) => {
+  try {
+    const ticket = await TicketModel.findTicketById(req.params.id);
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+    return res.json({ ticket });
+  } catch (err) {
+    console.error('Get ticket error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/tickets/:id
+router.put('/:id', requireAuth, async (req, res) => {
+  try {
+    const existing = await TicketModel.findTicketById(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Ticket not found' });
+
+    const updated = await TicketModel.updateTicket(req.params.id, req.body);
+
+    audit(req, 'UPDATE_TICKET', updated.pnr || updated.passengerName,
+      `Updated ticket for ${updated.passengerName} · PNR: ${updated.pnr || 'N/A'}`);
+
+    return res.json({ ticket: updated });
+  } catch (err) {
+    console.error('Update ticket error:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

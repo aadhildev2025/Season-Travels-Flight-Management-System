@@ -593,13 +593,13 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
                <div>
                  <label style={label}>Flight Number</label>
                  <input className="field" value={flightNumber} placeholder="e.g. UL503"
-                   style={{ fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', color: '#fff' }}
+                   style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 500, textTransform: 'uppercase', color: 'var(--text)' }}
                    onChange={e => setFlightNumber(e.target.value.toUpperCase())} />
                </div>
 
                <div>
                  <label style={label}>PNR *</label>
-                 <input className="field" style={{ ...err('pnr'), fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', color: 'var(--cyan)' }}
+                 <input className="field" style={{ ...err('pnr'), fontFamily: "'JetBrains Mono', monospace", fontWeight: 500, textTransform: 'uppercase', color: 'var(--text)' }}
                    value={pnr} placeholder="e.g. X7KQP2"
                    onChange={e => setPnr(e.target.value.toUpperCase())} />
                   {errors.pnr && <span style={{ fontSize: 11, color: 'var(--red)', marginTop: 4, display: 'block' }}>{errors.pnr}</span>}

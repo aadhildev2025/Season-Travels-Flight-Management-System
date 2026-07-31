@@ -1,8 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Season Travels</title>
+<style>
+  /* ── Reset ── */
+  body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+  table { border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+  img { border: 0; display: block; line-height: 100%; outline: none; text-decoration: none; -ms-interpolation-mode: bicubic; }
 
-        <div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #f0f0f0; border-radius: 8px; background-color: #ffffff; box-sizing: border-box;">
-          
-          <div style="margin-top: 15px;">
-            
+  /* ── Mobile overrides ── */
+  @media only screen and (max-width: 620px) {
+    .email-wrapper { padding: 12px !important; }
+    .email-card   { padding: 18px !important; border-radius: 6px !important; }
+    .logo-header  { height: 22px !important; }
+    .logo-iata    { height: 18px !important; }
+    .logo-footer  { max-width: 100% !important; height: auto !important; }
+    .body-text    { font-size: 13px !important; }
+    .detail-line  { font-size: 13px !important; }
+    .footer-link  { font-size: 11px !important; }
+  }
+</style>
+</head>
+<body style="margin:0; padding:0; background:#f4f4f7;">
+
+<!-- Outer wrapper -->
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="background:#f4f4f7;">
+  <tr>
+    <td align="center" class="email-wrapper" style="padding: 28px 16px;">
+
+      <!-- Card -->
+      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px; background:#ffffff; border-radius:10px; border:1px solid #e8e8ee; box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+        <tr>
+          <td class="email-card" style="padding: 28px 30px; font-family: Arial, sans-serif; font-size: 14px; line-height: 1.65; color: #333; box-sizing: border-box;">
+
+            <!-- Header row: brand logo left, IATA right -->
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:22px; border-bottom:1px solid #eee; padding-bottom:16px;">
+              <tr>
+                <td align="left" valign="middle" style="padding-bottom:0;">
+                  <img src="cid:logo_header" alt="Season Travels" class="logo-header" style="height:28px; width:auto;" />
+                </td>
+                <td align="right" valign="middle" style="padding-bottom:0;">
+                  <img src="cid:logo_iata" alt="IATA" class="logo-iata" style="height:24px; width:auto;" />
+                </td>
+              </tr>
+            </table>
+
+            <!-- Body content -->
+            <div style="margin-top:8px;" class="body-text">
+              
             <div style="margin-bottom: 15px; color: #374151;">
               Dear Passenger,
             </div>
@@ -13,7 +60,7 @@
           
             <div style="margin-bottom: 20px;">
               <div style="font-weight: bold; color: #1f2937; margin-bottom: 8px;">Flight Details:</div>
-              <div style="color: #dc2626; margin-bottom: 4px; font-weight: bold;">Booking Reference: 111111</div><div style="color: #dc2626; margin-bottom: 4px; font-weight: bold;">Route: CMB → ARN</div><div style="color: #dc2626; margin-bottom: 4px; font-weight: bold;">Departure: 04 Aug 2026, 06:12 (Colombo)</div>
+              <div style="color: #dc2626; margin-bottom: 4px; font-weight: bold;">Booking Reference: 111111</div><div style="color: #dc2626; margin-bottom: 4px; font-weight: bold;">Route: CMB → ARN</div><div style="color: #dc2626; margin-bottom: 4px; font-weight: bold;">Departure: 07 Aug 2026, 20:33 (Colombo)</div>
             </div>
           
             <div style="margin-bottom: 15px; color: #374151;">
@@ -24,22 +71,27 @@
               Warm regards,<br />SEASON TRAVELS
             </div>
           
-          </div>
+            </div>
 
-          <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 35px; border-top: 1px solid #eee; padding-top: 20px;">
-            <tr>
-              <td align="left" valign="middle">
-                <div style="display: inline-block; text-align: center;">
-                  <img src="cid:logo_footer" alt="Season Travels" style="height: 48px; width: auto; display: block; border: 0; margin: 0 auto;" />
-                  <div style="margin-top: 6px; font-size: 12px; color: #333; text-align: center;">
-                    <a href="https://www.seasontravels.com" target="_blank" style="text-decoration: none; color: #333;">www.seasontravels.com</a>
+            <!-- Footer: footer banner + website link -->
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:32px; border-top:1px solid #eee; padding-top:20px;">
+              <tr>
+                <td align="center" valign="middle">
+                  <img src="cid:logo_footer" alt="Season Travels" class="logo-footer" style="max-width:100%; height:auto; display:block; margin:0 auto;" />
+                  <div class="footer-link" style="margin-top:10px; font-size:12px; color:#555; text-align:center;">
+                    <a href="https://www.seasontravels.com" target="_blank" style="text-decoration:none; color:#555;">www.seasontravels.com</a>
                   </div>
-                </div>
-              </td>
-              <td align="right" valign="middle">
-                <img src="cid:logo_iata" alt="IATA" style="height: 38px; width: auto; display: block; border: 0;" />
-              </td>
-            </tr>
-          </table>
-        </div>
-      
+                </td>
+              </tr>
+            </table>
+
+          </td>
+        </tr>
+      </table><!-- /card -->
+
+    </td>
+  </tr>
+</table><!-- /outer wrapper -->
+
+</body>
+</html>

@@ -309,12 +309,12 @@ button {
 
 .date-loading-green {
   animation: pulseGreenLoading 1.5s infinite ease-in-out;
-  font-weight: 800 !important;
+  font-weight: 400 !important;
 }
 
 .date-loading-red {
   animation: pulseRedLoading 1.5s infinite ease-in-out;
-  font-weight: 800 !important;
+  font-weight: 400 !important;
 }
 
 .date-remark.date-loading-green {
@@ -907,7 +907,7 @@ button {
 .data-table thead th {
   padding: 10px 16px;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 400;
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: var(--text2);

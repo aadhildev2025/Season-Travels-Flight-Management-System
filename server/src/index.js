@@ -112,9 +112,40 @@ if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
     }
   };
 
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     tryConnect();
+    
+    // Automatically check & send thank-you emails every 5 minutes in background
+    setInterval(async () => {
+      try {
+        const { processExpiredAndThankYou } = await import('./routes/tickets.js');
+        await processExpiredAndThankYou();
+      } catch (err) {
+        console.error('Background thank-you process error:', err.message);
+      }
+    }, 5 * 60 * 1000);
+  });
+
+  // Handle port already in use — exit cleanly so node --watch can retry
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`Port ${PORT} is already in use. Exiting so the process can be restarted cleanly.`);
+    } else {
+      console.error('Server error:', err.message);
+    }
+    process.exit(1);
+  });
+
+  // Catch unhandled errors to prevent silent crashes
+  process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err);
+    process.exit(1);
+  });
+
+  process.on('unhandledRejection', (reason) => {
+    console.error('Unhandled Rejection:', reason);
+    process.exit(1);
   });
 }
 

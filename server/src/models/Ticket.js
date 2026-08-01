@@ -175,12 +175,14 @@ export async function findRecentTickets(limit = 5) {
 export async function findTicketsToThank() {
   const now = new Date();
   const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
-  // Find tickets marked as departed at least 48 hours ago, thank-you not yet sent
+  // Find tickets where flight departed at least 48 hours ago, thank-you email not yet sent
   const docs = await Ticket.find({
-    departed: true,
-    departedAt: { $lte: fortyEightHoursAgo },
+    $or: [
+      { departureTimeUTC: { $lte: fortyEightHoursAgo.toISOString() } },
+      { departedAt: { $lte: fortyEightHoursAgo } }
+    ],
     thankYouSent: false,
-    email: { $ne: '' },
+    email: { $exists: true, $ne: '' },
   });
   return docs.map(formatTicket);
 }

@@ -104,47 +104,55 @@ router.post('/', requireAuth, async (req, res) => {
 
 // ─── Special named routes MUST come before /:id to prevent route shadowing ───
 
+export async function processExpiredAndThankYou(req = null) {
+  const now = new Date();
+
+  // Phase 1: Mark newly-departed tickets
+  const allTickets = await findAllTicketsIncludingDeparted();
+  const newlyDeparted = allTickets.filter(t =>
+    t.departureTimeUTC && new Date(t.departureTimeUTC) <= now && !t.departed
+  );
+  for (const ticket of newlyDeparted) {
+    await TicketModel.markDeparted(ticket.id || ticket._id);
+  }
+
+  // Phase 2: Send thank-you emails and delete tickets departed 48h+ ago
+  const toThank = await TicketModel.findTicketsToThank();
+  for (const ticket of toThank) {
+    try {
+      if (ticket.email) {
+        const { subject, body } = buildThankYouMessage(ticket);
+        await sendEmail({ to: ticket.email, subject, text: body });
+      }
+      await TicketModel.markThankYouSent(ticket.id || ticket._id);
+      if (req) {
+        audit(req, 'SEND_THANK_YOU', ticket.pnr,
+          `Sent thank-you email to ${ticket.passengerName} · ${ticket.pnr}`);
+      }
+    } catch (err) {
+      console.error('Thank-you email failed:', err?.message || err);
+    }
+  }
+
+  // Delete tickets where thank-you has been confirmed sent (explicit true only)
+  const result = await TicketModel.deleteManyTickets({ thankYouSent: true });
+
+  return {
+    markedDepartedCount: newlyDeparted.length,
+    thankedCount: toThank.length,
+    deletedCount: result?.deletedCount || 0,
+  };
+}
+
 // POST /api/tickets/expire-departed
 // Phase 1: At departure time → mark as departed (UI removes them immediately)
 // Phase 2: 48h after departure → send thank-you email, then delete
 router.post('/expire-departed', requireAuth, async (req, res) => {
   try {
-    const now = new Date();
-
-    // --- Phase 1: Mark newly-departed tickets ---
-    // Use findAllTicketsIncludingDeparted to see tickets not yet marked, even if departureTime has passed
-    const allTickets = await findAllTicketsIncludingDeparted();
-    const newlyDeparted = allTickets.filter(t =>
-      t.departureTimeUTC && new Date(t.departureTimeUTC) <= now && !t.departed
-    );
-    for (const ticket of newlyDeparted) {
-      await TicketModel.markDeparted(ticket.id || ticket._id);
-    }
-
-    // --- Phase 2: Send thank-you emails and delete tickets departed 48h+ ago ---
-    const toThank = await TicketModel.findTicketsToThank();
-    for (const ticket of toThank) {
-      try {
-        if (ticket.email) {
-          const { subject, body } = buildThankYouMessage(ticket);
-          await sendEmail({ to: ticket.email, subject, text: body });
-        }
-        await TicketModel.markThankYouSent(ticket.id || ticket._id);
-        audit(req, 'SEND_THANK_YOU', ticket.pnr,
-          `Sent thank-you email to ${ticket.passengerName} · ${ticket.pnr}`);
-      } catch (err) {
-        console.error('Thank-you email failed:', err);
-      }
-    }
-
-    // Delete tickets where thank-you has been confirmed sent (explicit true only)
-    const result = await TicketModel.deleteManyTickets({ thankYouSent: true });
-
+    const stats = await processExpiredAndThankYou(req);
     return res.json({
       success: true,
-      markedDepartedCount: newlyDeparted.length,
-      thankedCount: toThank.length,
-      deletedCount: result?.deletedCount || 0,
+      ...stats
     });
   } catch (err) {
     console.error('Expire departed tickets error:', err);

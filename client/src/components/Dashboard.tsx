@@ -5,6 +5,7 @@ import { utcToLocalTime, formatCETTime, formatCETDate } from '../utils/timezone'
 import ConfirmDialog from './ConfirmDialog';
 import { Plane, Search, Plus, RefreshCw, Download } from 'lucide-react';
 import type { Ticket } from '../types';
+import { AIRPORTS } from '../types';
 import type { TZ } from '../App';
 
 interface DashboardProps {
@@ -130,12 +131,37 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
     return firstPart[0] || '';
   };
 
+  const getCountryName = (code: string): string => {
+    if (!code) return '';
+    const clean = code.trim().toUpperCase();
+    const found = AIRPORTS.find(a => a.code === clean);
+    if (found) return found.country;
+    const fallbackMap: Record<string, string> = {
+      CMB: 'Sri Lanka', ARN: 'Sweden', GOT: 'Sweden', CPH: 'Denmark',
+      ZRH: 'Switzerland', VRN: 'Italy', FCO: 'Italy', OSL: 'Norway',
+      LGW: 'United Kingdom', LHR: 'United Kingdom', CDG: 'France',
+      DXB: 'UAE', DOH: 'Qatar', HEL: 'Finland', SIN: 'Singapore',
+      FRA: 'Germany', SYD: 'Australia', AKL: 'New Zealand', NRT: 'Japan',
+      PEK: 'China', JFK: 'United States', LAX: 'United States',
+    };
+    return fallbackMap[clean] || clean;
+  };
+
+  const formatRouteWithCountry = (depCode: string, arrCode: string): string => {
+    const depCountry = getCountryName(depCode);
+    const arrCountry = getCountryName(arrCode);
+    const depStr = depCountry && depCountry !== depCode ? `${depCountry} (${depCode})` : depCode;
+    const arrStr = arrCountry && arrCountry !== arrCode ? `${arrCountry} (${arrCode})` : arrCode;
+    return `${depStr} → ${arrStr}`;
+  };
+
   const buildReminderMessage = (ticket: Ticket) => {
     const dep = utcToLocalTime(ticket.departureTimeUTC, ticket.originalTimezone);
     const tzLabel = ticket.originalTimezone.split('/').pop()?.replace('_',' ') || '';
+    const routeStr = formatRouteWithCountry(ticket.departureAirport, ticket.arrivalAirport);
     return {
       subject: 'Travel Reminder from SeasonTravels',
-      body: `Dear Passenger,\n\nThis is a reminder for your upcoming flight.\n\nFlight Details:\nBooking Reference: ${ticket.pnr}\nRoute: ${ticket.departureAirport} → ${ticket.arrivalAirport}\nDeparture: ${dep.formatted} (${tzLabel})\n\nPlease ensure you check in at least 4 hours prior to departure.\nWe wish you a safe and pleasant journey!\n\nWarm regards,\nSEASON TRAVELS`,
+      body: `Dear Passenger,\n\nThis is a reminder for your upcoming flight.\n\nFlight Details:\nBooking Reference: ${ticket.pnr}\nRoute: ${routeStr}\nDeparture: ${dep.formatted} (${tzLabel})\n\nPlease ensure you check in at least 4 hours prior to departure.\nWe wish you a safe and pleasant journey!\n\nWarm regards,\nSEASON TRAVELS`,
     };
   };
 
@@ -230,7 +256,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
     });
   };
 
-  const th: React.CSSProperties = { padding:'4px 8px', fontSize:13, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.10em', color:'var(--text2)', whiteSpace:'nowrap', textAlign:'left' };
+  const th: React.CSSProperties = { padding:'4px 8px', fontSize:13, fontWeight:400, textTransform:'uppercase', letterSpacing:'0.10em', color:'var(--text2)', whiteSpace:'nowrap', textAlign:'left' };
   const td: React.CSSProperties = { padding:'4px 8px', fontSize:15, whiteSpace:'nowrap' };
 
   return (
@@ -350,7 +376,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                               onClick={() => onEdit(ticket, true)}
                               style={{
                                 fontFamily:"'JetBrains Mono',monospace", 
-                                fontWeight:700, 
+                                fontWeight:400, 
                                 fontSize:14,
                                 cursor: 'pointer',
                                 color: 'var(--green)',
@@ -370,7 +396,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                               onClick={() => onEdit(ticket, true)}
                               style={{
                                 fontFamily:"'JetBrains Mono',monospace", 
-                                fontWeight:700, 
+                                fontWeight:400, 
                                 fontSize:14,
                                 cursor: 'pointer',
                                 color: 'var(--red)',
@@ -390,7 +416,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                             className={`date-remark${isNew ? ' date-new-remark' : ''} date-loading-green`}
                             style={{
                               fontFamily:"'JetBrains Mono',monospace", 
-                              fontWeight:700, 
+                              fontWeight:400, 
                               fontSize:14,
                               color: 'var(--green)',
                             }}
@@ -402,7 +428,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                             className={`${isNew ? 'date-new' : ''}`}
                             style={{ 
                               fontFamily:"'JetBrains Mono',monospace", 
-                              fontWeight:700, 
+                              fontWeight:400, 
                               color: 'var(--text)', 
                               fontSize:14 
                             }}
@@ -432,26 +458,26 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                         </span>
                       </td>
 
-                      <td style={{ ...td, fontWeight:800, color:'var(--text)', letterSpacing:'0.04em', padding:'4px 2px 4px 8px' }}>{ticket.departureAirport}</td>
-                      <td style={{ ...td, fontWeight:800, color:'var(--text)', letterSpacing:'0.04em', padding:'4px 2px' }}>{ticket.arrivalAirport}</td>
+                      <td style={{ ...td, fontWeight:400, color:'var(--text)', letterSpacing:'0.04em', padding:'4px 2px 4px 8px' }}>{ticket.departureAirport}</td>
+                      <td style={{ ...td, fontWeight:400, color:'var(--text)', letterSpacing:'0.04em', padding:'4px 2px' }}>{ticket.arrivalAirport}</td>
 
                       {/* CET Time */}
                       <td style={{ ...td, padding:'4px 2px' }}>
-                        <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, color:'var(--indigo2)', fontSize:15 }}>
+                        <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:400, color:'var(--indigo2)', fontSize:15 }}>
                           {getCETTime(ticket.departureTimeUTC)}
                         </span>
                       </td>
 
                       {/* SLT Time */}
                       <td style={{ ...td, padding:'4px 2px' }}>
-                         <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:700, color:'var(--cyan)', fontSize:15 }}>
+                         <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:400, color:'var(--cyan)', fontSize:15 }}>
                           {getSLTime(ticket.departureTimeUTC)}
                         </span>
                       </td>
 
                       {/* Flight Number */}
                       <td style={{ ...td, padding:'4px 2px' }}>
-                        <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:500, color:'var(--text)', fontSize:15, letterSpacing:'0.04em' }}>
+                        <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:400, color:'var(--text)', fontSize:15, letterSpacing:'0.04em' }}>
                           {ticket.flightNumber || '—'}
                         </span>
                       </td>
@@ -462,7 +488,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                             onClick={() => handleCopyPnr(ticket.pnr)}
                             title="Click to copy PNR"
                             style={{
-                              fontFamily:"'JetBrains Mono',monospace", fontWeight:500,
+                              fontFamily:"'JetBrains Mono',monospace", fontWeight:400,
                               color: copiedPnr === ticket.pnr ? 'var(--green)' : '#ec4899',
                                fontSize:15, letterSpacing:'0.04em',
                               cursor: 'copy',

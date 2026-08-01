@@ -5,6 +5,7 @@ import Dashboard from './components/Dashboard';
 import TicketForm from './components/TicketForm';
 import AuditLogs from './components/AuditLogs';
 import Staff from './components/Staff';
+import { NoteSummarizer } from './components/NoteSummarizer';
 import ConfirmDialog from './components/ConfirmDialog';
 import SplashScreen from './components/SplashScreen';
 import HeaderClock from './components/HeaderClock';
@@ -22,12 +23,13 @@ import {
   X,
   CheckCircle,
   Sun,
-  Moon
+  Moon,
+  Sparkles
 } from 'lucide-react';
 import logoSrc from './logo/2.png';
 import dashboardLogoSrc from './logo/3.png';
 
-export type View = 'dashboard' | 'ticket-form' | 'audit-logs' | 'profile' | 'staff';
+export type View = 'dashboard' | 'ticket-form' | 'audit-logs' | 'profile' | 'staff' | 'note-summarizer';
 export type TZ = 'CET' | 'SLT';
 
 export default function App() {
@@ -203,6 +205,7 @@ export default function App() {
   // Nav Items definition
   const sidebarNavItems = [
     { id: 'dashboard', label: 'Flight Departure', logoSrc: dashboardLogoSrc },
+    { id: 'note-summarizer', label: 'AI Summarization', icon: <Sparkles size={15} /> },
     { id: 'audit-logs', label: 'Audit Logs', icon: <ScrollText size={15} />, adminOnly: true },
     { id: 'staff', label: 'Staff Management', icon: <Users size={15} />, adminOnly: true },
   ];
@@ -493,6 +496,9 @@ export default function App() {
           )}
           {view === 'staff' && isAdmin && (
             <Staff tz={tz} />
+          )}
+          {view === 'note-summarizer' && (
+            <NoteSummarizer />
           )}
           </div>
         </main>

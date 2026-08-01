@@ -26,13 +26,75 @@ const transporter = nodemailer.createTransport({
   maxMessages: 10,
 });
 
+const countryMap = {
+  CMB: 'Sri Lanka', HRI: 'Sri Lanka', JAF: 'Sri Lanka', DAC: 'Bangladesh', KTM: 'Nepal',
+  ARN: 'Sweden', BMA: 'Sweden', GOT: 'Sweden', MMX: 'Sweden', VXO: 'Sweden',
+  LPI: 'Sweden', NRK: 'Sweden', KRN: 'Sweden', LLA: 'Sweden', UME: 'Sweden',
+  OSD: 'Sweden', RNB: 'Sweden', KLR: 'Sweden', SDL: 'Sweden',
+  CPH: 'Denmark', BLL: 'Denmark', AAL: 'Denmark', AAR: 'Denmark', RNN: 'Denmark',
+  EBJ: 'Denmark', SGD: 'Denmark', KRP: 'Denmark', ODE: 'Denmark', CNL: 'Denmark',
+  OSL: 'Norway', BGO: 'Norway', TRD: 'Norway', SVG: 'Norway', TOS: 'Norway',
+  BOO: 'Norway', AES: 'Norway', KRS: 'Norway', HAU: 'Norway', MOL: 'Norway',
+  EVE: 'Norway', LKL: 'Norway', ALF: 'Norway', KKN: 'Norway', LYR: 'Norway',
+  HEL: 'Finland', TMP: 'Finland', TKU: 'Finland', OUL: 'Finland', RVN: 'Finland',
+  KTT: 'Finland', IVL: 'Finland', KUO: 'Finland', JYV: 'Finland', JOE: 'Finland',
+  VAA: 'Finland', KAJ: 'Finland', KEM: 'Finland', POR: 'Finland', MHQ: 'Finland',
+  CIA: 'Italy', MXP: 'Italy', LIN: 'Italy', BGY: 'Italy', VCE: 'Italy',
+  TSF: 'Italy', NAP: 'Italy', BLQ: 'Italy', FLR: 'Italy', PSA: 'Italy',
+  CTA: 'Italy', PMO: 'Italy', BRI: 'Italy', TRN: 'Italy', VRN: 'Italy',
+  CAG: 'Italy', OLB: 'Italy', AHO: 'Italy', GOA: 'Italy', FCO: 'Italy',
+  FRA: 'Germany', MUC: 'Germany', BER: 'Germany', DUS: 'Germany', HAM: 'Germany',
+  CDG: 'France', ORY: 'France', NCE: 'France', LYS: 'France', MRS: 'France',
+  ZRH: 'Switzerland', GVA: 'Switzerland',
+  OTP: 'Romania', CLJ: 'Romania', TSR: 'Romania', IAS: 'Romania',
+  MAD: 'Spain', BCN: 'Spain', PMI: 'Spain', AGP: 'Spain', ALC: 'Spain',
+  AMS: 'Netherlands', EIN: 'Netherlands', RTM: 'Netherlands',
+  LHR: 'United Kingdom', LGW: 'United Kingdom', STN: 'United Kingdom',
+  LTN: 'United Kingdom', MAN: 'United Kingdom', BHX: 'United Kingdom',
+  VNO: 'Lithuania', KUN: 'Lithuania', PLQ: 'Lithuania', TLL: 'Estonia',
+  ATH: 'Greece', SKG: 'Greece', HER: 'Greece', RHO: 'Greece',
+  GOH: 'Greenland', SFJ: 'Greenland', JAV: 'Greenland',
+  WAW: 'Poland', KRK: 'Poland', GDN: 'Poland', KTW: 'Poland', WRO: 'Poland',
+  LIS: 'Portugal', OPO: 'Portugal', FAO: 'Portugal', FNC: 'Portugal', PDL: 'Portugal',
+  VIE: 'Austria', INN: 'Austria', GRZ: 'Austria',
+  PRG: 'Czech Republic', BRQ: 'Czech Republic', OSR: 'Czech Republic', KLV: 'Czech Republic', PED: 'Czech Republic',
+  IST: 'Turkey', SAW: 'Turkey', AYT: 'Turkey', MHD: 'Iran', KBL: 'Afghanistan',
+  DXB: 'UAE', DOH: 'Qatar', AUH: 'UAE', JED: 'Saudi Arabia', RUH: 'Saudi Arabia',
+  SHJ: 'UAE', MLE: 'Maldives', LHE: 'Pakistan', ISB: 'Pakistan', KHI: 'Pakistan', SKT: 'Pakistan',
+  ASM: 'Eritrea', ADD: 'Ethiopia', ACC: 'Ghana', LOS: 'Nigeria', NBO: 'Kenya',
+  JNB: 'South Africa', CPT: 'South Africa', DUR: 'South Africa',
+  DEL: 'India', BOM: 'India', BLR: 'India', MAA: 'India', HYD: 'India', CCU: 'India',
+  SYD: 'Australia', MEL: 'Australia', BNE: 'Australia', PER: 'Australia', ADL: 'Australia',
+  AKL: 'New Zealand', CHC: 'New Zealand', WLG: 'New Zealand', ZQN: 'New Zealand',
+  HND: 'Japan', NRT: 'Japan', KIX: 'Japan', NGO: 'Japan', FUK: 'Japan',
+  SIN: 'Singapore', HKG: 'Hong Kong', ICN: 'South Korea', BKK: 'Thailand', KUL: 'Malaysia',
+  PEK: 'China', DPS: 'Indonesia',
+  ATL: 'United States', LAX: 'United States', JFK: 'United States', ORD: 'United States',
+  DFW: 'United States', SFO: 'United States', MIA: 'United States',
+};
+
+function getCountryName(code) {
+  if (!code) return '';
+  const clean = code.trim().toUpperCase();
+  return countryMap[clean] || clean;
+}
+
+function formatRouteWithCountry(depCode, arrCode) {
+  const depCountry = getCountryName(depCode);
+  const arrCountry = getCountryName(arrCode);
+  const depStr = depCountry && depCountry !== depCode ? `${depCountry} (${depCode})` : depCode;
+  const arrStr = arrCountry && arrCountry !== arrCode ? `${arrCountry} (${arrCode})` : arrCode;
+  return `${depStr} → ${arrStr}`;
+}
+
 export function buildReminderMessage(ticket) {
   const dep = new Date(ticket.departureTimeUTC);
   const tzLabel = ticket.originalTimezone.split('/').pop()?.replace('_',' ') || '';
   const formatted = dep.toLocaleString('en-GB', { timeZone: ticket.originalTimezone, day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+  const routeStr = formatRouteWithCountry(ticket.departureAirport, ticket.arrivalAirport);
   return {
     subject: 'Travel Reminder from SeasonTravels',
-    body: `Dear Passenger,\n\nThis is a reminder for your upcoming flight.\n\nFlight Details:\nBooking Reference: ${ticket.pnr}\nRoute: ${ticket.departureAirport} → ${ticket.arrivalAirport}\nDeparture: ${formatted} (${tzLabel})\n\nPlease ensure you check in at least 4 hours prior to departure.\n\nWe wish you a safe and pleasant journey!\n\nWarm regards,\nSEASON TRAVELS`,
+    body: `Dear Passenger,\n\nThis is a reminder for your upcoming flight.\n\nFlight Details:\nBooking Reference: ${ticket.pnr}\nRoute: ${routeStr}\nDeparture: ${formatted} (${tzLabel})\n\nPlease ensure you check in at least 4 hours prior to departure.\n\nWe wish you a safe and pleasant journey!\n\nWarm regards,\nSEASON TRAVELS`,
   };
 }
 

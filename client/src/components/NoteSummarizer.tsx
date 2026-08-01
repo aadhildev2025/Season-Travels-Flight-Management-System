@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Sparkles, Copy, Check, Trash2, FileText, ArrowRight, Wand2 } from 'lucide-react';
 
 interface FlightSegment {
@@ -39,6 +39,8 @@ const SAMPLE_PNR_NOTE = `1  QR 162 T 11SEP 5 CPHDOH HK1       2  0905 1605   788
 export const NoteSummarizer: React.FC = () => {
   const [inputText, setInputText] = useState('');
   const [copied, setCopied] = useState(false);
+  const [copyMode, setCopyMode] = useState<'image' | 'text'>('image');
+  const tableRef = useRef<HTMLDivElement>(null);
 
   // Parse GDS flight lines from raw text
   const parseFlightSegments = (text: string): FlightSegment[] => {
@@ -130,11 +132,71 @@ export const NoteSummarizer: React.FC = () => {
 
   const formattedOutput = generateFormattedSummary(parsedSegments);
 
+  const handleCopyAsImage = async () => {
+    if (parsedSegments.length === 0) return;
+
+    const FONT    = "13px 'Courier New', 'Lucida Console', monospace";
+    const PAD_X   = 20;
+    const PAD_Y   = 16;
+    const LINE_H  = 22;
+    const TEXT_COLOR = '#1a1a1a';
+    const BG_COLOR   = '#f5f5f5';
+
+    // Build the plain column-aligned lines (same as text copy)
+    const lines = formattedOutput.split('\n');
+
+    // Measure canvas size
+    const measure = document.createElement('canvas');
+    const mctx = measure.getContext('2d')!;
+    mctx.font = FONT;
+    const maxLineW = Math.max(...lines.map(l => mctx.measureText(l).width));
+    const totalW = Math.ceil(maxLineW) + PAD_X * 2;
+    const totalH = lines.length * LINE_H + PAD_Y * 2;
+
+    const dpr = 2; // always 2× for crisp output
+    const canvas = document.createElement('canvas');
+    canvas.width  = totalW * dpr;
+    canvas.height = totalH * dpr;
+    const ctx = canvas.getContext('2d')!;
+    ctx.scale(dpr, dpr);
+
+    // White/light background
+    ctx.fillStyle = BG_COLOR;
+    ctx.fillRect(0, 0, totalW, totalH);
+
+    // Draw each line of plain text
+    ctx.font      = FONT;
+    ctx.fillStyle = TEXT_COLOR;
+    ctx.textBaseline = 'top';
+    lines.forEach((line, i) => {
+      ctx.fillText(line, PAD_X, PAD_Y + i * LINE_H);
+    });
+
+    // Copy PNG to clipboard
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch {
+        // Fallback: copy text
+        await navigator.clipboard.writeText(formattedOutput);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    }, 'image/png');
+  };
+
   const handleCopy = () => {
-    if (!formattedOutput) return;
-    navigator.clipboard.writeText(formattedOutput);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (copyMode === 'image') {
+      handleCopyAsImage();
+    } else {
+      if (!formattedOutput) return;
+      navigator.clipboard.writeText(formattedOutput);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const handleLoadSample = () => {
@@ -234,14 +296,36 @@ export const NoteSummarizer: React.FC = () => {
             </span>
 
             {parsedSegments.length > 0 && (
-              <button
-                onClick={handleCopy}
-                className="btn btn-primary btn-sm"
-                style={{ gap: 6, background: copied ? 'var(--green)' : undefined }}
-              >
-                {copied ? <Check size={13} /> : <Copy size={13} />}
-                {copied ? 'Copied!' : 'Copy Summary'}
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {/* Mode toggle */}
+                <div style={{
+                  display: 'flex', background: 'var(--bg2)', borderRadius: 8,
+                  border: '1px solid var(--border)', overflow: 'hidden', fontSize: 11,
+                }}>
+                  {(['image', 'text'] as const).map(mode => (
+                    <button
+                      key={mode}
+                      onClick={() => setCopyMode(mode)}
+                      style={{
+                        padding: '4px 10px', border: 'none', cursor: 'pointer',
+                        fontWeight: 600, fontSize: 11, transition: 'all 0.15s',
+                        background: copyMode === mode ? 'var(--indigo)' : 'transparent',
+                        color: copyMode === mode ? '#fff' : 'var(--text2)',
+                      }}
+                    >
+                      {mode === 'image' ? '🖼 PNG' : '📋 Text'}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={handleCopy}
+                  className="btn btn-primary btn-sm"
+                  style={{ gap: 6, background: copied ? 'var(--green)' : undefined }}
+                >
+                  {copied ? <Check size={13} /> : <Copy size={13} />}
+                  {copied ? 'Copied!' : copyMode === 'image' ? 'Copy as PNG' : 'Copy Text'}
+                </button>
+              </div>
             )}
           </div>
 

@@ -73,28 +73,80 @@ const countryMap = {
   DFW: 'United States', SFO: 'United States', MIA: 'United States',
 };
 
+const cityMap = {
+  CMB: 'Colombo', HRI: 'Colombo', JAF: 'Jaffna', DAC: 'Dhaka', KTM: 'Kathmandu',
+  ARN: 'Stockholm', BMA: 'Stockholm', GOT: 'Gothenburg', MMX: 'Malmö', VXO: 'Växjö',
+  LPI: 'Linköping', NRK: 'Norrköping', KRN: 'Kiruna', LLA: 'Luleå', UME: 'Umeå',
+  OSD: 'Östersund', RNB: 'Ronneby', KLR: 'Kalmar', SDL: 'Sundsvall',
+  CPH: 'Copenhagen', BLL: 'Billund', AAL: 'Aalborg', AAR: 'Aarhus', RNN: 'Rønne',
+  EBJ: 'Esbjerg', SGD: 'Sønderborg', KRP: 'Karup', ODE: 'Odense', CNL: 'Christiansø',
+  OSL: 'Oslo', BGO: 'Bergen', TRD: 'Trondheim', SVG: 'Stavanger', TOS: 'Tromsø',
+  BOO: 'Bodø', AES: 'Ålesund', KRS: 'Kristiansand', KKN: 'Kirkenes', LYR: 'Longyearbyen',
+  HEL: 'Helsinki', TMP: 'Tampere', TKU: 'Turku', OUL: 'Oulu', RVN: 'Rovaniemi',
+  KTT: 'Kittilä', IVL: 'Ivalo', KUO: 'Kuopio', JYV: 'Jyväskylä', JOE: 'Joensuu',
+  VAA: 'Vaasa', KAJ: 'Kajaani', KEM: 'Kemi', POR: 'Pori', MHQ: 'Mariehamn',
+  CIA: 'Rome', MXP: 'Milan', LIN: 'Milan', BGY: 'Milan', VCE: 'Venice',
+  TSF: 'Venice', NAP: 'Naples', BLQ: 'Bologna', FLR: 'Florence', PSA: 'Pisa',
+  CTA: 'Catania', PMO: 'Palermo', BRI: 'Bari', TRN: 'Turin', VRN: 'Verona',
+  CAG: 'Cagliari', OLB: 'Olbia', AHO: 'Alghero', GOA: 'Genoa', FCO: 'Rome',
+  FRA: 'Frankfurt', MUC: 'Munich', BER: 'Berlin', DUS: 'Düsseldorf', HAM: 'Hamburg',
+  CDG: 'Paris', ORY: 'Paris', NCE: 'Nice', LYS: 'Lyon', MRS: 'Marseille',
+  ZRH: 'Zurich', GVA: 'Geneva',
+  OTP: 'Bucharest', CLJ: 'Cluj-Napoca', TSR: 'Timișoara', IAS: 'Iași',
+  MAD: 'Madrid', BCN: 'Barcelona', PMI: 'Palma de Mallorca', AGP: 'Málaga', ALC: 'Alicante',
+  AMS: 'Amsterdam', EIN: 'Eindhoven', RTM: 'Rotterdam',
+  LHR: 'London', LGW: 'London', STN: 'London', LTN: 'London', MAN: 'Manchester', BHX: 'Birmingham',
+  VNO: 'Vilnius', KUN: 'Kaunas', PLQ: 'Palanga', TLL: 'Tallinn',
+  ATH: 'Athens', SKG: 'Thessaloniki', HER: 'Heraklion', RHO: 'Rhodes',
+  GOH: 'Nuuk', SFJ: 'Kangerlussuaq', JAV: 'Ilulissat',
+  WAW: 'Warsaw', KRK: 'Kraków', GDN: 'Gdańsk', KTW: 'Katowice', WRO: 'Wrocław',
+  LIS: 'Lisbon', OPO: 'Porto', FAO: 'Faro', FNC: 'Funchal', PDL: 'Ponta Delgada',
+  VIE: 'Vienna', INN: 'Innsbruck', GRZ: 'Graz',
+  PRG: 'Prague', BRQ: 'Brno', OSR: 'Ostrava', KLV: 'Karlovy Vary', PED: 'Pardubice',
+  IST: 'Istanbul', SAW: 'Istanbul', AYT: 'Antalya', MHD: 'Mashhad', KBL: 'Kabul',
+  DXB: 'Dubai', DOH: 'Doha', AUH: 'Abu Dhabi', JED: 'Jeddah', RUH: 'Riyadh',
+  SHJ: 'Sharjah', MLE: 'Malé', LHE: 'Lahore', ISB: 'Islamabad', KHI: 'Karachi', SKT: 'Sialkot',
+  ASM: 'Asmara', ADD: 'Addis Ababa', ACC: 'Accra', LOS: 'Lagos', NBO: 'Nairobi',
+  JNB: 'Johannesburg', CPT: 'Cape Town', DUR: 'Durban',
+  DEL: 'New Delhi', BOM: 'Mumbai', BLR: 'Bangalore', MAA: 'Chennai', HYD: 'Hyderabad', CCU: 'Kolkata',
+  SYD: 'Sydney', MEL: 'Melbourne', BNE: 'Brisbane', PER: 'Perth', ADL: 'Adelaide',
+  AKL: 'Auckland', CHC: 'Christchurch', WLG: 'Wellington', ZQN: 'Queenstown',
+  HND: 'Tokyo', NRT: 'Tokyo', KIX: 'Osaka', NGO: 'Nagoya', FUK: 'Fukuoka',
+  SIN: 'Singapore', HKG: 'Hong Kong', ICN: 'Seoul', BKK: 'Bangkok', KUL: 'Kuala Lumpur',
+  PEK: 'Beijing', DPS: 'Denpasar',
+  ATL: 'Atlanta', LAX: 'Los Angeles', JFK: 'New York', ORD: 'Chicago',
+  DFW: 'Dallas', SFO: 'San Francisco', MIA: 'Miami',
+};
+
 function getCountryName(code) {
   if (!code) return '';
   const clean = code.trim().toUpperCase();
   return countryMap[clean] || clean;
 }
 
+function getCityName(code) {
+  if (!code) return '';
+  const clean = code.trim().toUpperCase();
+  return cityMap[clean] || '';
+}
+
 function formatRouteWithCountry(depCode, arrCode) {
   const depCountry = getCountryName(depCode);
   const arrCountry = getCountryName(arrCode);
-  const depStr = depCountry && depCountry !== depCode ? `${depCountry} (${depCode})` : depCode;
-  const arrStr = arrCountry && arrCountry !== arrCode ? `${arrCountry} (${arrCode})` : arrCode;
+  const depCity = getCityName(depCode);
+  const arrCity = getCityName(arrCode);
+  const depStr = depCountry && depCountry !== depCode ? `${depCode}, ${depCity}, ${depCountry}` : depCode;
+  const arrStr = arrCountry && arrCountry !== arrCode ? `${arrCode}, ${arrCity}, ${arrCountry}` : arrCode;
   return `${depStr} → ${arrStr}`;
 }
 
 export function buildReminderMessage(ticket) {
   const dep = new Date(ticket.departureTimeUTC);
-  const tzLabel = ticket.originalTimezone.split('/').pop()?.replace('_',' ') || '';
   const formatted = dep.toLocaleString('en-GB', { timeZone: ticket.originalTimezone, day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
   const routeStr = formatRouteWithCountry(ticket.departureAirport, ticket.arrivalAirport);
   return {
     subject: 'Travel Reminder from SeasonTravels',
-    body: `Dear Passenger,\n\nThis is a reminder for your upcoming flight.\n\nFlight Details:\nBooking Reference: ${ticket.pnr}\nRoute: ${routeStr}\nDeparture: ${formatted} (${tzLabel})\n\nPlease ensure you check in at least 4 hours prior to departure.\n\nWe wish you a safe and pleasant journey!\n\nWarm regards,\nSEASON TRAVELS`,
+    body: `Dear Passenger,\n\nThis is a reminder for your upcoming flight.\n\nFlight Details:\nBooking Reference: ${ticket.pnr}\nRoute: ${routeStr}\nDeparture: ${formatted}\n\nPlease ensure you check in at least 4 hours prior to departure.\n\nWe wish you a safe and pleasant journey!\n\nWarm regards,\nSEASON TRAVELS`,
   };
 }
 

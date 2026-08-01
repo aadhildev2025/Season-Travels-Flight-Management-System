@@ -113,8 +113,14 @@ export const NoteSummarizer: React.FC = () => {
   const generateFormattedSummary = (segs: FlightSegment[]): string => {
     if (segs.length === 0) return '';
 
+    const maxSeg    = Math.max(...segs.map(s => s.segNo.length));
+    const maxFlight = Math.max(...segs.map(s => s.flightNo.length));
+    const maxDate   = Math.max(...segs.map(s => s.date.length));
+    const maxRoute  = Math.max(...segs.map(s => s.route.length));
+    const maxTimes  = Math.max(...segs.map(s => s.times.length));
+
     return segs.map(s =>
-      `${s.segNo} ${s.flightNo}  ${s.date}\t${s.route}\t${s.times}`
+      `${s.segNo.padEnd(maxSeg)}  ${s.flightNo.padEnd(maxFlight)}  ${s.date.padEnd(maxDate)}   ${s.route.padEnd(maxRoute)}   ${s.times.padEnd(maxTimes)}`
     ).join('\n');
   };
 
@@ -123,31 +129,10 @@ export const NoteSummarizer: React.FC = () => {
   const handleCopy = async () => {
     if (!formattedOutput) return;
 
-    const tableRows = parsedSegments.map(s =>
-      `<tr>
-        <td style="padding:2px 8px 2px 0;font-family:ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,'Courier New',monospace;font-size:13px;white-space:pre;">${s.segNo}</td>
-        <td style="padding:2px 8px 2px 0;font-family:ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,'Courier New',monospace;font-size:13px;white-space:pre;">${s.flightNo}</td>
-        <td style="padding:2px 8px 2px 0;font-family:ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,'Courier New',monospace;font-size:13px;white-space:pre;">${s.date}</td>
-        <td style="padding:2px 8px 2px 0;font-family:ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,'Courier New',monospace;font-size:13px;white-space:pre;">${s.route}</td>
-        <td style="padding:2px 0;font-family:ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,'Courier New',monospace;font-size:13px;white-space:pre;">${s.times}</td>
-      </tr>`
-    ).join('');
-
-    const htmlContent = `<table style="border-collapse:collapse;">${tableRows}</table>`;
-
     try {
-      if (navigator.clipboard && typeof ClipboardItem !== 'undefined') {
-        await navigator.clipboard.write([
-          new ClipboardItem({
-            'text/plain': new Blob([formattedOutput], { type: 'text/plain' }),
-            'text/html': new Blob([htmlContent], { type: 'text/html' }),
-          }),
-        ]);
-      } else {
-        await navigator.clipboard.writeText(formattedOutput);
-      }
-    } catch {
       await navigator.clipboard.writeText(formattedOutput);
+    } catch {
+      // clipboard write failed silently
     }
 
     setCopied(true);

@@ -110,34 +110,15 @@ export const NoteSummarizer: React.FC = () => {
 
   const parsedSegments = parseFlightSegments(inputText);
 
-  // Format as clean text output matching user's requested layout:
-  // 1  EK 152  23AUG   CPHDXB   1515 0020+1
-  // Each column is padded to the widest value so all lines align equally
   const generateFormattedSummary = (segs: FlightSegment[]): string => {
     if (segs.length === 0) return '';
 
-    const maxSeg    = Math.max(...segs.map(s => s.segNo.length));
-    const maxFlight = Math.max(...segs.map(s => s.flightNo.length));
-    const maxDate   = Math.max(...segs.map(s => s.date.length));
-    const maxRoute  = Math.max(...segs.map(s => s.route.length));
-    const maxTimes  = Math.max(...segs.map(s => s.times.length));
-
     return segs.map(s =>
-      `${s.segNo.padEnd(maxSeg)}  ${s.flightNo.padEnd(maxFlight)}  ${s.date.padEnd(maxDate)}   ${s.route.padEnd(maxRoute)}   ${s.times.padEnd(maxTimes)}`
+      `${s.segNo} ${s.flightNo}  ${s.date}\t${s.route}\t${s.times}`
     ).join('\n');
   };
 
   const formattedOutput = generateFormattedSummary(parsedSegments);
-
-  const generateTabSeparatedSummary = (segs: FlightSegment[]): string => {
-    if (segs.length === 0) return '';
-
-    return segs.map(s =>
-      `${s.segNo}\t${s.flightNo}\t${s.date}\t${s.route}\t${s.times}`
-    ).join('\n');
-  };
-
-  const tabSeparatedOutput = generateTabSeparatedSummary(parsedSegments);
 
   const handleCopy = async () => {
     if (!formattedOutput) return;
@@ -153,15 +134,15 @@ export const NoteSummarizer: React.FC = () => {
       if (navigator.clipboard && typeof ClipboardItem !== 'undefined') {
         await navigator.clipboard.write([
           new ClipboardItem({
-            'text/plain': new Blob([tabSeparatedOutput], { type: 'text/plain' }),
+            'text/plain': new Blob([formattedOutput], { type: 'text/plain' }),
             'text/html': new Blob([htmlContent], { type: 'text/html' }),
           }),
         ]);
       } else {
-        await navigator.clipboard.writeText(tabSeparatedOutput);
+        await navigator.clipboard.writeText(formattedOutput);
       }
     } catch {
-      await navigator.clipboard.writeText(tabSeparatedOutput);
+      await navigator.clipboard.writeText(formattedOutput);
     }
 
     setCopied(true);

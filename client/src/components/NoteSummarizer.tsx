@@ -123,12 +123,17 @@ export const NoteSummarizer: React.FC = () => {
   const handleCopy = async () => {
     if (!formattedOutput) return;
 
-    const escapedText = formattedOutput
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+    const tableRows = parsedSegments.map(s =>
+      `<tr>
+        <td style="padding:2px 8px 2px 0;font-family:ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,'Courier New',monospace;font-size:13px;white-space:pre;">${s.segNo}</td>
+        <td style="padding:2px 8px 2px 0;font-family:ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,'Courier New',monospace;font-size:13px;white-space:pre;">${s.flightNo}</td>
+        <td style="padding:2px 8px 2px 0;font-family:ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,'Courier New',monospace;font-size:13px;white-space:pre;">${s.date}</td>
+        <td style="padding:2px 8px 2px 0;font-family:ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,'Courier New',monospace;font-size:13px;white-space:pre;">${s.route}</td>
+        <td style="padding:2px 0;font-family:ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,'Courier New',monospace;font-size:13px;white-space:pre;">${s.times}</td>
+      </tr>`
+    ).join('');
 
-    const htmlContent = `<pre style="font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'Courier New', monospace; font-size: 13px; white-space: pre; margin: 0; line-height: 1.5;">${escapedText}</pre>`;
+    const htmlContent = `<table style="border-collapse:collapse;">${tableRows}</table>`;
 
     try {
       if (navigator.clipboard && typeof ClipboardItem !== 'undefined') {

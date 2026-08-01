@@ -112,15 +112,20 @@ export const NoteSummarizer: React.FC = () => {
 
   // Format as clean text output matching user's requested layout:
   // 1  QR 162  11SEP   CPHDOH   0905 1605
+  // Each column is padded to the widest value so all lines align equally
   const generateFormattedSummary = (segs: FlightSegment[]): string => {
     if (segs.length === 0) return '';
-    return segs.map(s => {
-      const segStr = s.segNo.padEnd(2, ' ');
-      const flightStr = s.flightNo.padEnd(8, ' ');
-      const dateStr = s.date.padEnd(7, ' ');
-      const routeStr = s.route.padEnd(8, ' ');
-      return `${segStr}  ${flightStr}  ${dateStr}   ${routeStr}   ${s.times}`;
-    }).join('\n');
+
+    // Find max width per column across all rows
+    const maxSeg    = Math.max(...segs.map(s => s.segNo.length));
+    const maxFlight = Math.max(...segs.map(s => s.flightNo.length));
+    const maxDate   = Math.max(...segs.map(s => s.date.length));
+    const maxRoute  = Math.max(...segs.map(s => s.route.length));
+    const maxTimes  = Math.max(...segs.map(s => s.times.length));
+
+    return segs.map(s =>
+      `${s.segNo.padEnd(maxSeg)}  ${s.flightNo.padEnd(maxFlight)}  ${s.date.padEnd(maxDate)}   ${s.route.padEnd(maxRoute)}   ${s.times.padEnd(maxTimes)}`
+    ).join('\n');
   };
 
   const formattedOutput = generateFormattedSummary(parsedSegments);

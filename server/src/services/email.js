@@ -241,7 +241,7 @@ export async function sendEmail({ to, subject, text, html }) {
           const detailsHtml = lines.slice(1).map(line => {
             const trimmedLine = line.trim();
             if (!trimmedLine) return '';
-            return `<div style="color: #dc2626; margin-bottom: 4px; font-weight: bold;">${trimmedLine}</div>`;
+            return `<div style="color: #2563eb; margin-bottom: 4px; font-weight: bold;">${trimmedLine}</div>`;
           }).filter(Boolean).join('');
 
           htmlBlocks.push(`
@@ -311,10 +311,10 @@ export async function sendEmail({ to, subject, text, html }) {
             <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:22px; padding-bottom:20px;">
               <tr>
                 <td align="left" valign="middle" style="padding-bottom:0;">
-                  ${hasLogoHeader ? `<img src="cid:logo_header" alt="Season Travels" class="logo-header" style="height:28px; width:auto;" />` : '<span style="font-size:16px;font-weight:bold;color:#111;">Season Travels</span>'}
+                  ${hasLogoHeader ? `<img src="cid:logo_header" alt="Season Travels" class="logo-header" style="height:40px; width:auto;" />` : '<span style="font-size:16px;font-weight:bold;color:#111;">Season Travels</span>'}
                 </td>
                 <td align="right" valign="middle" style="padding-bottom:0;">
-                  ${hasLogoIata ? `<img src="cid:logo_iata" alt="IATA" class="logo-iata" style="height:24px; width:auto;" />` : ''}
+                  ${hasLogoIata ? `<img src="cid:logo_iata" alt="IATA" class="logo-iata" style="height:48px; width:auto;" />` : ''}
                 </td>
               </tr>
             </table>

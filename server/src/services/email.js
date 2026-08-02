@@ -305,10 +305,10 @@ export async function sendEmail({ to, subject, text, html }) {
       <!-- Card -->
       <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px; background:#ffffff; border-radius:10px; border:1px solid #e8e8ee; box-shadow:0 2px 12px rgba(0,0,0,0.08);">
         <tr>
-          <td class="email-card" style="padding: 28px 30px; font-family: Arial, sans-serif; font-size: 14px; line-height: 1.65; color: #333; box-sizing: border-box;">
+          <td class="email-card" style="padding: 20px 30px 28px 30px; font-family: Arial, sans-serif; font-size: 14px; line-height: 1.65; color: #333; box-sizing: border-box;">
 
             <!-- Header row: brand logo left, IATA right -->
-            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:22px; border-bottom:1px solid #eee; padding-bottom:16px;">
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:22px; padding-bottom:20px;">
               <tr>
                 <td align="left" valign="middle" style="padding-bottom:0;">
                   ${hasLogoHeader ? `<img src="cid:logo_header" alt="Season Travels" class="logo-header" style="height:28px; width:auto;" />` : '<span style="font-size:16px;font-weight:bold;color:#111;">Season Travels</span>'}

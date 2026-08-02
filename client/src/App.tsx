@@ -278,11 +278,11 @@ export default function App() {
             if (item.adminOnly && !isAdmin) return null;
             const isActive = activeTab === item.id;
             return (
-              <button
-                key={item.id}
-                onClick={() => { setView(item.id as View); setSidebarOpen(false); }}
-                className={`sidebar-link${isActive ? ' active' : ''}`}
-              >
+               <button
+                 key={item.id}
+                 onClick={() => { setView(item.id as View); setSidebarOpen(false); setSidebarCollapsed(true); }}
+                 className={`sidebar-link${isActive ? ' active' : ''}`}
+               >
                 {item.logoSrc ? (
                   <span className="link-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18 }}>
                     <img src={item.logoSrc} alt="" style={{ width: 18, height: 18, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />

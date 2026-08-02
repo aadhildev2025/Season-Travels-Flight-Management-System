@@ -111,9 +111,14 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
     return formatCETTime(utcIsoStr);
   };
 
-  const getSLTime = (utcStr: string) => {
+  const getLocalTime = (utcStr: string, tz: string) => {
     if (!utcStr) return '—';
-    return utcToLocalTime(utcStr, 'Asia/Colombo').time;
+    return utcToLocalTime(utcStr, tz || 'Asia/Colombo').time;
+  };
+
+  const getLocationTime = (ticket: Ticket) => {
+    if (!ticket.departureTimeUTC) return '—';
+    return utcToLocalTime(ticket.departureTimeUTC, ticket.originalTimezone).time;
   };
 
   const maskName = (name: string) => {
@@ -131,37 +136,20 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
     return firstPart[0] || '';
   };
 
-  const getCountryName = (code: string): string => {
-    if (!code) return '';
-    const clean = code.trim().toUpperCase();
-    const found = AIRPORTS.find(a => a.code === clean);
-    if (found) return found.country;
-    const fallbackMap: Record<string, string> = {
-      CMB: 'Sri Lanka', ARN: 'Sweden', GOT: 'Sweden', CPH: 'Denmark',
-      ZRH: 'Switzerland', VRN: 'Italy', FCO: 'Italy', OSL: 'Norway',
-      LGW: 'United Kingdom', LHR: 'United Kingdom', CDG: 'France',
-      DXB: 'UAE', DOH: 'Qatar', HEL: 'Finland', SIN: 'Singapore',
-      FRA: 'Germany', SYD: 'Australia', AKL: 'New Zealand', NRT: 'Japan',
-      PEK: 'China', JFK: 'United States', LAX: 'United States',
-    };
-    return fallbackMap[clean] || clean;
-  };
-
   const formatRouteWithCountry = (depCode: string, arrCode: string): string => {
-    const depCountry = getCountryName(depCode);
-    const arrCountry = getCountryName(arrCode);
-    const depStr = depCountry && depCountry !== depCode ? `${depCountry} (${depCode})` : depCode;
-    const arrStr = arrCountry && arrCountry !== arrCode ? `${arrCountry} (${arrCode})` : arrCode;
+    const dep = AIRPORTS.find(a => a.code === depCode.trim().toUpperCase());
+    const arr = AIRPORTS.find(a => a.code === arrCode.trim().toUpperCase());
+    const depStr = dep ? `${dep.code}, ${dep.city}, ${dep.country}` : depCode;
+    const arrStr = arr ? `${arr.code}, ${arr.city}, ${arr.country}` : arrCode;
     return `${depStr} → ${arrStr}`;
   };
 
   const buildReminderMessage = (ticket: Ticket) => {
     const dep = utcToLocalTime(ticket.departureTimeUTC, ticket.originalTimezone);
-    const tzLabel = ticket.originalTimezone.split('/').pop()?.replace('_',' ') || '';
     const routeStr = formatRouteWithCountry(ticket.departureAirport, ticket.arrivalAirport);
     return {
       subject: 'Travel Reminder from SeasonTravels',
-      body: `Dear Passenger,\n\nThis is a reminder for your upcoming flight.\n\nFlight Details:\nBooking Reference: ${ticket.pnr}\nRoute: ${routeStr}\nDeparture: ${dep.formatted} (${tzLabel})\n\nPlease ensure you check in at least 4 hours prior to departure.\nWe wish you a safe and pleasant journey!\n\nWarm regards,\nSEASON TRAVELS`,
+      body: `Dear Passenger,\n\nThis is a reminder for your upcoming flight.\n\nFlight Details:\nBooking Reference: ${ticket.pnr}\nRoute: ${routeStr}\nDeparture: ${dep.formatted}\n\nPlease ensure you check in at least 4 hours prior to departure.\nWe wish you a safe and pleasant journey!\n\nWarm regards,\nSEASON TRAVELS`,
     };
   };
 
@@ -341,7 +329,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                   <th style={{ ...th, width: 68, padding:'4px 6px', whiteSpace:'nowrap' }}>From</th>
                   <th style={{ ...th, width: 64, padding:'4px 6px', whiteSpace:'nowrap' }}>To</th>
                   <th style={{ ...th, width: 40, padding:'4px 2px', color:'var(--indigo2)', whiteSpace:'nowrap' }}>CET</th>
-                  <th style={{ ...th, width: 60, padding:'4px 2px', color:'var(--cyan)', whiteSpace:'nowrap' }}>SLT</th>
+                   <th style={{ ...th, width: 60, padding:'4px 2px', color:'var(--cyan)', whiteSpace:'nowrap' }}>LT</th>
                   <th style={{ ...th, width: 52, padding:'4px 2px', whiteSpace:'nowrap' }}>FN</th>
                   <th style={{ ...th, width: 52, padding:'4px 2px', whiteSpace:'nowrap' }}>PNR</th>
                   <th style={{ ...th, width: 18, padding:'4px 2px', textAlign:'center', whiteSpace:'nowrap' }}>Checkin</th>
@@ -468,10 +456,10 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                         </span>
                       </td>
 
-                      {/* SLT Time */}
+                      {/* LT Time */}
                       <td style={{ ...td, padding:'4px 2px' }}>
                          <span style={{ fontFamily:"'JetBrains Mono',monospace", fontWeight:400, color:'var(--cyan)', fontSize:15 }}>
-                          {getSLTime(ticket.departureTimeUTC)}
+                           {getLocationTime(ticket)}
                         </span>
                       </td>
 

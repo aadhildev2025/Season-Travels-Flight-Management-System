@@ -128,61 +128,63 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
   }, [focusRemarks, editingTicket]);
 
   // ─── Time sync constants ───────────────────────────────────────────────────
-  // "Local Time" field ALWAYS shows SLT (Asia/Colombo), regardless of departure airport.
-  // When FROM = CMB: SLT is primary → auto-computes CET
-  // When FROM ≠ CMB: CET is primary → auto-computes SLT
-  const SLT = 'Asia/Colombo';
+  // "Location Time" field uses the departure airport's timezone.
+  // When CET changes → auto-compute Location time
+  // When Location time changes → auto-compute CET
   const CET = 'Europe/Stockholm';
-  const isCMBDeparture = departureAirport === 'CMB';
+  const depAirportTz = AIRPORTS.find(a => a.code === departureAirport)?.timezone || 'Asia/Colombo';
 
-  // CET Time → always compute SLT from it
+  // CET Time → always compute Location time from departure airport timezone
   const handleCETChange = (val: string) => {
     lastEditedField.current = 'cet';
     setCetTime(val);
     if (autoTime && dipDate && val) {
       const utc = localTimeToUTC(dipDate, val, CET);
-      if (utc) setDipTime(utcToLocalTime(utc, SLT).time);
+      if (utc) setDipTime(utcToLocalTime(utc, depAirportTz).time);
     }
   };
 
-  // Local Time (SLT) → always compute CET from it
+  // Location Time → always compute CET from departure airport timezone
   const handleLocalTimeChange = (val: string) => {
     lastEditedField.current = 'local';
     setDipTime(val);
     if (autoTime && dipDate && val) {
-      const utc = localTimeToUTC(dipDate, val, SLT);
+      const utc = localTimeToUTC(dipDate, val, depAirportTz);
       if (utc) setCetTime(utcToLocalTime(utc, CET).time);
     }
   };
 
-  // Departure Date → re-sync whichever field is primary
+  // Departure Date → re-sync whichever field was last edited
   const handleDateChange = (val: string) => {
     setDipDate(val);
     if (!autoTime || !val) return;
-    const primaryIsLocal = isCMBDeparture || lastEditedField.current === 'local';
+    const primaryIsLocal = lastEditedField.current === 'local';
     if (primaryIsLocal && dipTime) {
-      const utc = localTimeToUTC(val, dipTime, SLT);
+      const utc = localTimeToUTC(val, dipTime, depAirportTz);
       if (utc) setCetTime(utcToLocalTime(utc, CET).time);
     } else if (!primaryIsLocal && cetTime) {
       const utc = localTimeToUTC(val, cetTime, CET);
-      if (utc) setDipTime(utcToLocalTime(utc, SLT).time);
+      if (utc) setDipTime(utcToLocalTime(utc, depAirportTz).time);
     } else if (dipTime) {
-      // fallback: whatever we have in local, compute CET
-      const utc = localTimeToUTC(val, dipTime, SLT);
+      const utc = localTimeToUTC(val, dipTime, depAirportTz);
       if (utc) setCetTime(utcToLocalTime(utc, CET).time);
     } else if (cetTime) {
       const utc = localTimeToUTC(val, cetTime, CET);
-      if (utc) setDipTime(utcToLocalTime(utc, SLT).time);
+      if (utc) setDipTime(utcToLocalTime(utc, depAirportTz).time);
     }
   };
 
+  // When departure airport changes, CET becomes the source of truth
+  useEffect(() => {
+    lastEditedField.current = 'cet';
+  }, [departureAirport]);
+
   // Reactive guard: ensure both fields stay in sync whenever deps change
-  // (handles programmatic updates, e.g. editing existing ticket)
   useEffect(() => {
     if (!autoTime || !dipDate) return;
-    const primaryIsLocal = isCMBDeparture || lastEditedField.current === 'local';
+    const primaryIsLocal = lastEditedField.current === 'local';
     if (primaryIsLocal && dipTime) {
-      const utc = localTimeToUTC(dipDate, dipTime, SLT);
+      const utc = localTimeToUTC(dipDate, dipTime, depAirportTz);
       if (utc) {
         const c = utcToLocalTime(utc, CET).time;
         if (c !== cetTime) setCetTime(c);
@@ -190,33 +192,34 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
     } else if (!primaryIsLocal && cetTime) {
       const utc = localTimeToUTC(dipDate, cetTime, CET);
       if (utc) {
-        const s = utcToLocalTime(utc, SLT).time;
+        const s = utcToLocalTime(utc, depAirportTz).time;
         if (s !== dipTime) setDipTime(s);
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dipDate, dipTime, cetTime, departureAirport, autoTime]);
 
-  // Return ticket: CET Time → auto compute SLT departure time
+  // Return ticket: CET Time → auto compute Location departure time
   const handleReturnCETChange = (val: string) => {
     setReturnCetTime(val);
     if (returnAutoTime && returnDipDate && val) {
+      const returnDepTz = AIRPORTS.find(a => a.code === returnDepAirport)?.timezone || 'Asia/Colombo';
       const utc = localTimeToUTC(returnDipDate, val, 'Europe/Stockholm');
       if (utc) {
-        setReturnDipTime(utcToLocalTime(utc, 'Asia/Colombo').time);
+        setReturnDipTime(utcToLocalTime(utc, returnDepTz).time);
       }
     }
   };
 
-  // Return ticket: SLT departure time → auto compute CET
+  // Return ticket: Location departure time → auto compute CET
   useEffect(() => {
     if (!returnAutoTime || !returnDipDate || !returnDipTime) return;
-    const utc = localTimeToUTC(returnDipDate, returnDipTime, 'Asia/Colombo');
+    const returnDepTz = AIRPORTS.find(a => a.code === returnDepAirport)?.timezone || 'Asia/Colombo';
+    const utc = localTimeToUTC(returnDipDate, returnDipTime, returnDepTz);
     if (utc) setReturnCetTime(utcToLocalTime(utc, 'Europe/Stockholm').time);
-  }, [returnDipDate, returnDipTime, returnAutoTime]);
+  }, [returnDipDate, returnDipTime, returnAutoTime, returnDepAirport]);
 
   // Time diffs
-  const depAirportTz = AIRPORTS.find(a => a.code === departureAirport)?.timezone || '';
   const arrAirportTz = AIRPORTS.find(a => a.code === arrivalAirport)?.timezone || '';
 
   const timeDiffDepCET = (() => {
@@ -286,23 +289,16 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
       returnDepartureTimeUTC: '', returnOriginalTimezone: '',
     };
 
-    // When autoTime is on:
-    //   FROM = CMB → local (SLT) is primary; save as Asia/Colombo
-    //   FROM ≠ CMB → CET is primary; save as Europe/Stockholm using cetTime directly
-    // When autoTime is off → use manual dep airport tz
+    // When autoTime is on: save using departure airport timezone with location time
+    // When autoTime is off: use manual dep airport timezone
     let saveTz: string;
     let topDtu: string | null;
     if (autoTime) {
-      if (isCMBDeparture) {
-        saveTz = SLT;
-        topDtu = localTimeToUTC(dipDate, dipTime, SLT);
-      } else {
-        saveTz = CET;
-        topDtu = localTimeToUTC(dipDate, cetTime, CET);
-      }
+      saveTz = depAirportTz;
+      topDtu = localTimeToUTC(dipDate, dipTime, depAirportTz);
     } else {
-      saveTz = AIRPORTS.find(a => a.code === departureAirport)?.timezone || 'Asia/Colombo';
-      topDtu = localTimeToUTC(dipDate, dipTime, saveTz);
+      saveTz = depAirportTz;
+      topDtu = localTimeToUTC(dipDate, dipTime, depAirportTz);
     }
 
     try {
@@ -606,41 +602,38 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
                </div>
             </div>
 
-             {/* Row: Departure Date + CET Time + Local Time */}
-             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
-              <div>
-                <label style={label}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <CalendarDays size={11} /> Departure Date *
-                  </span>
-                </label>
-                <input className="field" style={err('dipDate')} type="date" value={dipDate}
-                  onChange={e => handleDateChange(e.target.value)} />
-                {errors.dipDate && <span style={{ fontSize: 11, color: 'var(--red)', marginTop: 4, display: 'block' }}>{errors.dipDate}</span>}
-              </div>
-              <div>
-                <label style={{ ...label, color: 'var(--indigo2)' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <Clock3 size={11} /> CET Time * <span style={{ fontSize: 9, opacity: 0.7 }}>(auto-sync)</span>
-                  </span>
-                </label>
-                <input className="field" style={{ ...err('cetTime'), borderColor: cetTime ? 'rgba(165,180,252,0.4)' : undefined }} type="time" value={cetTime}
-                  onChange={e => handleCETChange(e.target.value)} />
-                {errors.cetTime && <span style={{ fontSize: 11, color: 'var(--red)', marginTop: 4, display: 'block' }}>{errors.cetTime}</span>}
-              </div>
-              <div>
-                <label style={label}>
-                  Local Time *
-                  {autoTime 
-                    ? <span style={{ marginLeft: 6, fontWeight: 500, fontSize: 10, opacity: 0.7 }}>(SLT)</span>
-                    : depAirportLabel && <span style={{ marginLeft: 6, fontWeight: 500, fontSize: 10, opacity: 0.7 }}>({depAirportLabel})</span>
-                  }
-                </label>
-                <input className="field" style={err('dipTime')} type="time" value={dipTime}
-                  onChange={e => handleLocalTimeChange(e.target.value)} />
-                {errors.dipTime && <span style={{ fontSize: 11, color: 'var(--red)', marginTop: 4, display: 'block' }}>{errors.dipTime}</span>}
-              </div>
-            </div>
+              {/* Row: Departure Date + CET Time + Location Time */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+               <div>
+                 <label style={label}>
+                   <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                     <CalendarDays size={11} /> Departure Date *
+                   </span>
+                 </label>
+                 <input className="field" style={err('dipDate')} type="date" value={dipDate}
+                   onChange={e => handleDateChange(e.target.value)} />
+                 {errors.dipDate && <span style={{ fontSize: 11, color: 'var(--red)', marginTop: 4, display: 'block' }}>{errors.dipDate}</span>}
+               </div>
+               <div>
+                 <label style={{ ...label, color: 'var(--indigo2)' }}>
+                   <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                     <Clock3 size={11} /> CET Time *
+                   </span>
+                 </label>
+                 <input className="field" style={{ ...err('cetTime'), borderColor: cetTime ? 'rgba(165,180,252,0.4)' : undefined }} type="time" value={cetTime}
+                   onChange={e => handleCETChange(e.target.value)} />
+                 {errors.cetTime && <span style={{ fontSize: 11, color: 'var(--red)', marginTop: 4, display: 'block' }}>{errors.cetTime}</span>}
+               </div>
+               <div>
+                 <label style={label}>
+                   Location Time
+                   {depAirportLabel && <span style={{ marginLeft: 6, fontWeight: 500, fontSize: 10, opacity: 0.7 }}>({depAirportLabel})</span>}
+                 </label>
+                 <input className="field" style={err('dipTime')} type="time" value={dipTime}
+                   onChange={e => handleLocalTimeChange(e.target.value)} />
+                 {errors.dipTime && <span style={{ fontSize: 11, color: 'var(--red)', marginTop: 4, display: 'block' }}>{errors.dipTime}</span>}
+               </div>
+             </div>
 
             {/* Time difference badges */}
             {(timeDiffDepCET || timeDiffDepArr) && (
@@ -693,7 +686,7 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
                <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 600, color: 'var(--text)', cursor: 'pointer' }}>
                  <input type="checkbox" checked={autoTime} onChange={e => setAutoTime(e.target.checked)}
                    style={{ width: 15, height: 15, accentColor: 'var(--indigo)' }} />
-                 Auto Time (CET ↔ Local)
+                  Auto time (CET → Location)
                </label>
 
                {/* Return Ticket checkbox — hidden when editing a return leg or currently in return-leg entry mode */}

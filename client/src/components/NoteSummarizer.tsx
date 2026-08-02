@@ -34,34 +34,55 @@ const SAMPLE_PNR_NOTE = `1  QR 162 T 11SEP 5 CPHDOH HK1       2  0905 1605   788
 
      SEE RTSVC
 
-  4  QR 159 T 09OCT 5 DOHCPH HK1          0840 1405   788 E 0 M`;
+  4  QR 159 T 09OCT 5 DOHCPH HK1          0840 1405   788 E 0 M
+
+  AMADEUS FORMAT EXAMPLE:
+
+  1   QR      4  T  27SEP LHR DOH   1505  2350    SU   388    TLGBP1RE
+  2   QR    664  T  28SEP DOH CMB   0135  0900    MO   789    TLGBP1RE
+  3   QR    659  O  15OCT CMB DOH   0435  0655    TH   788    OLGBP1RE
+  4   QR      7  O  15OCT DOH LHR   0855  1410`;
 
 export const NoteSummarizer: React.FC = () => {
   const [inputText, setInputText] = useState('');
   const [copied, setCopied] = useState(false);
 
-  // Parse GDS flight lines from raw text
+  // Parse GDS and Amadeus flight lines from raw text
   const parseFlightSegments = (text: string): FlightSegment[] => {
     if (!text.trim()) return [];
 
     const lines = text.split(/\r?\n/);
     const segments: FlightSegment[] = [];
 
-    // Common GDS month names
+    // Common month names
     const months = 'JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC';
     
     // Pattern matching standard GDS segment lines:
     // e.g., "1  QR 162 T 11SEP 5 CPHDOH HK1       2  0905 1605   788 E 0 M"
-    // e.g., "2  UL 504 Y 15AUG 6 CMBLHR HK1 1000 1630"
     const gdsRegex = new RegExp(
-      `^\\s*(\\d{1,2})\\s+` +                                     // 1. Seg No (e.g. 1)
-      `([A-Z0-9]{2}\\s*\\d{1,4})` +                               // 2. Flight No (e.g. QR 162)
-      `\\s+[A-Z0-9]{1,2}\\s+` +                                   // Class (e.g. T or Y1)
-      `(\\d{1,2}(?:${months}))` +                                 // 3. Date (e.g. 11SEP)
-      `(?:\\s+\\d)?\\s+` +                                        // Day of week (optional e.g. 5)
+      `^\\s*(\\d{1,2})\\s+` +                                     // 1. Seg No
+      `([A-Z0-9]{2}\\s*\\d{1,4})` +                               // 2. Flight No
+      `\\s+[A-Z0-9]{1,2}\\s+` +                                   // Class
+      `(\\d{1,2}(?:${months}))` +                                 // 3. Date
+      `(?:\\s+\\d)?\\s+` +                                        // Day of week (optional)
       `([A-Z]{6})` +                                             // 4. Route (e.g. CPHDOH)
-      `.*?` +                                                    // Status code & extra spacing (HK1, etc.)
-      `(\\d{4}\\s+\\d{4}(?:\\+\\d)?|\\d{2}:\\d{2}\\s+\\d{2}:\\d{2}(?:\\+\\d)?)`, // 5. Times (e.g. 0905 1605)
+      `.*?` +                                                    // Status code & extra spacing
+      `(\\d{4}\\s+\\d{4}(?:\\+\\d)?|\\d{2}:\\d{2}\\s+\\d{2}:\\d{2}(?:\\+\\d)?)`, // 5. Times
+      'i'
+    );
+
+    // Pattern matching Amadeus segment lines:
+    // e.g., "1   QR      4  T  27SEP LHR DOH   1505  2350    SU   388    TLGBP1RE"
+    const amadeusRegex = new RegExp(
+      `^\\s*(\\d{1,2})\\s+` +                                     // 1. Seg No
+      `([A-Z]{2})\\s+` +                                          // Airline code
+      `(\\d{1,4})\\s+` +                                          // Flight No
+      `[A-Z]{1,2}\\s+` +                                          // Class
+      `(\\d{1,2}(?:${months}))\\s+` +                             // Date
+      `([A-Z]{3})\\s+` +                                          // Departure airport
+      `([A-Z]{3})\\s+` +                                          // Arrival airport
+      `(\\d{4})\\s+` +                                            // Departure time
+      `(\\d{4}(?:\\+\\d)?)`,                                      // Arrival time
       'i'
     );
 
@@ -79,29 +100,45 @@ export const NoteSummarizer: React.FC = () => {
 
       let match = trimmed.match(gdsRegex);
       if (match) {
-        // Standard GDS match
         const segNo = match[1];
         const rawFlight = match[2].toUpperCase();
-        // Ensure space in flight number, e.g. QR162 -> QR 162
         const flightNo = rawFlight.replace(/^([A-Z0-9]{2})(\d+)/, '$1 $2');
         const date = match[3].toUpperCase();
         const route = match[4].toUpperCase();
         const times = match[5].toUpperCase();
 
         segments.push({ segNo, flightNo, date, route, times, rawLine: trimmed });
-      } else {
-        // Try fallback matcher
-        const fallMatch = trimmed.match(fallbackRegex);
-        if (fallMatch) {
-          const segNo = fallMatch[1] || String(autoSegCounter++);
-          const rawFlight = fallMatch[2].toUpperCase();
-          const flightNo = rawFlight.replace(/^([A-Z0-9]{2})(\d+)/, '$1 $2');
-          const date = fallMatch[3].toUpperCase();
-          const route = fallMatch[4].toUpperCase();
-          const times = fallMatch[5].toUpperCase();
+        continue;
+      }
 
-          segments.push({ segNo, flightNo, date, route, times, rawLine: trimmed });
-        }
+      let amadeusMatch = trimmed.match(amadeusRegex);
+      if (amadeusMatch) {
+        const segNo = amadeusMatch[1];
+        const airline = amadeusMatch[2].toUpperCase();
+        const flightNum = amadeusMatch[3].toUpperCase();
+        const flightNo = `${airline} ${flightNum}`;
+        const date = amadeusMatch[4].toUpperCase();
+        const depAirport = amadeusMatch[5].toUpperCase();
+        const arrAirport = amadeusMatch[6].toUpperCase();
+        const depTime = amadeusMatch[7].toUpperCase();
+        const arrTime = amadeusMatch[8].toUpperCase();
+        const route = `${depAirport}${arrAirport}`;
+        const times = `${depTime}  ${arrTime}`;
+
+        segments.push({ segNo, flightNo, date, route, times, rawLine: trimmed });
+        continue;
+      }
+
+      const fallMatch = trimmed.match(fallbackRegex);
+      if (fallMatch) {
+        const segNo = fallMatch[1] || String(autoSegCounter++);
+        const rawFlight = fallMatch[2].toUpperCase();
+        const flightNo = rawFlight.replace(/^([A-Z0-9]{2})(\d+)/, '$1 $2');
+        const date = fallMatch[3].toUpperCase();
+        const route = fallMatch[4].toUpperCase();
+        const times = fallMatch[5].toUpperCase();
+
+        segments.push({ segNo, flightNo, date, route, times, rawLine: trimmed });
       }
     }
 
@@ -165,7 +202,7 @@ export const NoteSummarizer: React.FC = () => {
               AI Note Summarizer
             </h1>
             <p style={{ fontSize: 13, color: 'var(--text2)', margin: 0, marginTop: 2 }}>
-              Paste GDS flight booking notes to automatically extract clean flight details
+              Paste GDS / Amadeus flight booking notes to automatically extract clean flight details
             </p>
           </div>
         </div>
@@ -176,7 +213,7 @@ export const NoteSummarizer: React.FC = () => {
             onClick={handleLoadSample}
             className="btn btn-ghost btn-sm"
             style={{ gap: 6 }}
-            title="Load sample GDS text to try it out"
+            title="Load sample GDS / Amadeus text to try it out"
           >
             <Wand2 size={13} /> Load Sample Note
           </button>
@@ -208,7 +245,7 @@ export const NoteSummarizer: React.FC = () => {
           <textarea
             value={inputText}
             onChange={e => setInputText(e.target.value)}
-            placeholder={`Paste raw GDS flight details here...\n\nExample:\n1  QR 162 T 11SEP 5 CPHDOH HK1       2  0905 1605   788 E 0 M`}
+             placeholder={`Paste raw GDS / Amadeus flight details here...\n\nGDS Example:\n1  QR 162 T 11SEP 5 CPHDOH HK1       2  0905 1605   788 E 0 M\n\nAmadeus Example:\n1   QR      4  T  27SEP LHR DOH   1505  2350    SU   388    TLGBP1RE`}
             style={{
               width: '100%',
               height: 380,
@@ -270,7 +307,7 @@ export const NoteSummarizer: React.FC = () => {
                 No flight details detected yet
               </p>
               <p style={{ fontSize: 11.5, color: 'var(--text3)', margin: 0, marginTop: 4, maxWidth: 280 }}>
-                Paste GDS notes on the left or click <strong>Load Sample Note</strong> above to see instant summarization.
+                Paste GDS / Amadeus notes on the left or click <strong>Load Sample Note</strong> above to see instant summarization.
               </p>
             </div>
           ) : (

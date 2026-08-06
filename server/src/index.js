@@ -5,11 +5,13 @@ import cookieParser from 'cookie-parser';
 import compression from 'compression';
 import { connectDB, isDBReady } from './config/db.js';
 import { seedUsers } from './seed.js';
-import authRoutes     from './routes/auth.js';
-import ticketRoutes   from './routes/tickets.js';
-import staffRoutes    from './routes/staff.js';
-import auditLogRoutes from './routes/auditLogs.js';
-import emailRoutes    from './routes/email.js';
+import authRoutes       from './routes/auth.js';
+import ticketRoutes     from './routes/tickets.js';
+import staffRoutes      from './routes/staff.js';
+import auditLogRoutes   from './routes/auditLogs.js';
+import emailRoutes      from './routes/email.js';
+import credentialRoutes from './routes/credentials.js';
+import spreadsheetRoutes from './routes/spreadsheets.js';
 
 const app  = express();
 app.use(compression());
@@ -68,6 +70,8 @@ apiRouter.use('/tickets',    ticketRoutes);
 apiRouter.use('/staff',      staffRoutes);
 apiRouter.use('/audit-logs', auditLogRoutes);
 apiRouter.use('/email',      emailRoutes);
+apiRouter.use('/credentials', credentialRoutes);
+apiRouter.use('/spreadsheets', spreadsheetRoutes);
 apiRouter.get('/health', async (_req, res) => {
   const ready = await isDBReady();
   res.json({ 

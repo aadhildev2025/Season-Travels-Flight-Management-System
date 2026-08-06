@@ -28,6 +28,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
   const [copiedSurname, setCopiedSurname]     = useState<string | null>(null);
   const [newTicketId, setNewTicketId]         = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing]       = useState(false);
+  const [statusFilter, setStatusFilter]       = useState('All');
   const prevTicketIds = useRef<Set<string>>(new Set());
   const prevTicketsLength = useRef(tickets.length);
   
@@ -86,6 +87,10 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
           return false;
         }
       }
+    }
+
+    if (statusFilter !== 'All' && t.status !== statusFilter) {
+      return false;
     }
 
     if (!debouncedSearch.trim()) return true;
@@ -251,11 +256,35 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
     <div className="fade-up" style={{ display:'flex', flexDirection:'column', gap:14 }}>
 
       {/* Count row & clock */}
-      <div className="page-header" style={{ marginBottom: 4 }}>
+      <div className="page-header" style={{ marginBottom: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontSize:13, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.08em', display:'inline-block', alignSelf:'center' }}>
           {sorted.length} Departure{sorted.length !== 1 ? 's' : ''}
-          {search && <span style={{ marginLeft:8, color:'var(--text3)', fontWeight:500 }}>· filtered</span>}
+          {(search || statusFilter !== 'All') && <span style={{ marginLeft:8, color:'var(--text3)', fontWeight:500 }}>· filtered</span>}
         </span>
+
+        <div className="desktop-only" style={{ alignItems: 'center', gap: 10 }}>
+          <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Status:</label>
+          <select 
+            className="field" 
+            value={statusFilter} 
+            onChange={e => setStatusFilter(e.target.value)}
+            style={{ 
+              width: 190, 
+              padding: '6px 12px', 
+              fontSize: 13, 
+              height: 34, 
+              background: 'var(--surface2)', 
+              borderRadius: 8, 
+              border: '1px solid var(--border)',
+              outline: 'none',
+              cursor: 'pointer'
+            }}
+          >
+            <option value="All">All Statuses</option>
+            <option value="Date Change">Date Change</option>
+            <option value="Additional Packages">Additional Packages</option>
+          </select>
+        </div>
       </div>
 
       {/* Mobile controls section */}
@@ -276,6 +305,27 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
             }}
           />
         </div>
+
+        {/* Status Filter for Mobile */}
+        <select 
+          className="field" 
+          value={statusFilter} 
+          onChange={e => setStatusFilter(e.target.value)}
+          style={{ 
+            width: '100%', 
+            padding: '9px 12px', 
+            fontSize: 12, 
+            background: 'var(--surface)', 
+            borderRadius: 8, 
+            border: '1px solid var(--border)',
+            outline: 'none',
+            cursor: 'pointer'
+          }}
+        >
+          <option value="All">All Statuses</option>
+          <option value="Date Change">Date Change</option>
+          <option value="Additional Packages">Additional Packages</option>
+        </select>
         
         {/* Action buttons */}
         <div style={{ display: 'flex', gap: 8 }}>
@@ -342,7 +392,8 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                   const isToday = formatCETDate(ticket.departureTimeUTC) === todayStr;
                   const isNew = newTicketId === ticket._id;
                   const hasRemark = !!ticket.remarks?.trim();
-                  const isNeedFurtherActions = ticket.status === 'Need Further Actions' && hasRemark;
+                  const isAlertStatus = ['Need Further Actions', 'Date Change', 'Additional Packages'].includes(ticket.status);
+                  const isNeedFurtherActions = isAlertStatus;
 
                   const depTime = ticket.departureTimeUTC ? new Date(ticket.departureTimeUTC) : null;
                   const isNotDepartedYet = depTime ? (new Date().getTime() < depTime.getTime()) : false;
@@ -526,8 +577,8 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                           style={{
                             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                             width: 20, height: 20, borderRadius: 4, padding: 0,
-                            border: hasRemark ? '1.5px solid var(--red)' : '1.5px solid var(--border)',
-                            background: hasRemark ? 'rgba(244,63,94,0.15)' : 'transparent',
+                            border: (hasRemark || isAlertStatus) ? '1.5px solid var(--red)' : '1.5px solid var(--border)',
+                            background: (hasRemark || isAlertStatus) ? 'rgba(244,63,94,0.15)' : 'transparent',
                             cursor: 'pointer', transition: 'all 0.15s',
                           }}
                           onMouseEnter={e => {
@@ -535,11 +586,11 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                             e.currentTarget.style.boxShadow = '0 0 8px rgba(244,63,94,0.2)';
                           }}
                           onMouseLeave={e => {
-                            e.currentTarget.style.borderColor = hasRemark ? 'var(--red)' : 'var(--border)';
+                            e.currentTarget.style.borderColor = (hasRemark || isAlertStatus) ? 'var(--red)' : 'var(--border)';
                             e.currentTarget.style.boxShadow = 'none';
                           }}
                         >
-                          {hasRemark && (
+                          {(hasRemark || isAlertStatus) && (
                             <span style={{ color: 'var(--red)', fontSize: 12, fontWeight: 900, lineHeight: 1 }}>?</span>
                           )}
                         </button>

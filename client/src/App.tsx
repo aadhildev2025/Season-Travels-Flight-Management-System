@@ -6,6 +6,8 @@ import TicketForm from './components/TicketForm';
 import AuditLogs from './components/AuditLogs';
 import Staff from './components/Staff';
 import { NoteSummarizer } from './components/NoteSummarizer';
+import { PasswordCredential } from './components/PasswordCredential';
+import { SpreadsheetConsole } from './components/SpreadsheetConsole';
 import ConfirmDialog from './components/ConfirmDialog';
 import SplashScreen from './components/SplashScreen';
 import HeaderClock from './components/HeaderClock';
@@ -24,12 +26,14 @@ import {
   CheckCircle,
   Sun,
   Moon,
-  Sparkles
+  Sparkles,
+  Lock,
+  Grid
 } from 'lucide-react';
 import logoSrc from './logo/2.png';
 import dashboardLogoSrc from './logo/3.png';
 
-export type View = 'dashboard' | 'ticket-form' | 'audit-logs' | 'profile' | 'staff' | 'note-summarizer';
+export type View = 'dashboard' | 'ticket-form' | 'audit-logs' | 'profile' | 'staff' | 'note-summarizer' | 'password-credential' | 'spreadsheets';
 export type TZ = 'CET' | 'SLT';
 
 export default function App() {
@@ -206,6 +210,8 @@ export default function App() {
   const sidebarNavItems = [
     { id: 'dashboard', label: 'Flight Departure', logoSrc: dashboardLogoSrc },
     { id: 'note-summarizer', label: 'AI Summarization', icon: <Sparkles size={15} /> },
+    { id: 'password-credential', label: 'Password Credential', icon: <Lock size={15} /> },
+    { id: 'spreadsheets', label: 'Spreadsheets', icon: <Grid size={15} /> },
     { id: 'audit-logs', label: 'Audit Logs', icon: <ScrollText size={15} />, adminOnly: true },
     { id: 'staff', label: 'Staff Management', icon: <Users size={15} />, adminOnly: true },
   ];
@@ -499,6 +505,12 @@ export default function App() {
           )}
           {view === 'note-summarizer' && (
             <NoteSummarizer />
+          )}
+          {view === 'password-credential' && (
+            <PasswordCredential />
+          )}
+          {view === 'spreadsheets' && (
+            <SpreadsheetConsole />
           )}
           </div>
         </main>

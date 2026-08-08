@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useSpreadsheetStore, SpreadsheetData, SheetData, CellData, RowData } from '../store/spreadsheetStore';
 import { 
   ArrowLeft, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, 
-  Plus, Trash2, Download, RefreshCw, Type, Save, Grid
+  Plus, Trash2, Download, RefreshCw, Type, Save, Grid, Undo, Redo
 } from 'lucide-react';
 
 interface SpreadsheetEditorProps {
@@ -17,6 +17,14 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
   
+  // Drag selection range state
+  const [selectedRange, setSelectedRange] = useState<{ startRow: number; startCol: number; endRow: number; endCol: number } | null>(null);
+  const [isSelecting, setIsSelecting] = useState(false);
+
+  // Undo / Redo history state stacks
+  const [history, setHistory] = useState<SheetData[][]>([]);
+  const [redoStack, setRedoStack] = useState<SheetData[][]>([]);
+
   // Font Color & Highlight pickers
   const [showColorPicker, setShowColorPicker] = useState<'font' | 'bg' | null>(null);
 
@@ -57,6 +65,34 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     };
   }, []);
 
+  // Global mouseup to terminate cell drag selecting
+  useEffect(() => {
+    const handleMouseUp = () => {
+      setIsSelecting(false);
+    };
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => window.removeEventListener('mouseup', handleMouseUp);
+  }, []);
+
+  // Register Ctrl+Z (Undo) and Ctrl+Y (Redo) keyboard shortcuts
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Avoid keyboard shortcut conflicts when editing inside cell inputs
+      if (isEditing) return;
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        handleUndo();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [history, redoStack, activeSpreadsheet, isEditing]);
+
   if (!activeSpreadsheet) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4 text-center p-8">
@@ -70,6 +106,124 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
 
   const currentSheet = activeSpreadsheet.sheets[activeSheetIdx] || activeSpreadsheet.sheets[0];
   if (!currentSheet) return null;
+
+  // ════════════════════ UNDO / REDO CONTROLS ════════════════════
+
+  // Push current sheet layouts to history stack before changes are made
+  const saveHistoryState = () => {
+    setHistory(prev => [...prev, JSON.parse(JSON.stringify(activeSpreadsheet.sheets))]);
+    setRedoStack([]); // Clear redo stack on new action
+  };
+
+  const handleUndo = () => {
+    if (history.length === 0) return;
+    
+    const prevSheets = history[history.length - 1];
+    const currentSheets = JSON.parse(JSON.stringify(activeSpreadsheet.sheets));
+    
+    setRedoStack(prev => [...prev, currentSheets]);
+    setHistory(prev => prev.slice(0, -1));
+    
+    const updated: SpreadsheetData = {
+      ...activeSpreadsheet,
+      sheets: prevSheets
+    };
+    setActiveSpreadsheet(updated);
+    triggerAutosave(updated);
+  };
+
+  const handleRedo = () => {
+    if (redoStack.length === 0) return;
+    
+    const nextSheets = redoStack[redoStack.length - 1];
+    const currentSheets = JSON.parse(JSON.stringify(activeSpreadsheet.sheets));
+    
+    setHistory(prev => [...prev, currentSheets]);
+    setRedoStack(prev => prev.slice(0, -1));
+    
+    const updated: SpreadsheetData = {
+      ...activeSpreadsheet,
+      sheets: nextSheets
+    };
+    setActiveSpreadsheet(updated);
+    triggerAutosave(updated);
+  };
+
+  // ════════════════════ MERGED CELLS ENGINE ════════════════════
+
+  // Check if a cell is part of any merge range
+  const getMergeCell = (row: number, col: number) => {
+    const merges = (currentSheet as any).merges || [];
+    return merges.find((m: any) => 
+      row >= m.startRow && row <= m.endRow && 
+      col >= m.startCol && col <= m.endCol
+    ) || null;
+  };
+
+  // Skip rendering this cell if it's inside a merge block but NOT the top-left root cell
+  const shouldSkipCell = (row: number, col: number) => {
+    const merge = getMergeCell(row, col);
+    if (!merge) return false;
+    return !(row === merge.startRow && col === merge.startCol);
+  };
+
+  // Expand a selection range to completely wrap any merged cells it intersects with
+  const expandRangeWithMerges = (range: { startRow: number; startCol: number; endRow: number; endCol: number }) => {
+    let expanded = { ...range };
+    let changed = true;
+    const merges = (currentSheet as any).merges || [];
+
+    while (changed) {
+      changed = false;
+      const minRow = Math.min(expanded.startRow, expanded.endRow);
+      const maxRow = Math.max(expanded.startRow, expanded.endRow);
+      const minCol = Math.min(expanded.startCol, expanded.endCol);
+      const maxCol = Math.max(expanded.startCol, expanded.endCol);
+
+      for (const m of merges) {
+        const intersect = !(
+          maxRow < m.startRow || minRow > m.endRow ||
+          maxCol < m.startCol || minCol > m.endCol
+        );
+
+        if (intersect) {
+          const newMinRow = Math.min(minRow, m.startRow);
+          const newMaxRow = Math.max(maxRow, m.endRow);
+          const newMinCol = Math.min(minCol, m.startCol);
+          const newMaxCol = Math.max(maxCol, m.endCol);
+
+          if (newMinRow !== minRow || newMaxRow !== maxRow || newMinCol !== minCol || newMaxCol !== maxCol) {
+            expanded = {
+              startRow: newMinRow,
+              startCol: newMinCol,
+              endRow: newMaxRow,
+              endCol: newMaxCol
+            };
+            changed = true;
+          }
+        }
+      }
+    }
+    return expanded;
+  };
+
+  const setSelectedRangeExpanded = (range: { startRow: number; startCol: number; endRow: number; endCol: number } | null) => {
+    if (!range) {
+      setSelectedRange(null);
+      return;
+    }
+    setSelectedRange(expandRangeWithMerges(range));
+  };
+
+  // Check if cell falls inside the highlighted selection range
+  const isCellInSelection = (row: number, col: number) => {
+    if (!selectedRange) return false;
+    const minRow = Math.min(selectedRange.startRow, selectedRange.endRow);
+    const maxRow = Math.max(selectedRange.startRow, selectedRange.endRow);
+    const minCol = Math.min(selectedRange.startCol, selectedRange.endCol);
+    const maxCol = Math.max(selectedRange.startCol, selectedRange.endCol);
+    return row >= minRow && row <= maxRow && col >= minCol && col <= maxCol;
+  };
 
   // ════════════════════ FORMULA ENGINE ════════════════════
 
@@ -103,16 +257,17 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
   function evaluateCell(value: string, sheet: SheetData, visited: Set<string> = new Set()): string {
     if (!value.startsWith('=')) return value;
     
-    const formulaStr = value.substring(1).toUpperCase().trim();
-    if (visited.has(formulaStr)) return '#CIRCULAR!'; // Simple circular reference detection
+    let formulaStr = value.substring(1).toUpperCase().trim();
+    if (visited.has(formulaStr)) return '#CIRCULAR!';
     visited.add(formulaStr);
     
     try {
-      // 1. Math functions: SUM, AVERAGE, COUNT, MIN, MAX
-      const match = formulaStr.match(/^([A-Z]+)\((.+)\)$/);
-      if (match) {
-        const funcName = match[1];
-        const argsStr = match[2];
+      // 1. Math functions with ranges: SUM, AVERAGE, COUNT, MIN, MAX (e.g. SUM(A1:B3) or SUM (A1:B3))
+      // Supports optional spacing between function name and parameters
+      const funcMatch = formulaStr.match(/^([A-Z]+)\s*\(([^)]+)\)$/);
+      if (funcMatch) {
+        const funcName = funcMatch[1];
+        const argsStr = funcMatch[2];
         let cells: CellData[] = [];
         
         if (argsStr.includes(':')) {
@@ -171,39 +326,28 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
         }
       }
       
-      // 2. Simple arithmetic like A1+B1, A1-B1, etc.
-      const arithmeticMatch = formulaStr.match(/^([A-Z]+\d+)\s*([\+\-\*\/])\s*([A-Z]+\d+)$/);
-      if (arithmeticMatch) {
-        const cellRef1 = arithmeticMatch[1];
-        const op = arithmeticMatch[2];
-        const cellRef2 = arithmeticMatch[3];
+      // 2. Upgraded general math evaluator (supports A1+B1+C1, A1*10, etc.)
+      const cellRefRegex = /\b([A-Z]+)(\d+)\b/g;
+      
+      let expr = formulaStr;
+      expr = expr.replace(cellRefRegex, (ref, colLabel, rowStr) => {
+        const rowIdx = parseInt(rowStr, 10) - 1;
+        const colIdx = colLabelToIndex(colLabel);
+        const cell = sheet.rows[rowIdx]?.cells[colIdx];
+        if (!cell) return '0';
         
-        const val1Str = getCellValueByRef(cellRef1, sheet);
-        const val2Str = getCellValueByRef(cellRef2, sheet);
-        
-        const v1 = parseFloat(val1Str.startsWith('=') ? evaluateCell(val1Str, sheet, new Set(visited)) : val1Str);
-        const v2 = parseFloat(val2Str.startsWith('=') ? evaluateCell(val2Str, sheet, new Set(visited)) : val2Str);
-        
-        if (isNaN(v1) || isNaN(v2)) return '#VALUE!';
-        
-        if (op === '+') return (v1 + v2).toString();
-        if (op === '-') return (v1 - v2).toString();
-        if (op === '*') return (v1 * v2).toString();
-        if (op === '/') return v2 !== 0 ? (v1 / v2).toString() : '#DIV/0!';
+        const valStr = cell.value.startsWith('=') ? evaluateCell(cell.value, sheet, new Set(visited)) : cell.value;
+        const num = parseFloat(valStr);
+        return isNaN(num) ? '0' : num.toString();
+      });
+      
+      // Safely evaluate math expression containing numbers and basic operators (+, -, *, /, (, ))
+      if (/^[0-9.+\-*/()\s]+$/.test(expr)) {
+        const result = new Function(`return (${expr})`)();
+        if (result === Infinity || result === -Infinity) return '#DIV/0!';
+        return typeof result === 'number' && !isNaN(result) ? result.toString() : '#ERROR!';
       }
       
-      // 3. Single cell reference like =A1
-      const singleRefMatch = formulaStr.match(/^([A-Z]+\d+)$/);
-      if (singleRefMatch) {
-        const ref = singleRefMatch[1];
-        const valStr = getCellValueByRef(ref, sheet);
-        return valStr.startsWith('=') ? evaluateCell(valStr, sheet, new Set(visited)) : valStr;
-      }
-      
-      // 4. Raw number evaluate
-      const num = parseFloat(formulaStr);
-      if (!isNaN(num)) return num.toString();
-
       return '#ERROR!';
     } catch (e) {
       return '#ERROR!';
@@ -218,16 +362,83 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     return cell.value;
   };
 
+  const getSelectionStats = () => {
+    if (!selectedRange) return null;
+    
+    const minRow = Math.min(selectedRange.startRow, selectedRange.endRow);
+    const maxRow = Math.max(selectedRange.startRow, selectedRange.endRow);
+    const minCol = Math.min(selectedRange.startCol, selectedRange.endCol);
+    const maxCol = Math.max(selectedRange.startCol, selectedRange.endCol);
+    
+    let numbers: number[] = [];
+    let count = 0;
+    
+    for (let r = minRow; r <= maxRow; r++) {
+      const row = currentSheet.rows[r];
+      if (!row) continue;
+      for (let c = minCol; c <= maxCol; c++) {
+        const cell = row.cells[c];
+        if (cell && cell.value.trim() !== '') {
+          count++;
+          const valStr = cell.value.startsWith('=') ? evaluateCell(cell.value, currentSheet) : cell.value;
+          const num = parseFloat(valStr);
+          if (!isNaN(num)) {
+            numbers.push(num);
+          }
+        }
+      }
+    }
+    
+    if (numbers.length === 0) {
+      if (count > 0) {
+        return { count };
+      }
+      return null;
+    }
+    
+    const sum = numbers.reduce((a, b) => a + b, 0);
+    const avg = parseFloat((sum / numbers.length).toFixed(2));
+    const min = Math.min(...numbers);
+    const max = Math.max(...numbers);
+    
+    return {
+      sum,
+      avg,
+      count,
+      min,
+      max
+    };
+  };
+
   // ════════════════════ ACTIONS & EDITING ════════════════════
 
-  const handleCellSelect = (rowIdx: number, colIdx: number) => {
+  // Cell Drag Selection mouse down
+  const handleCellMouseDown = (rowIdx: number, colIdx: number, e: React.MouseEvent) => {
+    if (e.button !== 0) return; // Only left clicks
     if (isEditing) {
       saveCellEdit();
     }
+
+    setIsSelecting(true);
     setSelectedCell({ row: rowIdx, col: colIdx });
+    
+    const range = { startRow: rowIdx, startCol: colIdx, endRow: rowIdx, endCol: colIdx };
+    setSelectedRangeExpanded(range);
+
     const cell = currentSheet.rows[rowIdx]?.cells[colIdx];
     setEditValue(cell ? cell.value : '');
     setIsEditing(false);
+  };
+
+  // Cell Drag Selection mouse enter hover
+  const handleCellMouseEnter = (rowIdx: number, colIdx: number) => {
+    if (!isSelecting || !selectedRange) return;
+    const range = {
+      ...selectedRange,
+      endRow: rowIdx,
+      endCol: colIdx
+    };
+    setSelectedRangeExpanded(range);
   };
 
   const handleCellDoubleClick = (rowIdx: number, colIdx: number) => {
@@ -240,7 +451,8 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
 
   const saveCellEdit = () => {
     if (!selectedCell) return;
-    // Deep-clone so we never mutate the store's live object references
+    saveHistoryState(); // Save undo checkpoint
+
     const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
     const sheet = updated.sheets[activeSheetIdx];
 
@@ -261,35 +473,111 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     triggerAutosave(updated);
   };
 
+  // Format all selected cells in current selectedRange
   const updateCellFormatting = (formatter: (cell: CellData) => CellData) => {
-    if (!selectedCell) return;
-    // Deep-clone to avoid mutating shared nested arrays in the store
+    if (!selectedRange) return;
+    saveHistoryState(); // Save undo checkpoint
+
     const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
     const sheet = updated.sheets[activeSheetIdx];
 
-    const row = sheet.rows[selectedCell.row];
-    if (row) {
-      const cell = row.cells[selectedCell.col] || {
-        value: '', bold: false, italic: false, underline: false,
-        fontSize: 14, fontFamily: 'sans-serif', backgroundColor: '', fontColor: '', align: 'left'
-      };
-      row.cells[selectedCell.col] = formatter(cell);
+    const minRow = Math.min(selectedRange.startRow, selectedRange.endRow);
+    const maxRow = Math.max(selectedRange.startRow, selectedRange.endRow);
+    const minCol = Math.min(selectedRange.startCol, selectedRange.endCol);
+    const maxCol = Math.max(selectedRange.startCol, selectedRange.endCol);
+
+    for (let r = minRow; r <= maxRow; r++) {
+      const row = sheet.rows[r];
+      if (row) {
+        for (let c = minCol; c <= maxCol; c++) {
+          const cell = row.cells[c] || {
+            value: '', bold: false, italic: false, underline: false,
+            fontSize: 14, fontFamily: 'sans-serif', backgroundColor: '', fontColor: '', align: 'left'
+          };
+          row.cells[c] = formatter(cell);
+        }
+      }
     }
 
     setActiveSpreadsheet(updated);
     triggerAutosave(updated);
   };
 
-  // Cell Navigation
+  // ════════════════════ MERGE CELLS ACTIONS ════════════════════
+
+  const mergeSelectedCells = () => {
+    if (!selectedRange) return;
+    saveHistoryState(); // Save undo checkpoint
+
+    const minRow = Math.min(selectedRange.startRow, selectedRange.endRow);
+    const maxRow = Math.max(selectedRange.startRow, selectedRange.endRow);
+    const minCol = Math.min(selectedRange.startCol, selectedRange.endCol);
+    const maxCol = Math.max(selectedRange.startCol, selectedRange.endCol);
+
+    if (minRow === maxRow && minCol === maxCol) return; // Need at least 2 cells
+
+    const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
+    const sheet = updated.sheets[activeSheetIdx] as any;
+    if (!sheet.merges) sheet.merges = [];
+
+    // Clear values of non-top-left cells inside the merge range
+    for (let r = minRow; r <= maxRow; r++) {
+      for (let c = minCol; c <= maxCol; c++) {
+        if (r === minRow && c === minCol) continue;
+        if (sheet.rows[r]?.cells[c]) {
+          sheet.rows[r].cells[c].value = '';
+        }
+      }
+    }
+
+    sheet.merges.push({
+      startRow: minRow,
+      startCol: minCol,
+      endRow: maxRow,
+      endCol: maxCol
+    });
+
+    setActiveSpreadsheet(updated);
+    triggerAutosave(updated);
+  };
+
+  const unmergeSelectedCells = () => {
+    if (!selectedRange) return;
+    saveHistoryState(); // Save undo checkpoint
+
+    const minRow = Math.min(selectedRange.startRow, selectedRange.endRow);
+    const maxRow = Math.max(selectedRange.startRow, selectedRange.endRow);
+    const minCol = Math.min(selectedRange.startCol, selectedRange.endCol);
+    const maxCol = Math.max(selectedRange.startCol, selectedRange.endCol);
+
+    const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
+    const sheet = updated.sheets[activeSheetIdx] as any;
+    if (!sheet.merges) return;
+
+    // Filter out intersecting merges
+    sheet.merges = sheet.merges.filter((m: any) => {
+      const intersect = !(
+        maxRow < m.startRow || minRow > m.endRow ||
+        maxCol < m.startCol || minCol > m.endCol
+      );
+      return !intersect;
+    });
+
+    setActiveSpreadsheet(updated);
+    triggerAutosave(updated);
+  };
+
+  // Keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!selectedCell) return;
     
     if (isEditing) {
       if (e.key === 'Enter') {
         saveCellEdit();
-        // Move selection down
         if (selectedCell.row < currentSheet.rows.length - 1) {
-          setSelectedCell({ ...selectedCell, row: selectedCell.row + 1 });
+          const next = { row: selectedCell.row + 1, col: selectedCell.col };
+          setSelectedCell(next);
+          setSelectedRangeExpanded({ startRow: next.row, startCol: next.col, endRow: next.row, endCol: next.col });
         }
       } else if (e.key === 'Escape') {
         const cell = currentSheet.rows[selectedCell.row]?.cells[selectedCell.col];
@@ -337,7 +625,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
         handled = true;
         break;
       default:
-        // If user starts typing without double clicking
+        // Key type trigger
         if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
           setEditValue(e.key);
           setIsEditing(true);
@@ -349,17 +637,62 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
 
     if (handled) {
       setSelectedCell({ row: nextRow, col: nextCol });
+      setSelectedRangeExpanded({ startRow: nextRow, startCol: nextCol, endRow: nextRow, endCol: nextCol });
       const cell = currentSheet.rows[nextRow]?.cells[nextCol];
       setEditValue(cell ? cell.value : '');
     }
   };
 
-  // Active cell properties
   const activeCell = selectedCell ? currentSheet.rows[selectedCell.row]?.cells[selectedCell.col] : null;
+
+  // ════════════════════ HEADER CLICKS FOR ROW/COL SELECTION ════════════════════
+
+  // Click column header label to select entire column
+  const handleColHeaderMouseDown = (colIdx: number, e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    setIsSelecting(true);
+    const numRows = currentSheet.rows.length;
+    setSelectedCell({ row: 0, col: colIdx });
+    
+    const range = { startRow: 0, startCol: colIdx, endRow: numRows - 1, endCol: colIdx };
+    setSelectedRangeExpanded(range);
+  };
+
+  const handleColHeaderMouseEnter = (colIdx: number) => {
+    if (!isSelecting || !selectedRange) return;
+    const numRows = currentSheet.rows.length;
+    const range = {
+      ...selectedRange,
+      endCol: colIdx,
+      endRow: numRows - 1
+    };
+    setSelectedRangeExpanded(range);
+  };
+
+  // Click row header label to select entire row
+  const handleRowHeaderMouseDown = (rowIdx: number, e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    setIsSelecting(true);
+    const numCols = currentSheet.rows[0]?.cells.length || 15;
+    setSelectedCell({ row: rowIdx, col: 0 });
+
+    const range = { startRow: rowIdx, startCol: 0, endRow: rowIdx, endCol: numCols - 1 };
+    setSelectedRangeExpanded(range);
+  };
+
+  const handleRowHeaderMouseEnter = (rowIdx: number) => {
+    if (!isSelecting || !selectedRange) return;
+    const numCols = currentSheet.rows[0]?.cells.length || 15;
+    const range = {
+      ...selectedRange,
+      endRow: rowIdx,
+      endCol: numCols - 1
+    };
+    setSelectedRangeExpanded(range);
+  };
 
   // ════════════════════ DRAG RESIZE LIFECYCLE ════════════════════
 
-  // Columns
   const handleColResizeStart = (e: React.MouseEvent, colIdx: number) => {
     e.preventDefault();
     e.stopPropagation();
@@ -396,7 +729,6 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     };
   }, [resizingColIdx, startX, startWidth]);
 
-  // Rows
   const handleRowResizeStart = (e: React.MouseEvent, rowIdx: number) => {
     e.preventDefault();
     e.stopPropagation();
@@ -436,6 +768,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
   // ════════════════════ MULTI-SHEET TABS ════════════════════
 
   const handleAddSheet = () => {
+    saveHistoryState(); // Save undo checkpoint
     const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
     const num = updated.sheets.length + 1;
     
@@ -455,12 +788,14 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     setActiveSpreadsheet(updated);
     setActiveSheetIdx(updated.sheets.length - 1);
     setSelectedCell(null);
+    setSelectedRange(null);
     triggerAutosave(updated);
   };
 
   const handleDeleteSheet = (idx: number, e: React.MouseEvent) => {
     e.stopPropagation();
     if (activeSpreadsheet.sheets.length <= 1) return;
+    saveHistoryState(); // Save undo checkpoint
 
     const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
     updated.sheets.splice(idx, 1);
@@ -468,6 +803,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     setActiveSpreadsheet(updated);
     setActiveSheetIdx(Math.max(0, idx - 1));
     setSelectedCell(null);
+    setSelectedRange(null);
     triggerAutosave(updated);
   };
 
@@ -478,6 +814,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
 
   const handleSaveRenameSheet = () => {
     if (editingTabIdx === null || !editTabName.trim()) return;
+    saveHistoryState(); // Save undo checkpoint
     const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
     updated.sheets[editingTabIdx].name = editTabName.trim();
     setActiveSpreadsheet(updated);
@@ -489,6 +826,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
 
   const insertRow = (above = true) => {
     if (!selectedCell) return;
+    saveHistoryState(); // Save undo checkpoint
     const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
     const sheet = updated.sheets[activeSheetIdx];
     const targetIdx = above ? selectedCell.row : selectedCell.row + 1;
@@ -504,27 +842,33 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
 
     sheet.rows.splice(targetIdx, 0, newRow);
     setActiveSpreadsheet(updated);
-    setSelectedCell({ row: targetIdx, col: selectedCell.col });
+    
+    const next = { row: targetIdx, col: selectedCell.col };
+    setSelectedCell(next);
+    setSelectedRangeExpanded({ startRow: next.row, startCol: next.col, endRow: next.row, endCol: next.col });
     triggerAutosave(updated);
   };
 
   const deleteRow = () => {
     if (!selectedCell) return;
+    saveHistoryState(); // Save undo checkpoint
     const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
     const sheet = updated.sheets[activeSheetIdx];
     if (sheet.rows.length <= 1) return;
 
     sheet.rows.splice(selectedCell.row, 1);
     setActiveSpreadsheet(updated);
-    setSelectedCell({
-      row: Math.min(selectedCell.row, sheet.rows.length - 1),
-      col: selectedCell.col
-    });
+    
+    const nextRowIdx = Math.min(selectedCell.row, sheet.rows.length - 1);
+    const next = { row: nextRowIdx, col: selectedCell.col };
+    setSelectedCell(next);
+    setSelectedRangeExpanded({ startRow: next.row, startCol: next.col, endRow: next.row, endCol: next.col });
     triggerAutosave(updated);
   };
 
   const insertColumn = (left = true) => {
     if (!selectedCell) return;
+    saveHistoryState(); // Save undo checkpoint
     const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
     const sheet = updated.sheets[activeSheetIdx];
     const targetIdx = left ? selectedCell.col : selectedCell.col + 1;
@@ -541,12 +885,16 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     }
 
     setActiveSpreadsheet(updated);
-    setSelectedCell({ row: selectedCell.row, col: targetIdx });
+    
+    const next = { row: selectedCell.row, col: targetIdx };
+    setSelectedCell(next);
+    setSelectedRangeExpanded({ startRow: next.row, startCol: next.col, endRow: next.row, endCol: next.col });
     triggerAutosave(updated);
   };
 
   const deleteColumn = () => {
     if (!selectedCell) return;
+    saveHistoryState(); // Save undo checkpoint
     const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
     const sheet = updated.sheets[activeSheetIdx];
     const numCols = sheet.rows[0]?.cells.length || 0;
@@ -561,10 +909,11 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     }
 
     setActiveSpreadsheet(updated);
-    setSelectedCell({
-      row: selectedCell.row,
-      col: Math.min(selectedCell.col, numCols - 2)
-    });
+    
+    const nextColIdx = Math.min(selectedCell.col, numCols - 2);
+    const next = { row: selectedCell.row, col: nextColIdx };
+    setSelectedCell(next);
+    setSelectedRangeExpanded({ startRow: next.row, startCol: next.col, endRow: next.row, endCol: next.col });
     triggerAutosave(updated);
   };
 
@@ -576,7 +925,6 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     currentSheet.rows.forEach((row) => {
       const rowData = row.cells.map((cell) => {
         const val = getDisplayValue(cell);
-        // Escape quotes
         return `"${val.replace(/"/g, '""')}"`;
       });
       csvContent += rowData.join(",") + "\r\n";
@@ -592,14 +940,38 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 80px)', background: 'var(--bg2)', borderRadius: 16, border: '1px solid var(--border)', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 128px)', background: 'var(--bg2)', borderRadius: 16, border: '1px solid var(--border)', overflow: 'hidden' }}>
       
       {/* ════════════════════ TOOLBAR ════════════════════ */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '10px 16px', background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '10px 16px', background: 'var(--surface)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         
         <button onClick={onBack} className="btn btn-ghost btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px' }}>
           <ArrowLeft size={14} /> Back
         </button>
+
+        <div style={{ height: 20, width: 1, background: 'var(--border)' }} />
+
+        {/* Undo / Redo Buttons */}
+        <div style={{ display: 'flex', gap: 2 }}>
+          <button 
+            onClick={handleUndo} 
+            disabled={history.length === 0}
+            className="btn btn-ghost btn-sm" 
+            style={{ padding: 4, minWidth: 24, height: 24 }}
+            title="Undo (Ctrl+Z)"
+          >
+            <Undo size={14} />
+          </button>
+          <button 
+            onClick={handleRedo} 
+            disabled={redoStack.length === 0}
+            className="btn btn-ghost btn-sm" 
+            style={{ padding: 4, minWidth: 24, height: 24 }}
+            title="Redo (Ctrl+Y)"
+          >
+            <Redo size={14} />
+          </button>
+        </div>
 
         <div style={{ height: 20, width: 1, background: 'var(--border)' }} />
 
@@ -776,6 +1148,42 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
           )}
         </div>
 
+        {/* Merge / Unmerge Cells in Toolbar */}
+        {selectedRange && (
+          <>
+            <div style={{ height: 20, width: 1, background: 'var(--border)' }} />
+            {((currentSheet as any).merges || []).some((m: any) => {
+              const minRow = Math.min(selectedRange.startRow, selectedRange.endRow);
+              const maxRow = Math.max(selectedRange.startRow, selectedRange.endRow);
+              const minCol = Math.min(selectedRange.startCol, selectedRange.endCol);
+              const maxCol = Math.max(selectedRange.startCol, selectedRange.endCol);
+              return !(maxRow < m.startRow || minRow > m.endRow || maxCol < m.startCol || minCol > m.endCol);
+            }) ? (
+              <button
+                onClick={unmergeSelectedCells}
+                className="btn btn-sm btn-ghost"
+                style={{ fontSize: 11, gap: 4, color: 'var(--indigo)' }}
+                title="Unmerge selected cells"
+              >
+                Unmerge
+              </button>
+            ) : (
+              <button
+                onClick={mergeSelectedCells}
+                disabled={
+                  Math.min(selectedRange.startRow, selectedRange.endRow) === Math.max(selectedRange.startRow, selectedRange.endRow) &&
+                  Math.min(selectedRange.startCol, selectedRange.endCol) === Math.max(selectedRange.startCol, selectedRange.endCol)
+                }
+                className="btn btn-sm btn-ghost"
+                style={{ fontSize: 11, gap: 4 }}
+                title="Merge selected cells"
+              >
+                Merge
+              </button>
+            )}
+          </>
+        )}
+
         <div style={{ height: 20, width: 1, background: 'var(--border)' }} />
 
         {/* Row/Col Modifiers */}
@@ -838,7 +1246,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
       </div>
 
       {/* ════════════════════ FORMULA BAR ════════════════════ */}
-      <div style={{ display: 'flex', alignItems: 'center', padding: '6px 16px', background: 'var(--surface2)', borderBottom: '1px solid var(--border)', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', padding: '6px 16px', background: 'var(--surface2)', borderBottom: '1px solid var(--border)', gap: 8, flexShrink: 0 }}>
         <div style={{ 
           fontSize: 11, fontWeight: 700, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, 
           padding: '2px 8px', minWidth: 46, textAlign: 'center', color: 'var(--indigo)' 
@@ -852,10 +1260,17 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
           disabled={!selectedCell}
           value={isEditing ? editValue : (activeCell?.value || '')}
           onChange={(e) => {
-            // Only update local edit state — the actual cell write + save
-            // happens once on blur/Enter via saveCellEdit, not per keystroke.
             setEditValue(e.target.value);
             setIsEditing(true);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              saveCellEdit();
+              gridContainerRef.current?.focus(); // Focus back to grid
+            } else if (e.key === 'Escape') {
+              setIsEditing(false);
+              gridContainerRef.current?.focus();
+            }
           }}
           placeholder="Enter values, text or formulas (e.g. =SUM(A1:B3), =A1+B1)"
           style={{ 
@@ -870,7 +1285,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
       {/* ════════════════════ EXCEL GRID ════════════════════ */}
       <div 
         ref={gridContainerRef}
-        style={{ flex: 1, overflow: 'auto', background: 'var(--bg)' }}
+        style={{ flex: 1, minHeight: 0, overflow: 'auto', background: 'var(--bg)' }}
         onKeyDown={handleKeyDown}
         tabIndex={0}
       >
@@ -895,11 +1310,13 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                 return (
                   <th 
                     key={colIdx} 
+                    onMouseDown={(e) => handleColHeaderMouseDown(colIdx, e)}
+                    onMouseEnter={() => handleColHeaderMouseEnter(colIdx)}
                     style={{ 
                       width: colWidth, height: 26, background: isColActive ? 'rgba(99, 102, 241, 0.08)' : 'var(--surface)', 
                       color: isColActive ? 'var(--indigo)' : 'var(--text2)', fontWeight: isColActive ? 800 : 500, fontSize: 11,
                       borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)',
-                      position: 'sticky', top: 0, zIndex: 5, userSelect: 'none'
+                      position: 'sticky', top: 0, zIndex: 5, userSelect: 'none', cursor: 'col-resize'
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', position: 'relative' }}>
@@ -911,7 +1328,8 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                         style={{ 
                           position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize',
                           background: resizingColIdx === colIdx ? 'var(--indigo)' : 'transparent',
-                          transition: 'background-color 0.15s'
+                          transition: 'background-color 0.15s',
+                          zIndex: 6
                         }}
                         onMouseEnter={(e) => e.currentTarget.style.background = 'var(--indigo)'}
                         onMouseLeave={(e) => {
@@ -935,12 +1353,16 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                 <tr key={rowIdx}>
                   
                   {/* Row Index Header */}
-                  <td style={{ 
-                    width: 45, height: rowHeight, background: isRowActive ? 'rgba(99, 102, 241, 0.08)' : 'var(--surface)', 
-                    color: isRowActive ? 'var(--indigo)' : 'var(--text2)', fontWeight: isRowActive ? 800 : 500, fontSize: 11,
-                    borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)',
-                    position: 'sticky', left: 0, zIndex: 5, userSelect: 'none', display: 'table-cell', verticalAlign: 'middle', textAlign: 'center'
-                  }}>
+                  <td 
+                    onMouseDown={(e) => handleRowHeaderMouseDown(rowIdx, e)}
+                    onMouseEnter={() => handleRowHeaderMouseEnter(rowIdx)}
+                    style={{ 
+                      width: 45, height: rowHeight, background: isRowActive ? 'rgba(99, 102, 241, 0.08)' : 'var(--surface)', 
+                      color: isRowActive ? 'var(--indigo)' : 'var(--text2)', fontWeight: isRowActive ? 800 : 500, fontSize: 11,
+                      borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)',
+                      position: 'sticky', left: 0, zIndex: 5, userSelect: 'none', display: 'table-cell', verticalAlign: 'middle', textAlign: 'center', cursor: 'row-resize'
+                    }}
+                  >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', position: 'relative' }}>
                       {rowIdx + 1}
                       
@@ -950,7 +1372,8 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                         style={{ 
                           position: 'absolute', bottom: 0, left: 0, right: 0, height: 4, cursor: 'row-resize',
                           background: resizingRowIdx === rowIdx ? 'var(--indigo)' : 'transparent',
-                          transition: 'background-color 0.15s'
+                          transition: 'background-color 0.15s',
+                          zIndex: 6
                         }}
                         onMouseEnter={(e) => e.currentTarget.style.background = 'var(--indigo)'}
                         onMouseLeave={(e) => {
@@ -962,21 +1385,71 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
 
                   {/* Grid Cells */}
                   {row.cells.map((cell, colIdx) => {
+                    // Skip rendering cells that are part of a merge range (except the top-left root cell)
+                    if (shouldSkipCell(rowIdx, colIdx)) {
+                      return null;
+                    }
+
                     const isSelected = selectedCell?.row === rowIdx && selectedCell?.col === colIdx;
-                    const colWidth = currentSheet.colWidths?.[colIdx] || 120;
+                    const inSel = isCellInSelection(rowIdx, colIdx);
+                    
+                    const merge = getMergeCell(rowIdx, colIdx);
+                    const isMergeRoot = merge && rowIdx === merge.startRow && colIdx === merge.startCol;
+                    const rowSpan = isMergeRoot ? (merge.endRow - merge.startRow + 1) : undefined;
+                    const colSpan = isMergeRoot ? (merge.endCol - merge.startCol + 1) : undefined;
+
+                    // Calculate column widths in merged cell
+                    let colWidth = 0;
+                    if (merge) {
+                      for (let c = merge.startCol; c <= merge.endCol; c++) {
+                        colWidth += currentSheet.colWidths?.[c] || 120;
+                      }
+                    } else {
+                      colWidth = currentSheet.colWidths?.[colIdx] || 120;
+                    }
+
+                    // Calculate row heights in merged cell
+                    let calculatedRowHeight = 0;
+                    if (merge) {
+                      for (let r = merge.startRow; r <= merge.endRow; r++) {
+                        calculatedRowHeight += currentSheet.rows[r]?.height || 30;
+                      }
+                    } else {
+                      calculatedRowHeight = rowHeight;
+                    }
+
+                    // Setup borders for selection boundary outlining
+                    let borderTop = '1px solid var(--border)';
+                    let borderBottom = '1px solid var(--border)';
+                    let borderLeft = '1px solid var(--border)';
+                    let borderRight = '1px solid var(--border)';
+
+                    if (inSel && selectedRange) {
+                      const minRow = Math.min(selectedRange.startRow, selectedRange.endRow);
+                      const maxRow = Math.max(selectedRange.startRow, selectedRange.endRow);
+                      const minCol = Math.min(selectedRange.startCol, selectedRange.endCol);
+                      const maxCol = Math.max(selectedRange.startCol, selectedRange.endCol);
+
+                      if (rowIdx === minRow) borderTop = '2px solid var(--indigo)';
+                      if (rowIdx === maxRow) borderBottom = '2px solid var(--indigo)';
+                      if (colIdx === minCol) borderLeft = '2px solid var(--indigo)';
+                      if (colIdx === maxCol) borderRight = '2px solid var(--indigo)';
+                    }
                     
                     const cellStyle: React.CSSProperties = {
                       width: colWidth,
-                      height: rowHeight,
-                      borderRight: '1px solid var(--border)',
-                      borderBottom: '1px solid var(--border)',
+                      height: calculatedRowHeight,
+                      borderTop,
+                      borderBottom,
+                      borderLeft,
+                      borderRight,
                       padding: '4px 8px',
                       fontSize: `${cell.fontSize || 14}px`,
                       fontFamily: cell.fontFamily || 'sans-serif',
                       fontWeight: cell.bold ? 'bold' : 'normal',
                       fontStyle: cell.italic ? 'italic' : 'normal',
                       textDecoration: cell.underline ? 'underline' : 'none',
-                      backgroundColor: isSelected ? 'rgba(99, 102, 241, 0.05)' : (cell.backgroundColor || 'transparent'),
+                      backgroundColor: isSelected ? 'rgba(99, 102, 241, 0.05)' : (inSel ? 'rgba(99, 102, 241, 0.12)' : (cell.backgroundColor || 'transparent')),
                       color: cell.fontColor || 'var(--text)',
                       textAlign: cell.align || 'left',
                       verticalAlign: 'middle',
@@ -994,7 +1467,10 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                       <td 
                         key={colIdx} 
                         style={cellStyle}
-                        onClick={() => handleCellSelect(rowIdx, colIdx)}
+                        rowSpan={rowSpan}
+                        colSpan={colSpan}
+                        onMouseDown={(e) => handleCellMouseDown(rowIdx, colIdx, e)}
+                        onMouseEnter={() => handleCellMouseEnter(rowIdx, colIdx)}
                         onDoubleClick={() => handleCellDoubleClick(rowIdx, colIdx)}
                       >
                         {isSelected && isEditing ? (
@@ -1028,7 +1504,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
       </div>
 
       {/* ════════════════════ BOTTOM TABS / SHEETS ════════════════════ */}
-      <div style={{ display: 'flex', alignItems: 'center', background: 'var(--surface)', borderTop: '1px solid var(--border)', padding: '4px 16px', gap: 6, overflowX: 'auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', background: 'var(--surface)', borderTop: '1px solid var(--border)', padding: '4px 16px', gap: 6, overflowX: 'auto', flexShrink: 0 }}>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginRight: 8 }}>
           {activeSpreadsheet.sheets.map((sheet, idx) => {
@@ -1041,6 +1517,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                 onClick={() => {
                   setActiveSheetIdx(idx);
                   setSelectedCell(null);
+                  setSelectedRange(null);
                   setIsEditing(false);
                 }}
                 onDoubleClick={() => handleStartRenameSheet(idx)}
@@ -1097,8 +1574,35 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
           <Plus size={14} />
         </button>
 
+        {/* Selection Calculations Bar */}
+        {(() => {
+          const stats = getSelectionStats();
+          if (!stats) return null;
+          return (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              marginRight: 20,
+              fontSize: 11,
+              fontWeight: 700,
+              color: 'var(--indigo)',
+              background: 'rgba(99, 102, 241, 0.08)',
+              padding: '4px 12px',
+              borderRadius: 6,
+              border: '1px solid rgba(99, 102, 241, 0.2)'
+            }}>
+              {stats.sum !== undefined && <span>SUM: {stats.sum}</span>}
+              {stats.avg !== undefined && <span>AVG: {stats.avg}</span>}
+              <span>COUNT: {stats.count}</span>
+              {stats.min !== undefined && <span>MIN: {stats.min}</span>}
+              {stats.max !== undefined && <span>MAX: {stats.max}</span>}
+            </div>
+          );
+        })()}
+
         <div style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text3)', fontWeight: 600 }}>
-          Double-click tab to rename • Double-click cell to edit
+          Click & Drag cells to select range • Double-click cell to edit • Click header label to select whole row/col
         </div>
 
       </div>

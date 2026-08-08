@@ -46,6 +46,7 @@ const SAMPLE_PNR_NOTE = `1  QR 162 T 11SEP 5 CPHDOH HK1       2  0905 1605   788
 export const NoteSummarizer: React.FC = () => {
   const [inputText, setInputText] = useState('');
   const [copied, setCopied] = useState(false);
+  const [inputCopied, setInputCopied] = useState(false);
 
   // Parse GDS and Amadeus flight lines from raw text
   const parseFlightSegments = (text: string): FlightSegment[] => {
@@ -176,6 +177,19 @@ export const NoteSummarizer: React.FC = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleCopyInput = async () => {
+    if (!inputText) return;
+
+    try {
+      await navigator.clipboard.writeText(inputText);
+    } catch {
+      // clipboard write failed silently
+    }
+
+    setInputCopied(true);
+    setTimeout(() => setInputCopied(false), 2000);
+  };
+
   const handleLoadSample = () => {
     setInputText(SAMPLE_PNR_NOTE);
   };
@@ -217,15 +231,6 @@ export const NoteSummarizer: React.FC = () => {
           >
             <Wand2 size={13} /> Load Sample Note
           </button>
-          {inputText && (
-            <button
-              onClick={handleClear}
-              className="btn btn-ghost btn-sm"
-              style={{ gap: 6, color: 'var(--red)' }}
-            >
-              <Trash2 size={13} /> Clear
-            </button>
-          )}
         </div>
       </div>
 
@@ -233,13 +238,52 @@ export const NoteSummarizer: React.FC = () => {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20 }}>
         {/* Left Pane: Input Text Area */}
         <div className="card" style={{ display: 'flex', flexDirection: 'column', padding: 18, background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}>
               <FileText size={15} style={{ color: 'var(--indigo)' }} /> Paste Raw Booking Note / GDS Text
             </span>
-            <span style={{ fontSize: 11, color: 'var(--text3)' }}>
-              {inputText.length > 0 ? `${inputText.length} characters` : 'Empty'}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, color: 'var(--text3)', marginRight: 2 }}>
+                {inputText.length > 0 ? `${inputText.length} characters` : 'Empty'}
+              </span>
+              <button
+                onClick={handleCopyInput}
+                disabled={!inputText}
+                className="btn btn-ghost btn-sm"
+                style={{
+                  gap: 5,
+                  padding: '3px 8px',
+                  fontSize: 11,
+                  opacity: inputText ? 1 : 0.4,
+                  cursor: inputText ? 'pointer' : 'not-allowed',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+                title="Copy raw text to clipboard"
+              >
+                {inputCopied ? <Check size={12} style={{ color: 'var(--green)' }} /> : <Copy size={12} />}
+                {inputCopied ? 'Copied!' : 'Copy'}
+              </button>
+              <button
+                onClick={handleClear}
+                disabled={!inputText}
+                className="btn btn-ghost btn-sm"
+                style={{
+                  gap: 5,
+                  padding: '3px 8px',
+                  fontSize: 11,
+                  color: inputText ? 'var(--red)' : 'var(--text3)',
+                  opacity: inputText ? 1 : 0.4,
+                  cursor: inputText ? 'pointer' : 'not-allowed',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+                title="Clear input text"
+              >
+                <Trash2 size={12} />
+                Clear
+              </button>
+            </div>
           </div>
 
           <textarea

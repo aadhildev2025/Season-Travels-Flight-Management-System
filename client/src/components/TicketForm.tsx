@@ -681,7 +681,7 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
                    <option>No Need Further Actions</option>
                    <option>Need Further Actions</option>
                    <option>Date Change</option>
-                   <option>Additional Packages</option>
+                   <option>Extra Baggage</option>
                  </select>
               </div>
               <div>

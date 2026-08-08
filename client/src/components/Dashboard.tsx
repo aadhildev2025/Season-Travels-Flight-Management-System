@@ -282,7 +282,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
           >
             <option value="All">All Statuses</option>
             <option value="Date Change">Date Change</option>
-            <option value="Additional Packages">Additional Packages</option>
+            <option value="Extra Baggage">Extra Baggage</option>
           </select>
         </div>
       </div>
@@ -324,7 +324,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
         >
           <option value="All">All Statuses</option>
           <option value="Date Change">Date Change</option>
-          <option value="Additional Packages">Additional Packages</option>
+          <option value="Extra Baggage">Extra Baggage</option>
         </select>
         
         {/* Action buttons */}
@@ -392,7 +392,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                   const isToday = formatCETDate(ticket.departureTimeUTC) === todayStr;
                   const isNew = newTicketId === ticket._id;
                   const hasRemark = !!ticket.remarks?.trim();
-                  const isAlertStatus = ['Need Further Actions', 'Date Change', 'Additional Packages'].includes(ticket.status);
+                  const isAlertStatus = ['Need Further Actions', 'Date Change', 'Extra Baggage'].includes(ticket.status);
                   const isNeedFurtherActions = isAlertStatus;
 
                   const depTime = ticket.departureTimeUTC ? new Date(ticket.departureTimeUTC) : null;

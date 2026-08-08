@@ -5,6 +5,7 @@ const credentialSchema = new mongoose.Schema({
   username: { type: String, default: '' },
   password: { type: String, required: true },
   notes: { type: String, default: '' },
+  folder: { type: String, default: 'Notes' },
   createdBy: { type: String, default: null },
 }, { timestamps: true });
 
@@ -33,6 +34,7 @@ export async function createCredential(data) {
     username: data.username || '',
     password: data.password,
     notes: data.notes || '',
+    folder: data.folder || 'Notes',
     createdBy: data.createdBy ? String(data.createdBy) : null,
   });
   return formatCredential(doc);
@@ -44,6 +46,7 @@ export async function updateCredential(id, data) {
   if (data.username !== undefined) updateData.username = data.username;
   if (data.password !== undefined) updateData.password = data.password;
   if (data.notes !== undefined) updateData.notes = data.notes;
+  if (data.folder !== undefined) updateData.folder = data.folder;
 
   const doc = await Credential.findByIdAndUpdate(id, updateData, { returnDocument: 'after' });
   return doc ? formatCredential(doc) : null;
@@ -63,6 +66,7 @@ function formatCredential(doc) {
     username: obj.username || '',
     password: obj.password,
     notes: obj.notes || '',
+    folder: obj.folder || 'Notes',
     createdBy: obj.createdBy || null,
     createdAt: obj.createdAt,
     updatedAt: obj.updatedAt,

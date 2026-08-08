@@ -16,7 +16,7 @@ router.get('/', requireAuth, async (req, res) => {
 
 router.post('/', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { title, username, password, notes } = req.body;
+    const { title, username, password, notes, folder } = req.body;
     if (!title || !password) {
       return res.status(400).json({ error: 'Title and password are required' });
     }
@@ -26,6 +26,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
       username,
       password,
       notes,
+      folder,
       createdBy: req.user.userId,
     });
 
@@ -38,7 +39,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
 
 router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { title, username, password, notes } = req.body;
+    const { title, username, password, notes, folder } = req.body;
     const credential = await CredentialModel.findCredentialById(req.params.id);
     if (!credential) {
       return res.status(404).json({ error: 'Credential not found' });
@@ -49,6 +50,7 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       username,
       password,
       notes,
+      folder,
     });
 
     return res.json({ credential: updated, success: true });

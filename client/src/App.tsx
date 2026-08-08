@@ -28,7 +28,8 @@ import {
   Moon,
   Sparkles,
   Lock,
-  Grid
+  Grid,
+  FileText
 } from 'lucide-react';
 import logoSrc from './logo/2.png';
 import dashboardLogoSrc from './logo/3.png';
@@ -210,7 +211,7 @@ export default function App() {
   const sidebarNavItems = [
     { id: 'dashboard', label: 'Flight Departure', logoSrc: dashboardLogoSrc },
     { id: 'note-summarizer', label: 'AI Summarization', icon: <Sparkles size={15} /> },
-    { id: 'password-credential', label: 'Password Credential', icon: <Lock size={15} /> },
+    { id: 'password-credential', label: 'Notepad', icon: <FileText size={15} /> },
     { id: 'spreadsheets', label: 'Spreadsheets', icon: <Grid size={15} /> },
     { id: 'audit-logs', label: 'Audit Logs', icon: <ScrollText size={15} />, adminOnly: true },
     { id: 'staff', label: 'Staff Management', icon: <Users size={15} />, adminOnly: true },
@@ -219,6 +220,8 @@ export default function App() {
   const activeTab = view === 'ticket-form' ? 'dashboard' : view;
   const pageTitle = view === 'ticket-form'
     ? (editingTicket ? 'Edit Departure Ticket' : 'Add Departure Ticket')
+    : view === 'password-credential'
+    ? 'Notepad'
     : view === 'dashboard'
       ? (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
@@ -476,7 +479,7 @@ export default function App() {
         </header>
 
         {/* ════════════════════ MAIN CONTENT AREA ════════════════════ */}
-        <main className="main-content-area" style={{ flex: 1, position: 'relative', overflow: view === 'ticket-form' ? 'hidden' : 'visible' }}>
+        <main className="main-content-area" style={{ flex: 1, position: 'relative', overflow: (view === 'ticket-form' || view === 'spreadsheets') ? 'hidden' : 'visible' }}>
           <div key={view} className="view-transition" style={{ height: '100%' }}>
           {view === 'dashboard' && (
             <Dashboard 

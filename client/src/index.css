@@ -64,9 +64,9 @@
   --border-glow: rgba(99, 102, 241, 0.2);
 
   /* ── Text ── */
-  --text: #0f172a;
-  --text2: #475569;
-  --text3: #94a3b8;
+  --text: #09090b;
+  --text2: #18181b;
+  --text3: #3f3f46;
 
   /* ── Accents ── */
   --indigo: #4f46e5;
@@ -578,14 +578,26 @@ button {
 
 .btn-ghost {
   background: rgba(255, 255, 255, 0.03);
-  color: var(--text2);
+  color: var(--text);
   border: 1px solid var(--border);
 }
 
 .btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.08);
   color: var(--text);
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+[data-theme="light"] .btn-ghost {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--text);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="light"] .btn-ghost:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: #000000;
+  border-color: rgba(0, 0, 0, 0.22);
 }
 
 .btn-sm {
@@ -1738,3 +1750,24 @@ button {
   border-color: var(--red);
   color: var(--red);
 }
+
+/* ═══════════════════════════════════════════════════════
+   TOPBAR BUTTONS — Always light on the dark chrome
+   ═══════════════════════════════════════════════════════ */
+
+/* Keep topbar btn-ghost readable against the always-dark topbar */
+.topbar .btn-ghost {
+  background: rgba(255,255,255,0.07);
+  color: #eaeaf5;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+
+.topbar .btn-ghost:hover {
+  background: rgba(255,255,255,0.13);
+  color: #ffffff;
+  border-color: rgba(255,255,255,0.22);
+}
+
+.audit-row:hover {
+  background: rgba(99, 102, 241, 0.08) !important;
+}

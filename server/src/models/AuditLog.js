@@ -28,10 +28,24 @@ export async function createAuditLog(data) {
   return formatAuditLog(log);
 }
 
-export async function findAllAuditLogs(skip = 0, limit = 50) {
+export async function findAllAuditLogs(skip = 0, limit = 50, search = '') {
+  let query = {};
+  if (search) {
+    const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    query = {
+      $or: [
+        { target: regex },
+        { details: regex },
+        { userName: regex },
+        { userEmail: regex },
+        { action: regex },
+      ],
+    };
+  }
+
   const [logs, total] = await Promise.all([
-    AuditLog.find().sort({ createdAt: -1 }).skip(skip).limit(limit),
-    AuditLog.countDocuments(),
+    AuditLog.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
+    AuditLog.countDocuments(query),
   ]);
 
   return {

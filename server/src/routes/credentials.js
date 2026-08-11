@@ -37,6 +37,20 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
+router.put('/reorder', requireAuth, async (req, res) => {
+  try {
+    const { orderedIds } = req.body;
+    if (!Array.isArray(orderedIds)) {
+      return res.status(400).json({ error: 'orderedIds array required' });
+    }
+    await CredentialModel.updateCredentialPositions(orderedIds);
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('Reorder credentials error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { title, username, password, notes, folder } = req.body;

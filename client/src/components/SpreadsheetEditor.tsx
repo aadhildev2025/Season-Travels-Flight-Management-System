@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useSpreadsheetStore, SpreadsheetData, SheetData, CellData, RowData } from '../store/spreadsheetStore';
 import { 
   ArrowLeft, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, 
-  Plus, Trash2, Download, RefreshCw, Type, Save, Grid, Undo, Redo
+  Plus, Trash2, Download, RefreshCw, Type, Save, Grid, Undo, Redo, FileText
 } from 'lucide-react';
 
 interface SpreadsheetEditorProps {
@@ -17,9 +17,10 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
   
-  // Drag selection range state
+  // Drag selection range state & cursor position tracking
   const [selectedRange, setSelectedRange] = useState<{ startRow: number; startCol: number; endRow: number; endCol: number } | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
+  const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Undo / Redo history state stacks
   const [history, setHistory] = useState<SheetData[][]>([]);
@@ -65,13 +66,20 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     };
   }, []);
 
-  // Global mouseup to terminate cell drag selecting
+  // Global mouseup to terminate cell drag selecting & mousemove for cursor tracking
   useEffect(() => {
     const handleMouseUp = () => {
       setIsSelecting(false);
     };
+    const handleMouseMove = (e: MouseEvent) => {
+      setMousePos({ x: e.clientX, y: e.clientY });
+    };
     window.addEventListener('mouseup', handleMouseUp);
-    return () => window.removeEventListener('mouseup', handleMouseUp);
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => {
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('mousemove', handleMouseMove);
+    };
   }, []);
 
   // Register Ctrl+Z (Undo) and Ctrl+Y (Redo) keyboard shortcuts
@@ -939,6 +947,68 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     document.body.removeChild(link);
   };
 
+  // ════════════════════ PDF EXPORT ════════════════════
+
+  const handleExportPDF = async () => {
+    try {
+      const { default: jsPDF } = await import('jspdf');
+      const { default: autoTable } = await import('jspdf-autotable');
+      const { applySeasonTravelsWatermark } = await import('../utils/pdfWatermark');
+
+      const maxCols = currentSheet.rows[0]?.cells.length || 10;
+      const colHeaders: string[] = [];
+      for (let c = 0; c < maxCols; c++) {
+        colHeaders.push(indexToColLabel(c));
+      }
+
+      const bodyRows = currentSheet.rows.map((row) => {
+        return row.cells.map((cell) => getDisplayValue(cell));
+      });
+
+      let lastNonEmptyRowIdx = bodyRows.length - 1;
+      while (lastNonEmptyRowIdx >= 0 && bodyRows[lastNonEmptyRowIdx].every(v => !v || v.trim() === '')) {
+        lastNonEmptyRowIdx--;
+      }
+      const trimmedBody = bodyRows.slice(0, Math.max(lastNonEmptyRowIdx + 1, 5));
+
+      let maxNonEmptyCol = colHeaders.length - 1;
+      while (maxNonEmptyCol >= 3 && trimmedBody.every(row => !row[maxNonEmptyCol] || row[maxNonEmptyCol].trim() === '')) {
+        maxNonEmptyCol--;
+      }
+      const finalHeaders = colHeaders.slice(0, maxNonEmptyCol + 1);
+      const finalBody = trimmedBody.map(row => row.slice(0, maxNonEmptyCol + 1));
+
+      const doc = new jsPDF({ orientation: finalHeaders.length > 7 ? 'landscape' : 'portrait' });
+
+      autoTable(doc, {
+        startY: 24,
+        head: [finalHeaders],
+        body: finalBody,
+        styles: {
+          fontSize: 9,
+          cellPadding: 4,
+          textColor: [30, 41, 59],
+        },
+        headStyles: {
+          fillColor: [15, 23, 42],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          fontSize: 9.5,
+        },
+        alternateRowStyles: {
+          fillColor: [248, 250, 252],
+        },
+      });
+
+      applySeasonTravelsWatermark(doc, `${activeSpreadsheet.title} - ${currentSheet.name}`);
+
+      const dateStr = new Date().toISOString().slice(0, 10);
+      doc.save(`${activeSpreadsheet.title}_${currentSheet.name}_${dateStr}.pdf`);
+    } catch (err) {
+      console.error('PDF export failed:', err);
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 128px)', background: 'var(--bg2)', borderRadius: 16, border: '1px solid var(--border)', overflow: 'hidden' }}>
       
@@ -977,7 +1047,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
 
         {/* Font Family Selector */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <Type size={14} style={{ color: 'var(--text2)' }} />
+          <Type size={14} style={{ color: 'var(--text)' }} />
           <select 
             value={activeCell?.fontFamily || 'sans-serif'} 
             onChange={(e) => updateCellFormatting(c => ({ ...c, fontFamily: e.target.value }))}
@@ -1227,13 +1297,16 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
         </div>
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
-          {/* Export CSV */}
+          {/* Export CSV & PDF */}
           <button onClick={handleExportCSV} className="btn btn-ghost btn-sm" style={{ gap: 4 }}>
             <Download size={13} /> Export CSV
           </button>
+          <button onClick={handleExportPDF} className="btn btn-ghost btn-sm" style={{ gap: 4, color: 'var(--red)', borderColor: 'rgba(239,68,68,0.25)' }}>
+            <FileText size={13} /> Export PDF
+          </button>
 
           {/* Save Status indicator */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text2)', fontWeight: 600 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text)', fontWeight: 600 }}>
             {saveStatus === 'Saving...' ? (
               <RefreshCw size={11} className="spin" style={{ color: 'var(--indigo)' }} />
             ) : (
@@ -1253,7 +1326,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
         }}>
           {selectedCell ? `${indexToColLabel(selectedCell.col)}${selectedCell.row + 1}` : '—'}
         </div>
-        <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text2)', fontFamily: 'monospace' }}>fx</div>
+        <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text)', fontFamily: 'monospace' }}>fx</div>
         <input 
           ref={formulaInputRef}
           type="text" 
@@ -1314,7 +1387,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                     onMouseEnter={() => handleColHeaderMouseEnter(colIdx)}
                     style={{ 
                       width: colWidth, height: 26, background: isColActive ? 'rgba(99, 102, 241, 0.08)' : 'var(--surface)', 
-                      color: isColActive ? 'var(--indigo)' : 'var(--text2)', fontWeight: isColActive ? 800 : 500, fontSize: 11,
+                      color: isColActive ? 'var(--indigo)' : 'var(--text)', fontWeight: isColActive ? 800 : 600, fontSize: 11,
                       borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)',
                       position: 'sticky', top: 0, zIndex: 5, userSelect: 'none', cursor: 'col-resize'
                     }}
@@ -1358,7 +1431,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                     onMouseEnter={() => handleRowHeaderMouseEnter(rowIdx)}
                     style={{ 
                       width: 45, height: rowHeight, background: isRowActive ? 'rgba(99, 102, 241, 0.08)' : 'var(--surface)', 
-                      color: isRowActive ? 'var(--indigo)' : 'var(--text2)', fontWeight: isRowActive ? 800 : 500, fontSize: 11,
+                      color: isRowActive ? 'var(--indigo)' : 'var(--text)', fontWeight: isRowActive ? 800 : 600, fontSize: 11,
                       borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)',
                       position: 'sticky', left: 0, zIndex: 5, userSelect: 'none', display: 'table-cell', verticalAlign: 'middle', textAlign: 'center', cursor: 'row-resize'
                     }}
@@ -1418,7 +1491,13 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                       calculatedRowHeight = rowHeight;
                     }
 
-                    // Setup borders for selection boundary outlining
+                    // Setup bounds for border & outline calculations
+                    const cellStartRow = merge ? merge.startRow : rowIdx;
+                    const cellEndRow = merge ? merge.endRow : rowIdx;
+                    const cellStartCol = merge ? merge.startCol : colIdx;
+                    const cellEndCol = merge ? merge.endCol : colIdx;
+
+                    // Setup borders for selection boundary outlining and merged cell outline
                     let borderTop = '1px solid var(--border)';
                     let borderBottom = '1px solid var(--border)';
                     let borderLeft = '1px solid var(--border)';
@@ -1430,10 +1509,10 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                       const minCol = Math.min(selectedRange.startCol, selectedRange.endCol);
                       const maxCol = Math.max(selectedRange.startCol, selectedRange.endCol);
 
-                      if (rowIdx === minRow) borderTop = '2px solid var(--indigo)';
-                      if (rowIdx === maxRow) borderBottom = '2px solid var(--indigo)';
-                      if (colIdx === minCol) borderLeft = '2px solid var(--indigo)';
-                      if (colIdx === maxCol) borderRight = '2px solid var(--indigo)';
+                      if (cellStartRow === minRow) borderTop = '2px solid var(--indigo)';
+                      if (cellEndRow === maxRow) borderBottom = '2px solid var(--indigo)';
+                      if (cellStartCol === minCol) borderLeft = '2px solid var(--indigo)';
+                      if (cellEndCol === maxCol) borderRight = '2px solid var(--indigo)';
                     }
                     
                     const cellStyle: React.CSSProperties = {
@@ -1443,24 +1522,25 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                       borderBottom,
                       borderLeft,
                       borderRight,
+                      boxShadow: merge ? 'inset 0 0 0 1.5px #000000' : 'none',
                       padding: '4px 8px',
                       fontSize: `${cell.fontSize || 14}px`,
                       fontFamily: cell.fontFamily || 'sans-serif',
                       fontWeight: cell.bold ? 'bold' : 'normal',
                       fontStyle: cell.italic ? 'italic' : 'normal',
                       textDecoration: cell.underline ? 'underline' : 'none',
-                      backgroundColor: isSelected ? 'rgba(99, 102, 241, 0.05)' : (inSel ? 'rgba(99, 102, 241, 0.12)' : (cell.backgroundColor || 'transparent')),
+                      backgroundColor: isSelected ? 'rgba(99, 102, 241, 0.08)' : (inSel ? 'rgba(99, 102, 241, 0.12)' : (cell.backgroundColor || 'transparent')),
                       color: cell.fontColor || 'var(--text)',
                       textAlign: cell.align || 'left',
                       verticalAlign: 'middle',
-                      outline: isSelected ? '2px solid var(--indigo)' : 'none',
+                      outline: isSelected && !merge ? '2px solid var(--indigo)' : 'none',
                       outlineOffset: -2,
                       cursor: 'cell',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
-                      position: isSelected ? 'relative' : 'static',
-                      zIndex: isSelected ? 4 : 'auto'
+                      position: isSelected || merge ? 'relative' : 'static',
+                      zIndex: isSelected ? 4 : (merge ? 3 : 'auto')
                     };
 
                     return (
@@ -1524,7 +1604,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                 style={{ 
                   display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', 
                   background: isActive ? 'var(--bg2)' : 'rgba(255,255,255,0.02)',
-                  color: isActive ? 'var(--indigo)' : 'var(--text2)', 
+                  color: isActive ? 'var(--indigo)' : 'var(--text)', 
                   fontWeight: isActive ? 700 : 500, fontSize: 12,
                   borderTopLeftRadius: 6, borderTopRightRadius: 6, 
                   border: isActive ? '1px solid var(--border)' : '1px solid transparent',
@@ -1601,11 +1681,54 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
           );
         })()}
 
-        <div style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text3)', fontWeight: 600 }}>
+        <div style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text2)', fontWeight: 600 }}>
           Click & Drag cells to select range • Double-click cell to edit • Click header label to select whole row/col
         </div>
 
       </div>
+
+      {/* ════════════════════ CURSOR FLOATING STATS POPUP ════════════════════ */}
+      {(() => {
+        if (!selectedRange) return null;
+        const stats = getSelectionStats();
+        if (!stats) return null;
+
+        // Position popup nicely near the cursor with viewport clamping
+        const popX = Math.min(window.innerWidth - 420, Math.max(10, mousePos.x + 16));
+        const popY = Math.min(window.innerHeight - 60, Math.max(10, mousePos.y + 16));
+
+        return (
+          <div style={{
+            position: 'fixed',
+            left: popX,
+            top: popY,
+            zIndex: 99999,
+            pointerEvents: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            padding: '6px 14px',
+            borderRadius: 10,
+            background: 'var(--surface2)',
+            border: '1px solid rgba(99, 102, 241, 0.4)',
+            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
+            backdropFilter: 'blur(10px)',
+            color: 'var(--indigo2)',
+            fontSize: 11.5,
+            fontWeight: 800,
+            fontFamily: "'JetBrains Mono', monospace",
+            whiteSpace: 'nowrap',
+            letterSpacing: '0.02em',
+            transition: 'opacity 0.15s ease'
+          }} className="fade-in">
+            {stats.sum !== undefined && <span>SUM: {stats.sum}</span>}
+            {stats.avg !== undefined && <span>AVG: {stats.avg}</span>}
+            <span>COUNT: {stats.count}</span>
+            {stats.min !== undefined && <span>MIN: {stats.min}</span>}
+            {stats.max !== undefined && <span>MAX: {stats.max}</span>}
+          </div>
+        );
+      })()}
 
     </div>
   );

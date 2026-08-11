@@ -6,16 +6,17 @@ const credentialSchema = new mongoose.Schema({
   password: { type: String, required: true },
   notes: { type: String, default: '' },
   folder: { type: String, default: 'Notes' },
+  position: { type: Number, default: 0 },
   createdBy: { type: String, default: null },
 }, { timestamps: true });
 
 credentialSchema.index({ title: 1 });
-credentialSchema.index({ createdAt: -1 });
+credentialSchema.index({ position: 1, createdAt: -1 });
 
 export const Credential = mongoose.models.Credential || mongoose.model('Credential', credentialSchema);
 
 export async function findAllCredentials() {
-  const docs = await Credential.find().sort({ createdAt: -1 });
+  const docs = await Credential.find().sort({ position: 1, createdAt: -1 });
   return docs.map(formatCredential);
 }
 
@@ -35,6 +36,7 @@ export async function createCredential(data) {
     password: data.password,
     notes: data.notes || '',
     folder: data.folder || 'Notes',
+    position: data.position !== undefined ? data.position : 0,
     createdBy: data.createdBy ? String(data.createdBy) : null,
   });
   return formatCredential(doc);
@@ -47,9 +49,22 @@ export async function updateCredential(id, data) {
   if (data.password !== undefined) updateData.password = data.password;
   if (data.notes !== undefined) updateData.notes = data.notes;
   if (data.folder !== undefined) updateData.folder = data.folder;
+  if (data.position !== undefined) updateData.position = data.position;
 
   const doc = await Credential.findByIdAndUpdate(id, updateData, { returnDocument: 'after' });
   return doc ? formatCredential(doc) : null;
+}
+
+export async function updateCredentialPositions(orderedIds = []) {
+  if (!Array.isArray(orderedIds) || orderedIds.length === 0) return true;
+  const bulkOps = orderedIds.map((id, index) => ({
+    updateOne: {
+      filter: { _id: id },
+      update: { $set: { position: index } },
+    },
+  }));
+  await Credential.bulkWrite(bulkOps);
+  return true;
 }
 
 export async function deleteCredential(id) {
@@ -67,6 +82,7 @@ function formatCredential(doc) {
     password: obj.password,
     notes: obj.notes || '',
     folder: obj.folder || 'Notes',
+    position: obj.position !== undefined ? obj.position : 0,
     createdBy: obj.createdBy || null,
     createdAt: obj.createdAt,
     updatedAt: obj.updatedAt,

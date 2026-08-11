@@ -59,6 +59,20 @@ export async function findTicketById(id) {
   }
 }
 
+export async function findTicketByPnr(pnr) {
+  try {
+    if (!pnr) return null;
+    const cleanPnr = String(pnr).trim();
+    const regex = new RegExp(`^${cleanPnr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    const doc = await Ticket.findOne({
+      $or: [{ pnr: regex }, { returnPnr: regex }]
+    });
+    return doc ? formatTicket(doc) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function createTicket(data) {
   const doc = await Ticket.create({
     passengerName: data.passengerName,

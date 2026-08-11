@@ -9,9 +9,10 @@ router.get('/', requireAuth, requireAdmin, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 50;
+    const search = req.query.search ? String(req.query.search).trim() : '';
     const skip = (page - 1) * limit;
 
-    const { logs, total } = await AuditLogModel.findAllAuditLogs(skip, limit);
+    const { logs, total } = await AuditLogModel.findAllAuditLogs(skip, limit, search);
 
     return res.json({ logs, total, page, pages: Math.ceil(total / limit) });
   } catch (err) {

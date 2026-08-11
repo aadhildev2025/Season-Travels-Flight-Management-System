@@ -132,14 +132,7 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
   // When CET changes → auto-compute Location time
   // When Location time changes → auto-compute CET
   const CET = 'Europe/Stockholm';
-  const isFromCETToCMB = (() => {
-    const fromTz = AIRPORTS.find(a => a.code === departureAirport)?.timezone || '';
-    const isFromCET = ['Europe/Stockholm', 'Europe/Copenhagen', 'Europe/Oslo', 'Europe/Berlin', 'Europe/Paris', 'Europe/Rome', 'Europe/Amsterdam', 'Europe/Vienna', 'Europe/Zurich', 'Europe/Prague', 'Europe/Warsaw'].includes(fromTz);
-    return isFromCET && arrivalAirport === 'CMB';
-  })();
-  const depAirportTz = isFromCETToCMB
-    ? 'Asia/Colombo'
-    : (AIRPORTS.find(a => a.code === departureAirport)?.timezone || 'Asia/Colombo');
+  const depAirportTz = AIRPORTS.find(a => a.code === departureAirport)?.timezone || 'Europe/Copenhagen';
 
   // CET Time → always compute Location time from departure airport timezone
   const handleCETChange = (val: string) => {
@@ -634,11 +627,7 @@ export default function TicketForm({ editingTicket, onBack, onSuccess, focusRema
                <div>
                   <label style={label}>
                     Location Time
-                    {isFromCETToCMB ? (
-                      <span style={{ marginLeft: 6, fontWeight: 500, fontSize: 10, opacity: 0.7 }}>(Colombo)</span>
-                    ) : (
-                      depAirportLabel && <span style={{ marginLeft: 6, fontWeight: 500, fontSize: 10, opacity: 0.7 }}>({depAirportLabel})</span>
-                    )}
+                    {depAirportLabel && <span style={{ marginLeft: 6, fontWeight: 500, fontSize: 10, opacity: 0.7 }}>({depAirportLabel})</span>}
                   </label>
                  <input className="field" style={err('dipTime')} type="time" value={dipTime}
                    onChange={e => handleLocalTimeChange(e.target.value)} />

@@ -113,7 +113,8 @@ interface FlightState {
   deleteTicket: (id: string) => Promise<void>;
 
   fetchAnalytics: () => Promise<AnalyticsData>;
-  fetchAuditLogs: (page?: number) => Promise<{ logs: AuditLog[]; total: number; pages: number }>;
+  fetchAuditLogs: (page?: number, search?: string) => Promise<{ logs: AuditLog[]; total: number; pages: number }>;
+  fetchTicketByPnr: (pnr: string) => Promise<Ticket | null>;
   toggleTheme: () => void;
 }
 
@@ -303,8 +304,19 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
     return await apiFetch('/api/tickets/analytics');
   },
 
-  fetchAuditLogs: async (page = 1) => {
-    return await apiFetch(`/api/audit-logs?page=${page}&limit=50`);
+  fetchAuditLogs: async (page = 1, search = '') => {
+    const q = search ? `&search=${encodeURIComponent(search.trim())}` : '';
+    return await apiFetch(`/api/audit-logs?page=${page}&limit=50${q}`);
+  },
+
+  fetchTicketByPnr: async (pnr: string) => {
+    if (!pnr) return null;
+    try {
+      const res = await apiFetch(`/api/tickets/pnr/${encodeURIComponent(pnr.trim())}`);
+      return res.ticket || null;
+    } catch {
+      return null;
+    }
   },
 }));
 

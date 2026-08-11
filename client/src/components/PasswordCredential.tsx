@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useFlightStore, apiFetch } from '../store/flightStore';
 import ConfirmDialog from './ConfirmDialog';
-import { Trash2, Plus, X, Search, ChevronLeft } from 'lucide-react';
+import { Trash2, Plus, X, Search, ChevronLeft, Download, Lock, GripVertical } from 'lucide-react';
+import jsPDF from 'jspdf';
+import { applySeasonTravelsWatermark } from '../utils/pdfWatermark';
 
 interface Credential {
   id: string;
@@ -11,6 +13,7 @@ interface Credential {
   password: string;
   notes: string;
   folder: string;
+  position?: number;
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
@@ -26,11 +29,54 @@ export const PasswordCredential: React.FC = () => {
   const { currentUser, showToast, theme } = useFlightStore();
   const isAdmin = currentUser?.role === 'Admin';
 
-  const [credentials, setCredentials] = useState<Credential[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const CACHE_KEY = 'st_cached_notepad_v1';
+
+  // Initialize state from local cache for instant 0ms load
+  const [credentials, setCredentials] = useState<Credential[]>(() => {
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [loading, setLoading] = useState<boolean>(() => {
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      const list = cached ? JSON.parse(cached) : [];
+      return list.length === 0;
+    } catch {
+      return true;
+    }
+  });
+
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const list: Credential[] = JSON.parse(cached);
+        if (list.length > 0) return list[0].id || list[0]._id;
+      }
+    } catch {}
+    return null;
+  });
+
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Auto-sync credentials state to local cache whenever modified
+  useEffect(() => {
+    if (credentials.length > 0) {
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(credentials));
+      } catch {}
+    }
+  }, [credentials]);
+
+  // Drag and Drop reorder state
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
   // Mobile layout navigation state
   const [isMobile, setIsMobile] = useState(false);
@@ -67,25 +113,35 @@ export const PasswordCredential: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
 
-  // Load credentials from API
+  // Load credentials from API (Background Sync pattern)
   const fetchCredentials = useCallback(async () => {
     try {
-      setLoading(true);
-      const data = await apiFetch('/api/credentials');
-      const list = data.credentials || [];
-      setCredentials(list);
-      
-      // Auto-select first note if there's no selection
-      if (list.length > 0 && !selectedId) {
-        const firstId = list[0].id || list[0]._id;
-        setSelectedId(firstId);
+      // Only set blocking loading spinner if no cached items exist at all
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (!cached || JSON.parse(cached).length === 0) {
+        setLoading(true);
       }
+
+      const data = await apiFetch('/api/credentials');
+      const list: Credential[] = data.credentials || [];
+      setCredentials(list);
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(list));
+      } catch {}
+
+      // Auto-select first note if there's no selection
+      setSelectedId(prev => {
+        if (!prev && list.length > 0) {
+          return list[0].id || list[0]._id;
+        }
+        return prev;
+      });
     } catch {
       showToast('Failed to load notes', 'error');
     } finally {
       setLoading(false);
     }
-  }, [showToast, selectedId]);
+  }, [showToast]);
 
   useEffect(() => {
     fetchCredentials();
@@ -99,7 +155,30 @@ export const PasswordCredential: React.FC = () => {
       isSelectionChange.current = true;
       
       // If the note content is empty, start with a clean paragraph structure
-      const initialHtml = current.notes ? current.notes : `<div><br></div>`;
+      let initialHtml = current.notes ? current.notes : `<div><br></div>`;
+
+      // Auto-upgrade legacy password box elements into new premium glassmorphic card format
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = initialHtml;
+      const legacyWidgets = tempDiv.querySelectorAll('.password-box-widget, input.pass-box-input');
+      if (legacyWidgets.length > 0) {
+        tempDiv.querySelectorAll('.password-box-widget').forEach(widget => {
+          const passInput = widget.querySelector('.pass-box-input');
+          const val = passInput ? (passInput.getAttribute('data-value') || (passInput as HTMLInputElement).value || passInput.getAttribute('value') || passInput.textContent || '') : '';
+          const cleanVal = val.replace(/^(Set password\.\.\.|Click to set password\.\.\.)/i, '').trim();
+          
+          const newCard = document.createElement('div');
+          newCard.className = 'password-box-widget';
+          newCard.setAttribute('contenteditable', 'false');
+          newCard.style.cssText = 'display: inline-flex; align-items: center; gap: 10px; background: rgba(30, 41, 59, 0.65); backdrop-filter: blur(12px); border: 1px solid rgba(59, 130, 246, 0.35); border-radius: 12px; padding: 8px 14px; margin: 8px 0; max-width: 100%; vertical-align: middle; user-select: none; box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15);';
+          
+          newCard.innerHTML = `<span class="pass-box-badge" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 4px 10px; color: #3b82f6; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>PASSWORD</span><span class="pass-box-input pass-masked" contenteditable="true" data-placeholder="Set password..." style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 8px; color: #f8fafc; padding: 6px 14px; font-size: 13px; font-family: monospace; outline: none; min-width: 160px; cursor: text; display: inline-block; vertical-align: middle; text-align: left; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3); -webkit-text-security: disc; text-security: disc;">${cleanVal}</span><button class="pass-box-btn pass-verify-btn" type="button" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border: none; color: #ffffff; border-radius: 8px; padding: 6px 14px; font-size: 11.5px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35); transition: all 0.15s ease;">Verify</button><button class="pass-box-btn pass-copy-btn" type="button" style="background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.18); color: #cbd5e1; border-radius: 8px; padding: 6px 12px; font-size: 11.5px; font-weight: 600; cursor: pointer; transition: all 0.15s ease;">Copy</button><button class="pass-box-btn pass-remove-btn" type="button" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; border-radius: 8px; padding: 6px 10px; font-size: 11.5px; font-weight: 700; cursor: pointer; transition: all 0.15s ease;" title="Remove password box">X</button>`;
+          
+          widget.replaceWith(newCard);
+        });
+        initialHtml = tempDiv.innerHTML;
+      }
+
       editorRef.current.innerHTML = initialHtml;
     }
   }, [selectedId]);
@@ -120,6 +199,75 @@ export const PasswordCredential: React.FC = () => {
       setSyncStatus('Sync Error');
     }
   }, []);
+
+  // Save drag-and-drop reordered list to API
+  const handleReorder = useCallback(async (newCredentials: Credential[]) => {
+    setCredentials(newCredentials);
+    const orderedIds = newCredentials.map(c => c.id || c._id);
+    try {
+      setSyncStatus('Saving...');
+      await apiFetch('/api/credentials/reorder', {
+        method: 'PUT',
+        body: JSON.stringify({ orderedIds }),
+      });
+      setSyncStatus('Synced');
+    } catch {
+      setSyncStatus('Sync Error');
+    }
+  }, []);
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIdx(index);
+    e.dataTransfer.effectAllowed = 'move';
+    const cred = filteredCredentials[index];
+    if (cred) {
+      e.dataTransfer.setData('text/plain', cred.id || cred._id);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverIdx !== index) {
+      setDragOverIdx(index);
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIdx(null);
+    setDragOverIdx(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedIdx === null || draggedIdx === targetIndex) {
+      setDraggedIdx(null);
+      setDragOverIdx(null);
+      return;
+    }
+
+    const draggedItem = filteredCredentials[draggedIdx];
+    const targetItem = filteredCredentials[targetIndex];
+
+    if (!draggedItem || !targetItem) {
+      setDraggedIdx(null);
+      setDragOverIdx(null);
+      return;
+    }
+
+    const masterFromIdx = credentials.findIndex(c => (c.id || c._id) === (draggedItem.id || draggedItem._id));
+    const masterToIdx = credentials.findIndex(c => (c.id || c._id) === (targetItem.id || targetItem._id));
+
+    if (masterFromIdx !== -1 && masterToIdx !== -1) {
+      const updated = [...credentials];
+      const [moved] = updated.splice(masterFromIdx, 1);
+      updated.splice(masterToIdx, 0, moved);
+      handleReorder(updated);
+    }
+
+    setDraggedIdx(null);
+    setDragOverIdx(null);
+  };
 
   // Queue saving with 800ms debounce
   const queueAutoSave = useCallback((id: string, updates: { title: string; notes: string; folder: string }) => {
@@ -157,11 +305,138 @@ export const PasswordCredential: React.FC = () => {
   };
 
   // Focus editor when clicking anywhere on the notepad background
-  const handleContainerClick = () => {
+  const handleContainerClick = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('.password-box-widget')) {
+      return;
+    }
     if (editorRef.current) {
       editorRef.current.focus();
     }
   };
+
+  // Handle inserting password box widget at current caret position
+  const handleInsertPasswordBox = useCallback(() => {
+    if (!editorRef.current) return;
+    editorRef.current.focus();
+
+    const passwordBoxHtml = `<div class="password-box-widget" contenteditable="false" style="display: inline-flex; align-items: center; gap: 10px; background: rgba(30, 41, 59, 0.65); backdrop-filter: blur(12px); border: 1px solid rgba(59, 130, 246, 0.35); border-radius: 12px; padding: 8px 14px; margin: 8px 0; max-width: 100%; vertical-align: middle; user-select: none; box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15);"><span class="pass-box-badge" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 4px 10px; color: #3b82f6; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>PASSWORD</span><span class="pass-box-input pass-masked" contenteditable="true" data-placeholder="Set password..." style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 8px; color: #f8fafc; padding: 6px 14px; font-size: 13px; font-family: monospace; outline: none; min-width: 160px; cursor: text; display: inline-block; vertical-align: middle; text-align: left; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3); -webkit-text-security: disc; text-security: disc;"></span><button class="pass-box-btn pass-verify-btn" type="button" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border: none; color: #ffffff; border-radius: 8px; padding: 6px 14px; font-size: 11.5px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35); transition: all 0.15s ease;">Verify</button><button class="pass-box-btn pass-copy-btn" type="button" style="background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.18); color: #cbd5e1; border-radius: 8px; padding: 6px 12px; font-size: 11.5px; font-weight: 600; cursor: pointer; transition: all 0.15s ease;">Copy</button><button class="pass-box-btn pass-remove-btn" type="button" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; border-radius: 8px; padding: 6px 10px; font-size: 11.5px; font-weight: 700; cursor: pointer; transition: all 0.15s ease;" title="Remove password box">X</button></div>&nbsp;`;
+
+    document.execCommand('insertHTML', false, passwordBoxHtml);
+    handleInput();
+  }, [handleInput]);
+
+  // Attach event delegation for Password Box interactive buttons & inputs
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+
+      // 1. Verify button click
+      const verifyBtn = target.closest('.pass-verify-btn') as HTMLButtonElement | null;
+      if (verifyBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!isAdmin) {
+          showToast('Only Admin can verify and view passwords', 'error');
+          return;
+        }
+        const widget = verifyBtn.closest('.password-box-widget');
+        const passInput = widget?.querySelector('.pass-box-input') as HTMLElement | null;
+        if (passInput) {
+          const isRevealed = passInput.classList.contains('pass-revealed');
+          if (!isRevealed) {
+            passInput.classList.add('pass-revealed');
+            passInput.classList.remove('pass-masked');
+            passInput.style.setProperty('-webkit-text-security', 'none');
+            passInput.style.setProperty('text-security', 'none');
+            verifyBtn.textContent = 'Hide';
+            verifyBtn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+            verifyBtn.style.boxShadow = '0 2px 8px rgba(16, 185, 129, 0.35)';
+            showToast('Password verified & revealed', 'success');
+          } else {
+            passInput.classList.remove('pass-revealed');
+            passInput.classList.add('pass-masked');
+            passInput.style.setProperty('-webkit-text-security', 'disc');
+            passInput.style.setProperty('text-security', 'disc');
+            verifyBtn.textContent = 'Verify';
+            verifyBtn.style.background = 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
+            verifyBtn.style.boxShadow = '0 2px 8px rgba(37, 99, 235, 0.35)';
+          }
+          handleInput();
+        }
+        return;
+      }
+
+      // 2. Copy button click
+      const copyBtn = target.closest('.pass-copy-btn') as HTMLButtonElement | null;
+      if (copyBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!isAdmin) {
+          showToast('Only Admin can copy passwords', 'error');
+          return;
+        }
+        const widget = copyBtn.closest('.password-box-widget');
+        const passInput = widget?.querySelector('.pass-box-input') as HTMLElement | null;
+        if (passInput) {
+          const val = passInput.innerText?.trim() || passInput.textContent?.trim() || '';
+          if (!val) {
+            showToast('Password box is empty', 'error');
+          } else {
+            navigator.clipboard.writeText(val);
+            showToast('Password copied to clipboard!', 'success');
+          }
+        }
+        return;
+      }
+
+      // 3. Remove button click
+      const removeBtn = target.closest('.pass-remove-btn') as HTMLButtonElement | null;
+      if (removeBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!isAdmin) {
+          showToast('Only Admin can remove password box', 'error');
+          return;
+        }
+        const widget = removeBtn.closest('.password-box-widget');
+        if (widget) {
+          widget.remove();
+          handleInput();
+          showToast('Password box removed', 'success');
+        }
+        return;
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && target.classList.contains('pass-box-input')) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+        }
+      }
+    };
+
+    const handleInputEvent = (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (target && target.classList.contains('pass-box-input')) {
+        handleInput();
+      }
+    };
+
+    editor.addEventListener('click', handleClick);
+    editor.addEventListener('keydown', handleKeyDown);
+    editor.addEventListener('input', handleInputEvent);
+
+    return () => {
+      editor.removeEventListener('click', handleClick);
+      editor.removeEventListener('keydown', handleKeyDown);
+      editor.removeEventListener('input', handleInputEvent);
+    };
+  }, [isAdmin, showToast, handleInput]);
 
   // Apple Notes style instant creation
   const handleAddNote = async () => {
@@ -241,6 +516,57 @@ export const PasswordCredential: React.FC = () => {
     }
   };
 
+  // Download current note as PDF with Season Travels watermark
+  const handleDownloadPDF = () => {
+    if (!activeCred) return;
+
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const marginLeft = 14;
+    const marginTop = 28; // below header
+    const marginBottom = 18;
+    const maxLineW = pageW - marginLeft * 2;
+
+    // Strip HTML to plain text, preserving line breaks and password box values
+    const tmp = document.createElement('div');
+    tmp.innerHTML = activeCred.notes || '';
+    tmp.querySelectorAll('.pass-box-input').forEach((input: any) => {
+      const val = input.value || input.getAttribute('value') || '';
+      input.replaceWith(document.createTextNode(`[Password: ${val ? '••••••••' : 'Empty'}]`));
+    });
+    // Replace <br>, </p>, </div> with newlines before reading innerText
+    tmp.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
+    tmp.querySelectorAll('p,div').forEach(el => {
+      if (el.nextSibling) el.insertAdjacentText('afterend', '\n');
+    });
+    const rawText = tmp.innerText || tmp.textContent || '';
+    const lines = rawText.split(/\n/);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(30, 41, 59);
+
+    let y = marginTop;
+
+    for (const line of lines) {
+      const wrapped = doc.splitTextToSize(line.trimEnd() || ' ', maxLineW);
+      for (const wl of wrapped) {
+        if (y + 6 > pageH - marginBottom) {
+          doc.addPage();
+          y = marginTop;
+        }
+        doc.text(wl, marginLeft, y);
+        y += 6;
+      }
+    }
+
+    applySeasonTravelsWatermark(doc, activeCred.title || 'Note');
+
+    const safeName = (activeCred.title || 'note').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    doc.save(`${safeName}.pdf`);
+  };
+
   const filteredCredentials = credentials.filter(cred => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
@@ -273,7 +599,7 @@ export const PasswordCredential: React.FC = () => {
   const renderNotesColumn = () => (
     <div className="apple-notes-sidebar" style={{
       width: isMobile ? '100%' : 260,
-      background: theme === 'dark' ? 'rgba(28, 28, 30, 0.95)' : 'rgba(244, 244, 247, 0.95)',
+      background: theme === 'dark' ? '#05050a' : 'rgba(244, 244, 247, 0.95)',
       backdropFilter: 'blur(30px)',
       borderRight: '1px solid var(--border)',
       display: 'flex',
@@ -344,9 +670,11 @@ export const PasswordCredential: React.FC = () => {
             {searchQuery ? 'No Results' : 'No Notes'}
           </div>
         ) : (
-          filteredCredentials.map(cred => {
+          filteredCredentials.map((cred, index) => {
             const id = cred.id || cred._id;
             const isSelected = selectedId === id;
+            const isDragging = draggedIdx === index;
+            const isDragOver = dragOverIdx === index;
             const dateText = getShortDate(cred.createdAt);
             
             // Generate plaintext snippet from the HTML notes field
@@ -358,6 +686,11 @@ export const PasswordCredential: React.FC = () => {
               <div
                 key={id}
                 className="note-item"
+                draggable={true}
+                onDragStart={(e) => handleDragStart(e, index)}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDragEnd={handleDragEnd}
+                onDrop={(e) => handleDrop(e, index)}
                 onClick={() => {
                   setSelectedId(id);
                   if (isMobile) {
@@ -365,63 +698,90 @@ export const PasswordCredential: React.FC = () => {
                   }
                 }}
                 style={{
-                  margin: '3px 6px',
-                  padding: '10px 12px',
+                  margin: '4px 6px',
+                  padding: '10px 10px 10px 8px',
                   borderRadius: 8,
-                  cursor: 'pointer',
-                  background: isSelected ? ACTIVE_ACCENT.hex : 'transparent',
+                  cursor: 'grab',
+                  background: isSelected
+                    ? ACTIVE_ACCENT.hex
+                    : isDragOver
+                    ? 'rgba(0, 122, 255, 0.15)'
+                    : 'transparent',
                   color: isSelected ? '#ffffff' : 'var(--text)',
+                  opacity: isDragging ? 0.4 : 1,
+                  borderTop: isDragOver && draggedIdx !== null && index < draggedIdx ? '2px solid #007aff' : '1px solid transparent',
+                  borderBottom: isDragOver && draggedIdx !== null && index > draggedIdx ? '2px solid #007aff' : '1px solid transparent',
+                  transition: 'all 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{
-                    fontWeight: 700,
-                    fontSize: 13,
-                    marginBottom: 2,
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    color: isSelected ? '#ffffff' : 'var(--text)',
-                    flex: 1
-                  }}>
-                    {cred.title || 'New Note'}
+                {/* Drag Grip Handle */}
+                <span
+                  style={{
+                    color: isSelected ? 'rgba(255,255,255,0.7)' : 'var(--text3)',
+                    cursor: 'grab',
+                    display: 'flex',
+                    alignItems: 'center',
+                    flexShrink: 0
+                  }}
+                  title="Drag to reorder note"
+                >
+                  <GripVertical size={14} />
+                </span>
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{
+                      fontWeight: 700,
+                      fontSize: 13,
+                      marginBottom: 2,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      color: isSelected ? '#ffffff' : 'var(--text)',
+                      flex: 1
+                    }}>
+                      {cred.title || 'New Note'}
+                    </div>
+                    
+                    {/* Delete button directly inside the list item card */}
+                    {isAdmin && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent note selection when clicking delete
+                          setDeleteId(id);
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: isSelected ? 'rgba(255,255,255,0.85)' : 'var(--red)',
+                          cursor: 'pointer',
+                          padding: '2px 4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          marginLeft: 6
+                        }}
+                        title="Delete Note"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
                   </div>
-                  
-                  {/* Delete button directly inside the list item card */}
-                  {isAdmin && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation(); // Prevent note selection when clicking delete
-                        setDeleteId(id);
-                      }}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: isSelected ? 'rgba(255,255,255,0.85)' : 'var(--red)',
-                        cursor: 'pointer',
-                        padding: '2px 4px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        marginLeft: 6
-                      }}
-                      title="Delete Note"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  )}
-                </div>
-                <div style={{ display: 'flex', gap: 6, fontSize: 11, alignItems: 'center' }}>
-                  <span style={{ color: isSelected ? 'rgba(255,255,255,0.9)' : 'var(--text3)', flexShrink: 0 }}>
-                    {dateText}
-                  </span>
-                  <span style={{
-                    color: isSelected ? 'rgba(255,255,255,0.75)' : 'var(--text2)',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}>
-                    {plainSnippet}
-                  </span>
+                  <div style={{ display: 'flex', gap: 6, fontSize: 11, alignItems: 'center' }}>
+                    <span style={{ color: isSelected ? 'rgba(255,255,255,0.9)' : 'var(--text3)', flexShrink: 0 }}>
+                      {dateText}
+                    </span>
+                    <span style={{
+                      color: isSelected ? 'rgba(255,255,255,0.75)' : 'var(--text2)',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}>
+                      {plainSnippet}
+                    </span>
+                  </div>
                 </div>
               </div>
             );
@@ -440,7 +800,7 @@ export const PasswordCredential: React.FC = () => {
   const renderEditorColumn = () => (
     <div style={{
       flex: 1,
-      background: theme === 'dark' ? '#1c1c1e' : '#ffffff',
+      background: theme === 'dark' ? '#05050a' : '#ffffff',
       display: 'flex',
       flexDirection: 'column',
       overflow: 'hidden',
@@ -453,7 +813,7 @@ export const PasswordCredential: React.FC = () => {
           justifyContent: 'space-between',
           padding: '10px 16px',
           borderBottom: '1px solid var(--border)',
-          background: theme === 'dark' ? 'rgba(30, 30, 32, 0.35)' : 'rgba(255, 255, 255, 0.5)',
+          background: theme === 'dark' ? '#05050a' : 'rgba(255, 255, 255, 0.5)',
         }}>
           <button
             onClick={() => setMobileView('notes')}
@@ -481,15 +841,15 @@ export const PasswordCredential: React.FC = () => {
       )}
 
       {/* Rich Text Format Toolbar */}
-      {activeCred && isAdmin && (
+      {activeCred && (
         <div style={{
           display: 'flex',
           alignItems: 'center',
           flexWrap: 'wrap',
-          gap: 12,
+          gap: 10,
           padding: '8px 24px',
           borderBottom: '1px solid var(--border)',
-          background: theme === 'dark' ? '#18181a' : '#f5f5f7'
+          background: theme === 'dark' ? '#05050a' : '#f5f5f7'
         }}>
           {/* Format Styles */}
           <button
@@ -508,6 +868,24 @@ export const PasswordCredential: React.FC = () => {
             title="Italic"
           >
             I
+          </button>
+
+          <button
+            onMouseDown={(e) => { e.preventDefault(); document.execCommand('underline', false); handleInput(); }}
+            className="format-btn"
+            style={{ textDecoration: 'underline' }}
+            title="Underline"
+          >
+            U
+          </button>
+
+          <button
+            onMouseDown={(e) => { e.preventDefault(); document.execCommand('strikeThrough', false); handleInput(); }}
+            className="format-btn"
+            style={{ textDecoration: 'line-through' }}
+            title="Strikethrough"
+          >
+            S
           </button>
 
           <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
@@ -547,7 +925,7 @@ export const PasswordCredential: React.FC = () => {
                 background: theme === 'dark' ? '#2c2c2e' : '#ffffff',
                 border: '1px solid var(--border)',
                 borderRadius: 8,
-                boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
                 padding: 4,
                 zIndex: 100,
                 display: 'flex',
@@ -565,7 +943,7 @@ export const PasswordCredential: React.FC = () => {
                   <button
                     key={opt.val}
                     onMouseDown={(e) => {
-                      e.preventDefault(); // Prevents selection destruction
+                      e.preventDefault();
                       document.execCommand('fontSize', false, opt.val);
                       handleInput();
                       setSizeMenuOpen(false);
@@ -593,30 +971,58 @@ export const PasswordCredential: React.FC = () => {
 
           <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
 
-          {/* Bullet List */}
+          {/* Alignment & Lists */}
           <button
-            onMouseDown={(e) => {
-              e.preventDefault();
-              document.execCommand('insertUnorderedList', false);
-              handleInput();
-            }}
+            onMouseDown={(e) => { e.preventDefault(); document.execCommand('insertUnorderedList', false); handleInput(); }}
             className="format-btn"
             title="Unordered Bullet List"
-            style={{ display: 'flex', alignItems: 'center', gap: 4 }}
           >
-            <span style={{ fontSize: 16 }}>•=</span>
+            •=
+          </button>
+          
+          <button
+            onMouseDown={(e) => { e.preventDefault(); document.execCommand('insertOrderedList', false); handleInput(); }}
+            className="format-btn"
+            title="Numbered List"
+          >
+            1.
+          </button>
+
+          <button
+            onMouseDown={(e) => { e.preventDefault(); document.execCommand('justifyLeft', false); handleInput(); }}
+            className="format-btn"
+            title="Align Left"
+          >
+            ⇇
+          </button>
+
+          <button
+            onMouseDown={(e) => { e.preventDefault(); document.execCommand('justifyCenter', false); handleInput(); }}
+            className="format-btn"
+            title="Align Center"
+          >
+            ≡
+          </button>
+
+          <button
+            onMouseDown={(e) => { e.preventDefault(); document.execCommand('justifyRight', false); handleInput(); }}
+            className="format-btn"
+            title="Align Right"
+          >
+            ⇉
           </button>
 
           <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
 
-          {/* Font Colors */}
+          {/* Font Color Palette & Custom Picker */}
           <span style={{ fontSize: 11, color: 'var(--text3)' }}>Color:</span>
-          {['inherit', '#007aff', '#ff3b30', '#34c759', '#ff9500', '#8e8e93'].map(color => (
+          {['inherit', '#007aff', '#22d3ee', '#34d399', '#f43f5e', '#fbbf24', '#a78bfa', '#9ca3af'].map(color => (
             <button
               key={color}
               onMouseDown={(e) => {
                 e.preventDefault();
-                document.execCommand('foreColor', false, color);
+                const targetColor = color === 'inherit' ? (theme === 'dark' ? '#ffffff' : '#000000') : color;
+                document.execCommand('foreColor', false, targetColor);
                 handleInput();
               }}
               style={{
@@ -633,6 +1039,55 @@ export const PasswordCredential: React.FC = () => {
               title={color === 'inherit' ? 'Default Theme Color' : color}
             />
           ))}
+
+          <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
+
+          {/* Password Box Button */}
+          <button
+            onMouseDown={(e) => {
+              e.preventDefault();
+              handleInsertPasswordBox();
+            }}
+            className="format-btn"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              background: 'rgba(0, 122, 255, 0.12)',
+              color: '#007aff',
+              fontWeight: 600,
+              padding: '3px 8px',
+              borderRadius: 6,
+              fontSize: 12,
+              border: '1px solid rgba(0, 122, 255, 0.25)',
+              cursor: 'pointer'
+            }}
+            title="Insert Password Box at cursor position"
+          >
+            <Lock size={12} />
+            <span>Password</span>
+          </button>
+
+          <div style={{ marginLeft: 'auto' }}>
+            {activeCred && (
+              <button
+                onMouseDown={(e) => { e.preventDefault(); handleDownloadPDF(); }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  padding: '4px 10px', borderRadius: 7,
+                  background: '#007aff', border: 'none',
+                  color: '#fff', fontSize: 11.5, fontWeight: 700,
+                  cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,122,255,0.25)',
+                  transition: 'all 0.15s'
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#0066d6'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#007aff'; }}
+                title="Download this note as PDF with Season Travels watermark"
+              >
+                <Download size={12} /> PDF
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -650,7 +1105,7 @@ export const PasswordCredential: React.FC = () => {
         {activeCred ? (
           <div style={{
             flex: 1,
-            background: theme === 'dark' ? '#1c1c1e' : '#ffffff',
+            background: theme === 'dark' ? 'transparent' : '#ffffff',
             padding: '24px 36px',
             display: 'flex',
             flexDirection: 'column',
@@ -686,7 +1141,7 @@ export const PasswordCredential: React.FC = () => {
             {/* Click-and-Type unified contentEditable rich text area */}
             <div
               ref={editorRef}
-              contentEditable={isAdmin}
+              contentEditable={true}
               onInput={handleInput}
               data-placeholder="New Note"
               style={{
@@ -705,7 +1160,7 @@ export const PasswordCredential: React.FC = () => {
           </div>
         ) : (
           /* Empty placeholder sheet when there's no note selected */
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 12, color: 'var(--text3)', background: theme === 'dark' ? '#1c1c1e' : '#ffffff' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 12, color: 'var(--text3)', background: theme === 'dark' ? 'transparent' : '#ffffff' }}>
             <Trash2 size={32} style={{ opacity: 0.25, color: ACTIVE_ACCENT.hex }} />
             <span style={{ fontSize: 13, fontWeight: 500 }}>No Note Selected</span>
             {isAdmin && (
@@ -741,6 +1196,42 @@ export const PasswordCredential: React.FC = () => {
       <style dangerouslySetInnerHTML={{__html: `
         .apple-notes-sidebar::-webkit-scrollbar {
           width: 5px;
+        }
+        .password-box-widget {
+          user-select: auto !important;
+          transition: all 0.2s ease-in-out;
+        }
+        .password-box-widget:hover {
+          border-color: rgba(59, 130, 246, 0.6) !important;
+          box-shadow: 0 6px 24px -2px rgba(0, 0, 0, 0.4), 0 0 12px rgba(59, 130, 246, 0.2) !important;
+        }
+        .pass-box-input {
+          user-select: text !important;
+          pointer-events: auto !important;
+          -webkit-user-select: text !important;
+          white-space: nowrap !important;
+          transition: all 0.2s ease;
+        }
+        .pass-box-input:hover {
+          border-color: rgba(59, 130, 246, 0.5) !important;
+          background: rgba(15, 23, 42, 0.85) !important;
+        }
+        .pass-box-btn:hover {
+          transform: translateY(-1px);
+        }
+        .pass-box-btn:active {
+          transform: translateY(0);
+        }
+        .pass-verify-btn:hover {
+          filter: brightness(1.1);
+        }
+        .pass-copy-btn:hover {
+          background: rgba(255, 255, 255, 0.15) !important;
+          color: #ffffff !important;
+        }
+        .pass-remove-btn:hover {
+          background: rgba(239, 68, 68, 0.28) !important;
+          color: #ef4444 !important;
         }
         .apple-notes-sidebar::-webkit-scrollbar-thumb {
           background: rgba(120, 120, 120, 0.25);
@@ -796,6 +1287,9 @@ export const PasswordCredential: React.FC = () => {
           pointer-events: none;
           display: block;
         }
+        .apple-notes-editor, .apple-notes-editor *:not(.pass-box-input) {
+          font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+        }
         .apple-notes-editor ul {
           list-style-type: disc !important;
           margin-left: 20px !important;
@@ -803,11 +1297,19 @@ export const PasswordCredential: React.FC = () => {
           margin-top: 8px !important;
           margin-bottom: 8px !important;
         }
+        .apple-notes-editor ol {
+          list-style-type: decimal !important;
+          margin-left: 20px !important;
+          padding-left: 10px !important;
+          margin-top: 8px !important;
+          margin-bottom: 8px !important;
+        }
         .apple-notes-editor li {
           display: list-item !important;
-          list-style-type: disc !important;
           margin-bottom: 4px !important;
         }
+        .apple-notes-editor u { text-decoration: underline !important; }
+        .apple-notes-editor s, .apple-notes-editor strike { text-decoration: line-through !important; }
         .apple-notes-editor font[size="1"] { font-size: 11px !important; }
         .apple-notes-editor font[size="2"] { font-size: 13px !important; }
         .apple-notes-editor font[size="3"] { font-size: 16px !important; }

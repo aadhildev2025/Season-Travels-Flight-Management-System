@@ -5,6 +5,7 @@ import Dashboard from './components/Dashboard';
 import TicketForm from './components/TicketForm';
 import AuditLogs from './components/AuditLogs';
 import Staff from './components/Staff';
+import { StaffCalendar } from './components/StaffCalendar';
 import { NoteSummarizer } from './components/NoteSummarizer';
 import { PasswordCredential } from './components/PasswordCredential';
 import { SpreadsheetConsole } from './components/SpreadsheetConsole';
@@ -29,12 +30,13 @@ import {
   Sparkles,
   Lock,
   Grid,
-  FileText
+  FileText,
+  Calendar
 } from 'lucide-react';
 import logoSrc from './logo/2.png';
 import dashboardLogoSrc from './logo/3.png';
 
-export type View = 'dashboard' | 'ticket-form' | 'audit-logs' | 'profile' | 'staff' | 'note-summarizer' | 'password-credential' | 'spreadsheets';
+export type View = 'dashboard' | 'ticket-form' | 'audit-logs' | 'profile' | 'staff' | 'note-summarizer' | 'password-credential' | 'spreadsheets' | 'staff-calendar';
 export type TZ = 'CET' | 'SLT';
 
 export default function App() {
@@ -182,24 +184,28 @@ export default function App() {
     try {
       const { default: jsPDF } = await import('jspdf');
       const { default: autoTable } = await import('jspdf-autotable');
+      const { applySeasonTravelsWatermark } = await import('./utils/pdfWatermark');
+
       const doc = new jsPDF({ orientation: 'landscape' });
-      doc.setFontSize(16);
-      doc.text('Season Travels Scandic - Flight Departures', 14, 15);
-      doc.setFontSize(10);
-      doc.text(`Generated: ${new Date().toLocaleString('en-GB', { hour12: false })}`, 14, 22);
+
       const rows = tickets.map(t => {
         const cetTime = t.departureTimeUTC ? new Date(t.departureTimeUTC).toLocaleTimeString('en-GB', { timeZone: 'Europe/Stockholm', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
         const sltTime = t.departureTimeUTC ? new Date(t.departureTimeUTC).toLocaleTimeString('en-GB', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
         const date = t.departureTimeUTC ? new Date(t.departureTimeUTC).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '';
         return [date, t.passengerName, t.departureAirport, t.arrivalAirport, cetTime, sltTime, t.flightNumber || '—', t.pnr, t.checkin ? 'YES' : 'NO', t.remind ? 'YES' : 'NO'];
       });
+
       autoTable(doc, {
-        startY: 28,
+        startY: 24,
         head: [['Date', 'Name', 'From', 'To', 'CET', 'SLT Time', 'Flight No.', 'PNR', 'Checkin', 'Remind']],
         body: rows,
-        styles: { fontSize: 8 },
-        headStyles: { fillColor: [13, 13, 31] },
+        styles: { fontSize: 8.5, cellPadding: 3, textColor: [30, 41, 59] },
+        headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
       });
+
+      applySeasonTravelsWatermark(doc, 'Flight Departures Record');
+
       const now = new Date();
       const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-');
       const timeStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }).replace(/:/g, '-');
@@ -215,6 +221,7 @@ export default function App() {
     { id: 'spreadsheets', label: 'Spreadsheets', icon: <Grid size={15} /> },
     { id: 'audit-logs', label: 'Audit Logs', icon: <ScrollText size={15} />, adminOnly: true },
     { id: 'staff', label: 'Staff Management', icon: <Users size={15} />, adminOnly: true },
+    { id: 'staff-calendar', label: 'Staff Calendar', icon: <Calendar size={15} /> },
   ];
 
   const activeTab = view === 'ticket-form' ? 'dashboard' : view;
@@ -479,7 +486,7 @@ export default function App() {
         </header>
 
         {/* ════════════════════ MAIN CONTENT AREA ════════════════════ */}
-        <main className="main-content-area" style={{ flex: 1, position: 'relative', overflow: (view === 'ticket-form' || view === 'spreadsheets') ? 'hidden' : 'visible' }}>
+        <main className="main-content-area" style={{ flex: 1, position: 'relative', padding: view === 'staff-calendar' ? 0 : undefined, overflow: (view === 'ticket-form' || view === 'spreadsheets' || view === 'staff-calendar') ? 'hidden' : 'visible' }}>
           <div key={view} className="view-transition" style={{ height: '100%' }}>
           {view === 'dashboard' && (
             <Dashboard 
@@ -499,6 +506,9 @@ export default function App() {
               onSuccess={handleTicketSuccess}
               focusRemarks={focusRemarks}
             />
+          )}
+          {view === 'staff-calendar' && (
+            <StaffCalendar />
           )}
           {view === 'audit-logs' && isAdmin && (
             <AuditLogs tz={tz} />

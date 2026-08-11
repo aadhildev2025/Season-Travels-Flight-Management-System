@@ -189,7 +189,17 @@ router.post('/send-reminders', requireAuth, async (req, res) => {
   }
 });
 
-// ─── Parameterised routes ───
+// GET /api/tickets/pnr/:pnr
+router.get('/pnr/:pnr', requireAuth, async (req, res) => {
+  try {
+    const ticket = await TicketModel.findTicketByPnr(req.params.pnr);
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found for this PNR' });
+    return res.json({ ticket });
+  } catch (err) {
+    console.error('Get ticket by PNR error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // GET /api/tickets/:id
 router.get('/:id', requireAuth, async (req, res) => {

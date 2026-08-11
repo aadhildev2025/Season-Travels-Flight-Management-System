@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useFlightStore, apiFetch } from '../store/flightStore';
 import { utcToLocalTime, formatCETTime, formatCETDate } from '../utils/timezone';
 import ConfirmDialog from './ConfirmDialog';
+import { WhatsAppIcon } from './WhatsAppIcon';
 import { Plane, Search, Plus, RefreshCw, Download } from 'lucide-react';
 import type { Ticket } from '../types';
 import { AIRPORTS } from '../types';
@@ -123,7 +124,10 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
 
   const getLocationTime = (ticket: Ticket) => {
     if (!ticket.departureTimeUTC) return '—';
-    return utcToLocalTime(ticket.departureTimeUTC, ticket.originalTimezone).time;
+    const depCode = (ticket.departureAirport || '').trim().toUpperCase();
+    const depAirportObj = AIRPORTS.find(a => a.code === depCode);
+    const realDepTz = depAirportObj?.timezone || ticket.originalTimezone || 'Europe/Copenhagen';
+    return utcToLocalTime(ticket.departureTimeUTC, realDepTz).time;
   };
 
   const maskName = (name: string) => {
@@ -150,7 +154,10 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
   };
 
   const buildReminderMessage = (ticket: Ticket) => {
-    const dep = utcToLocalTime(ticket.departureTimeUTC, ticket.originalTimezone);
+    const depCode = (ticket.departureAirport || '').trim().toUpperCase();
+    const depAirportObj = AIRPORTS.find(a => a.code === depCode);
+    const realDepTz = depAirportObj?.timezone || ticket.originalTimezone || 'Europe/Copenhagen';
+    const dep = utcToLocalTime(ticket.departureTimeUTC, realDepTz);
     const routeStr = formatRouteWithCountry(ticket.departureAirport, ticket.arrivalAirport);
     return {
       subject: 'Travel Reminder from SeasonTravels',
@@ -194,15 +201,15 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
   };
 
   // ── WhatsApp ──
-  const sendViaWhatsApp = (ticket: Ticket) => {
-    const text = buildReminderText(ticket);
-    // Keep only digits from the phone number for wa.me
+  const sendViaWhatsApp = (ticket: Ticket, customMessage?: string) => {
+    const text = (customMessage && customMessage.trim()) ? customMessage : buildReminderText(ticket);
     const phone = (ticket.phone || '').replace(/[^\d]/g, '');
     const waUrl = phone
       ? `https://wa.me/${phone}?text=${encodeURIComponent(text)}`
       : `https://wa.me/?text=${encodeURIComponent(text)}`;
     window.open(waUrl, '_blank', 'noopener,noreferrer');
     setMailTicket(null);
+    setComposeMessage('');
   };
 
   // Staff can only delete tickets created today
@@ -598,7 +605,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
 
                       <td style={{ ...td, textAlign:'center', whiteSpace:'nowrap', padding:'4px 2px' }}>
                         <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:2 }}>
-                          <button onClick={() => setMailTicket(ticket)} className="btn btn-blue btn-sm" title="Send reminder">MAIL</button>
+                          <button onClick={() => setMailTicket(ticket)} className="btn btn-blue btn-sm" title="Send reminder / message">MAIL</button>
                           <button onClick={() => onEdit(ticket)} className="btn btn-cyan btn-sm">EDIT</button>
                           {canDelete(ticket) && (
                             <button onClick={() => setConfirmDeleteId(ticket._id)} className="btn btn-red btn-sm">DEL</button>
@@ -627,23 +634,37 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
           />
           <div
             className="card fade-up"
-            style={{ position: 'relative', width: '100%', maxWidth: 420, padding: 24, boxShadow: '0 24px 64px rgba(0,0,0,0.6)' }}
+            style={{ position: 'relative', width: '100%', maxWidth: 440, padding: 24, boxShadow: '0 24px 64px rgba(0,0,0,0.6)' }}
             onClick={e => e.stopPropagation()}
           >
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Send Message</h3>
-            <p style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 18 }}>
-              To: {mailTicket.passengerName} ({mailTicket.email})
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Send Message</h3>
+            <p style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 18, lineHeight: 1.5 }}>
+              <strong>To:</strong> {mailTicket.passengerName}<br/>
+              <span style={{ opacity: 0.85 }}>
+                {mailTicket.email ? `Email: ${mailTicket.email}` : 'No email'}
+                {mailTicket.phone ? ` • Phone: ${mailTicket.phone}` : ''}
+              </span>
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {/* Send Reminder */}
+              {/* Send Email Reminder */}
               <button
                 onClick={() => sendViaEmail(mailTicket)}
                 className="btn"
                 style={{ width: '100%', justifyContent: 'flex-start', gap: 12, padding: '12px 16px', background: 'var(--indigo)', color: '#fff', fontSize: 13, fontWeight: 700 }}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
-                Send Reminder
+                Send Email Reminder
+              </button>
+
+              {/* Send WhatsApp Reminder */}
+              <button
+                onClick={() => sendViaWhatsApp(mailTicket)}
+                className="btn"
+                style={{ width: '100%', justifyContent: 'flex-start', gap: 12, padding: '12px 16px', background: '#25D366', color: '#fff', fontSize: 13, fontWeight: 700, border: 'none' }}
+              >
+                <WhatsAppIcon width="20" height="20" />
+                Send WhatsApp Reminder
               </button>
 
               {/* Compose Mail */}
@@ -653,7 +674,7 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                 style={{ width: '100%', justifyContent: 'flex-start', gap: 12, padding: '12px 16px', background: 'var(--surface2)', color: 'var(--text)', fontSize: 13, fontWeight: 700, border: '1px solid var(--border)' }}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-                Compose Mail
+                Compose Custom Message
               </button>
 
               <textarea
@@ -676,14 +697,39 @@ export default function Dashboard({ onEdit, tz, search, setSearch, onAddNew, onR
                 }}
               />
 
-              <button
-                onClick={() => sendViaEmail(mailTicket, composeMessage)}
-                disabled={!composeMessage.trim()}
-                className="btn btn-primary"
-                style={{ width: '100%', justifyContent: 'center', padding: '10px', opacity: composeMessage.trim() ? 1 : 0.5 }}
-              >
-                Send Message
-              </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => sendViaEmail(mailTicket, composeMessage)}
+                  disabled={!composeMessage.trim()}
+                  className="btn btn-primary"
+                  style={{ flex: 1, justifyContent: 'center', padding: '10px', opacity: composeMessage.trim() ? 1 : 0.5 }}
+                >
+                  Send Email
+                </button>
+
+                <button
+                  onClick={() => sendViaWhatsApp(mailTicket, composeMessage)}
+                  disabled={!composeMessage.trim()}
+                  className="btn"
+                  style={{
+                    flex: 1,
+                    justifyContent: 'center',
+                    padding: '10px',
+                    background: '#25D366',
+                    color: '#fff',
+                    opacity: composeMessage.trim() ? 1 : 0.5,
+                    border: 'none',
+                    fontWeight: 700,
+                    fontSize: 13,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6
+                  }}
+                >
+                  <WhatsAppIcon width="16" height="16" />
+                  Send WhatsApp
+                </button>
+              </div>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)' }}>

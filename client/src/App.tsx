@@ -508,7 +508,7 @@ export default function App() {
             />
           )}
           {view === 'staff-calendar' && (
-            <StaffCalendar />
+            <StaffCalendar currentUser={currentUser} />
           )}
           {view === 'audit-logs' && isAdmin && (
             <AuditLogs tz={tz} />

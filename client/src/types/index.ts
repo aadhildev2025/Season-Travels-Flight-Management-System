@@ -185,6 +185,7 @@ export const AIRPORTS: Airport[] = [
   { code: 'BHX', name: 'Birmingham Airport', city: 'Birmingham', country: 'United Kingdom', timezone: 'Europe/London' },
 
   // Baltics
+  { code: 'RIX', name: 'Riga International Airport', city: 'Riga', country: 'Latvia', timezone: 'Europe/Riga' },
   { code: 'VNO', name: 'Vilnius Airport', city: 'Vilnius', country: 'Lithuania', timezone: 'Europe/Vilnius' },
   { code: 'KUN', name: 'Kaunas Airport', city: 'Kaunas', country: 'Lithuania', timezone: 'Europe/Vilnius' },
   { code: 'PLQ', name: 'Palanga International Airport', city: 'Palanga', country: 'Lithuania', timezone: 'Europe/Vilnius' },
@@ -289,6 +290,9 @@ export const AIRPORTS: Airport[] = [
   { code: 'KUL', name: 'Kuala Lumpur International Airport', city: 'Kuala Lumpur', country: 'Malaysia', timezone: 'Asia/Kuala_Lumpur' },
   { code: 'PEK', name: 'Beijing Capital International Airport', city: 'Beijing', country: 'China', timezone: 'Asia/Shanghai' },
   { code: 'DPS', name: 'Ngurah Rai International Airport', city: 'Bali', country: 'Indonesia', timezone: 'Asia/Makassar' },
+
+  // Canada
+  { code: 'YOW', name: 'Ottawa Macdonald–Cartier International Airport', city: 'Ottawa', country: 'Canada', timezone: 'America/Toronto' },
 
   // USA
   { code: 'ATL', name: 'Hartsfield–Jackson Atlanta Airport', city: 'Atlanta', country: 'United States', timezone: 'America/New_York' },

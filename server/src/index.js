@@ -143,15 +143,13 @@ if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
     process.exit(1);
   });
 
-  // Catch unhandled errors to prevent silent crashes
+  // Catch unhandled errors gracefully without killing the server
   process.on('uncaughtException', (err) => {
     console.error('Uncaught Exception:', err);
-    process.exit(1);
   });
 
   process.on('unhandledRejection', (reason) => {
     console.error('Unhandled Rejection:', reason);
-    process.exit(1);
   });
 }
 

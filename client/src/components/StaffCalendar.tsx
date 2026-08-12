@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -16,7 +17,13 @@ import {
   Building2,
   Eye,
   EyeOff,
-  UserPlus
+  UserPlus,
+  Globe,
+  Sun,
+  Umbrella,
+  CheckCircle,
+  XCircle,
+  AlertCircle
 } from 'lucide-react';
 import { apiFetch } from '../store/flightStore';
 
@@ -39,10 +46,23 @@ export interface CalendarShiftEvent {
   date: string; // YYYY-MM-DD
   startTime: string; // HH:mm
   finishTime: string; // HH:mm
+  timezone?: 'CET' | 'SLT';
   department: string;
   color: string;
   location?: string;
   notes?: string;
+}
+
+export interface HolidayRequest {
+  id: string;
+  _id?: string;
+  staffId: string;
+  staffName: string;
+  startDate: string;
+  endDate: string;
+  reason?: string;
+  status: 'Pending' | 'Approved' | 'Rejected';
+  createdAt?: string;
 }
 
 type CalendarViewMode = 'month' | 'week' | 'day' | 'timeline';
@@ -61,14 +81,64 @@ const DEPARTMENTS = [
   'Executive Ops'
 ];
 
+const WEEKDAYS = [
+  { label: 'Mon', value: 1 },
+  { label: 'Tue', value: 2 },
+  { label: 'Wed', value: 3 },
+  { label: 'Thu', value: 4 },
+  { label: 'Fri', value: 5 },
+  { label: 'Sat', value: 6 },
+  { label: 'Sun', value: 0 },
+];
 
+export interface StaffCalendarProps {
+  currentUser?: {
+    id?: string;
+    name?: string;
+    email?: string;
+    role?: string;
+  } | null;
+}
 
-export function StaffCalendar() {
+// Converts shift time between CET and SLT (+3 hours 30 mins offset)
+export const convertShiftTime = (timeStr: string, fromTz: 'CET' | 'SLT' = 'CET', toTz: 'CET' | 'SLT' = 'CET'): string => {
+  if (!timeStr) return '';
+  if (fromTz === toTz) return timeStr;
+
+  const [hStr, mStr] = timeStr.split(':');
+  let hours = parseInt(hStr, 10) || 0;
+  let mins = parseInt(mStr, 10) || 0;
+
+  let totalMins = hours * 60 + mins;
+
+  // CET -> SLT: add +210 mins (+3h 30m)
+  // SLT -> CET: subtract 210 mins (-3h 30m)
+  if (fromTz === 'CET' && toTz === 'SLT') {
+    totalMins += 210;
+  } else if (fromTz === 'SLT' && toTz === 'CET') {
+    totalMins -= 210;
+  }
+
+  totalMins = (totalMins % 1440 + 1440) % 1440;
+
+  const finalH = Math.floor(totalMins / 60);
+  const finalM = totalMins % 60;
+
+  return `${finalH.toString().padStart(2, '0')}:${finalM.toString().padStart(2, '0')}`;
+};
+
+export function StaffCalendar({ currentUser }: StaffCalendarProps) {
+  const isAdmin = currentUser?.role === 'Admin';
+
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
 
+  // Timezone View Toggle State (CET vs SLT)
+  const [activeTz, setActiveTz] = useState<'CET' | 'SLT'>('CET');
+
   const [staffList, setStaffList] = useState<CalendarStaffMember[]>([]);
   const [eventsList, setEventsList] = useState<CalendarShiftEvent[]>([]);
+  const [holidaysList, setHolidaysList] = useState<HolidayRequest[]>([]);
   const [visibleStaffIds, setVisibleStaffIds] = useState<Set<string>>(new Set());
 
   const [loading, setLoading] = useState<boolean>(true);
@@ -85,12 +155,22 @@ export function StaffCalendar() {
   const [newStaffDept, setNewStaffDept] = useState('Ticketing & Sales');
   const [newStaffColor, setNewStaffColor] = useState('#6366f1');
 
+  // Holiday Request Modals
+  const [holidayModalOpen, setHolidayModalOpen] = useState<boolean>(false);
+  const [adminHolidaysOpen, setAdminHolidaysOpen] = useState<boolean>(false);
+  const [holidayStaffId, setHolidayStaffId] = useState<string>('');
+  const [holidayStartDate, setHolidayStartDate] = useState<string>('');
+  const [holidayEndDate, setHolidayEndDate] = useState<string>('');
+  const [holidayReason, setHolidayReason] = useState<string>('');
+
   // Shift Form
   const [formTitle, setFormTitle] = useState('');
   const [formStaffId, setFormStaffId] = useState('');
   const [formDate, setFormDate] = useState('');
   const [formStartTime, setFormStartTime] = useState('08:00');
   const [formFinishTime, setFormFinishTime] = useState('16:30');
+  const [formTimezone, setFormTimezone] = useState<'CET' | 'SLT'>('CET');
+  const [formSelectedWeekdays, setFormSelectedWeekdays] = useState<number[]>([]);
   const [formLocation, setFormLocation] = useState('');
   const [formNotes, setFormNotes] = useState('');
 
@@ -98,63 +178,28 @@ export function StaffCalendar() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [staffRes, eventsRes] = await Promise.all([
+      const [staffRes, eventsRes, holidaysRes] = await Promise.all([
         apiFetch('/api/staff-calendar/staff'),
-        apiFetch('/api/staff-calendar/events')
+        apiFetch('/api/staff-calendar/events'),
+        apiFetch('/api/staff-calendar/holidays')
       ]);
 
       const staffData: CalendarStaffMember[] = staffRes.staff || [];
       const eventsData: CalendarShiftEvent[] = eventsRes.events || [];
+      const holidaysData: HolidayRequest[] = holidaysRes.holidays || [];
 
       setStaffList(staffData);
       setVisibleStaffIds(new Set(staffData.map(s => s.id || s._id || '')));
       setEventsList(eventsData);
+      setHolidaysList(holidaysData);
     } catch (err) {
       console.warn('Backend fetch failed:', err);
       setStaffList([]);
       setEventsList([]);
+      setHolidaysList([]);
     } finally {
       setLoading(false);
     }
-  };
-
-  // Delete individual staff member
-  const handleDeleteStaff = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      await apiFetch(`/api/staff-calendar/staff/${id}`, { method: 'DELETE' });
-    } catch {
-      // fallback
-    }
-    setStaffList(prev => prev.filter(s => (s.id !== id && s._id !== id)));
-    setVisibleStaffIds(prev => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  };
-
-  // Clear all staff members
-  const handleClearAllStaff = async () => {
-    if (!window.confirm('Are you sure you want to remove ALL staff members from the list?')) return;
-    try {
-      await apiFetch('/api/staff-calendar/staff', { method: 'DELETE' });
-    } catch {
-      // fallback
-    }
-    setStaffList([]);
-    setVisibleStaffIds(new Set());
-  };
-
-  // Clear All Tasks / Shifts
-  const handleClearAllShifts = async () => {
-    if (!window.confirm('Are you sure you want to remove ALL tasks/shifts from the Staff Calendar?')) return;
-    try {
-      await apiFetch('/api/staff-calendar/events', { method: 'DELETE' });
-    } catch (err) {
-      console.error('Failed to delete all events:', err);
-    }
-    setEventsList([]);
   };
 
   useEffect(() => {
@@ -163,6 +208,11 @@ export function StaffCalendar() {
 
   // Format Helper: YYYY-MM-DD
   const formatDateKey = (d: Date) => d.toISOString().split('T')[0];
+
+  // Pending Holidays Count
+  const pendingHolidaysCount = useMemo(() => {
+    return holidaysList.filter(h => h.status === 'Pending').length;
+  }, [holidaysList]);
 
   // Date Navigation Actions
   const handlePrevDate = () => {
@@ -214,14 +264,64 @@ export function StaffCalendar() {
     });
   }, [eventsList, visibleStaffIds, searchFilter]);
 
+  // Approved Holidays helper
+  const getApprovedHolidaysForDate = (dateStr: string) => {
+    return holidaysList.filter(h => {
+      if (h.status !== 'Approved') return false;
+      return dateStr >= h.startDate && dateStr <= h.endDate;
+    });
+  };
+
+  // Delete individual staff member
+  const handleDeleteStaff = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await apiFetch(`/api/staff-calendar/staff/${id}`, { method: 'DELETE' });
+    } catch {
+      // fallback
+    }
+    setStaffList(prev => prev.filter(s => (s.id !== id && s._id !== id)));
+    setVisibleStaffIds(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  };
+
+  // Clear all staff members
+  const handleClearAllStaff = async () => {
+    if (!window.confirm('Are you sure you want to remove ALL staff members from the list?')) return;
+    try {
+      await apiFetch('/api/staff-calendar/staff', { method: 'DELETE' });
+    } catch {
+      // fallback
+    }
+    setStaffList([]);
+    setVisibleStaffIds(new Set());
+  };
+
+  // Clear All Tasks / Shifts
+  const handleClearAllShifts = async () => {
+    if (!window.confirm('Are you sure you want to remove ALL tasks/shifts from the Staff Calendar?')) return;
+    try {
+      await apiFetch('/api/staff-calendar/events', { method: 'DELETE' });
+    } catch (err) {
+      console.error('Failed to delete all events:', err);
+    }
+    setEventsList([]);
+  };
+
   // Open Add Shift Modal
   const handleOpenAddShift = (defaultDate?: string) => {
+    if (!isAdmin) return; // Admin only
     setEditingShift(null);
     setFormTitle('Ticketing Shift');
     setFormStaffId(staffList[0]?.id || staffList[0]?._id || '');
     setFormDate(defaultDate || formatDateKey(currentDate));
     setFormStartTime('08:00');
     setFormFinishTime('16:30');
+    setFormTimezone(activeTz);
+    setFormSelectedWeekdays([]);
     setFormLocation('Ticketing Desk');
     setFormNotes('');
     setShiftModalOpen(true);
@@ -229,23 +329,91 @@ export function StaffCalendar() {
 
   // Open Edit Shift Modal
   const handleOpenEditShift = (shift: CalendarShiftEvent) => {
+    if (!isAdmin) return; // Admin only
     setEditingShift(shift);
     setFormTitle(shift.title);
     setFormStaffId(shift.staffId);
     setFormDate(shift.date);
     setFormStartTime(shift.startTime);
     setFormFinishTime(shift.finishTime);
+    setFormTimezone(shift.timezone || 'CET');
+    setFormSelectedWeekdays([]);
     setFormLocation(shift.location || '');
     setFormNotes(shift.notes || '');
     setShiftModalOpen(true);
   };
 
-  // Save Shift
+  // Toggle Weekday Selection
+  const toggleWeekdaySelection = (val: number) => {
+    setFormSelectedWeekdays(prev =>
+      prev.includes(val) ? prev.filter(w => w !== val) : [...prev, val]
+    );
+  };
+
+  // Save Shift (Supports Single or Multi-Weekday Appointment across month)
   const handleSaveShift = async (e: React.FormEvent) => {
     e.preventDefault();
     const staff = staffList.find(s => (s.id || s._id) === formStaffId);
     if (!staff) return;
 
+    // Multi-weekday bulk creation mode
+    if (formSelectedWeekdays.length > 0 && !editingShift) {
+      const baseDateObj = formDate ? new Date(formDate) : currentDate;
+      const year = baseDateObj.getFullYear();
+      const month = baseDateObj.getMonth();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const dates: string[] = [];
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dObj = new Date(year, month, d);
+        if (formSelectedWeekdays.includes(dObj.getDay())) {
+          dates.push(formatDateKey(dObj));
+        }
+      }
+
+      if (dates.length > 0) {
+        const payload = {
+          title: formTitle,
+          staffId: formStaffId,
+          staffName: staff.name,
+          dates,
+          startTime: formStartTime,
+          finishTime: formFinishTime,
+          timezone: formTimezone,
+          department: staff.department,
+          color: staff.color,
+          location: formLocation,
+          notes: formNotes
+        };
+        try {
+          const res = await apiFetch('/api/staff-calendar/events', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+          });
+          if (res.events && res.events.length > 0) {
+            setEventsList(prev => [...prev, ...res.events]);
+          } else {
+            const fallbackEvents = dates.map(d => ({
+              ...payload,
+              date: d,
+              id: `ev-${Date.now()}-${Math.random()}`
+            }));
+            setEventsList(prev => [...prev, ...fallbackEvents]);
+          }
+        } catch {
+          const fallbackEvents = dates.map(d => ({
+            ...payload,
+            date: d,
+            id: `ev-${Date.now()}-${Math.random()}`
+          }));
+          setEventsList(prev => [...prev, ...fallbackEvents]);
+        }
+        setShiftModalOpen(false);
+        return;
+      }
+    }
+
+    // Single shift mode
     const payload = {
       title: formTitle,
       staffId: formStaffId,
@@ -253,6 +421,7 @@ export function StaffCalendar() {
       date: formDate,
       startTime: formStartTime,
       finishTime: formFinishTime,
+      timezone: formTimezone,
       department: staff.department,
       color: staff.color,
       location: formLocation,
@@ -277,7 +446,6 @@ export function StaffCalendar() {
         setEventsList(prev => [...prev, created]);
       }
     } catch {
-      // Local fallback
       if (editingShift) {
         setEventsList(prev => prev.map(ev => ev.id === editingShift.id ? { ...editingShift, ...payload } : ev));
       } else {
@@ -329,6 +497,83 @@ export function StaffCalendar() {
     setAddStaffModalOpen(false);
   };
 
+  // Open Staff Holiday Request Modal
+  const handleOpenRequestHoliday = () => {
+    const defaultStaff = staffList.find(s => s.name.toLowerCase() === currentUser?.name?.toLowerCase()) || staffList[0];
+    setHolidayStaffId(defaultStaff?.id || defaultStaff?._id || '');
+    setHolidayStartDate(formatDateKey(currentDate));
+    setHolidayEndDate(formatDateKey(currentDate));
+    setHolidayReason('');
+    setHolidayModalOpen(true);
+  };
+
+  // Save Holiday Request (Staff)
+  const handleSaveHolidayRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!holidayStartDate || !holidayEndDate || !holidayStaffId) return;
+
+    const staff = staffList.find(s => (s.id || s._id) === holidayStaffId);
+    const staffName = staff ? staff.name : (currentUser?.name || 'Staff Member');
+
+    const payload = {
+      staffId: holidayStaffId,
+      staffName,
+      startDate: holidayStartDate,
+      endDate: holidayEndDate,
+      reason: holidayReason
+    };
+
+    try {
+      const res = await apiFetch('/api/staff-calendar/holidays', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      const created = res.holiday || { ...payload, status: 'Pending', id: `hol-${Date.now()}` };
+      setHolidaysList(prev => [created, ...prev]);
+    } catch {
+      setHolidaysList(prev => [{ ...payload, status: 'Pending', id: `hol-${Date.now()}` }, ...prev]);
+    }
+    setHolidayModalOpen(false);
+  };
+
+  // Update Holiday Status (Admin Approve / Reject)
+  const handleUpdateHolidayStatus = async (id: string, status: 'Approved' | 'Rejected') => {
+    try {
+      const res = await apiFetch(`/api/staff-calendar/holidays/${id}/status`, {
+        method: 'PUT',
+        body: JSON.stringify({ status })
+      });
+      if (res.holiday) {
+        setHolidaysList(prev => prev.map(h => (h.id === id || h._id === id) ? res.holiday : h));
+      } else {
+        setHolidaysList(prev => prev.map(h => (h.id === id || h._id === id) ? { ...h, status } : h));
+      }
+    } catch {
+      setHolidaysList(prev => prev.map(h => (h.id === id || h._id === id) ? { ...h, status } : h));
+    }
+  };
+
+  // Delete Holiday Request
+  const handleDeleteHoliday = async (id: string) => {
+    try {
+      await apiFetch(`/api/staff-calendar/holidays/${id}`, { method: 'DELETE' });
+    } catch {
+      // Fallback
+    }
+    setHolidaysList(prev => prev.filter(h => h.id !== id && h._id !== id));
+  };
+
+  // Clear All Holiday Requests
+  const handleClearAllHolidays = async () => {
+    if (!window.confirm('Are you sure you want to remove ALL holiday requests?')) return;
+    try {
+      await apiFetch('/api/staff-calendar/holidays', { method: 'DELETE' });
+    } catch (err) {
+      console.error('Failed to delete all holidays:', err);
+    }
+    setHolidaysList([]);
+  };
+
   // Export PDF with Watermark
   const handleExportPDF = async () => {
     try {
@@ -340,7 +585,7 @@ export function StaffCalendar() {
 
       const tableRows = filteredEvents.map(e => [
         e.date,
-        `${e.startTime} - ${e.finishTime}`,
+        `${convertShiftTime(e.startTime, e.timezone || 'CET', activeTz)} - ${convertShiftTime(e.finishTime, e.timezone || 'CET', activeTz)} (${activeTz})`,
         e.staffName,
         e.department,
         e.title,
@@ -349,17 +594,17 @@ export function StaffCalendar() {
 
       autoTable(doc, {
         startY: 24,
-        head: [['Date', 'Time (Start - Finish)', 'Staff Name', 'Department', 'Shift Title', 'Location']],
+        head: [['Date', `Time (${activeTz})`, 'Staff Name', 'Department', 'Shift Title', 'Location']],
         body: tableRows,
         styles: { fontSize: 8.5, cellPadding: 3, textColor: [30, 41, 59] },
         headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
         alternateRowStyles: { fillColor: [248, 250, 252] }
       });
 
-      applySeasonTravelsWatermark(doc, 'Staff Work Roster & Calendar');
+      applySeasonTravelsWatermark(doc, `Staff Work Roster (${activeTz} Timezone)`);
 
       const dateStr = new Date().toISOString().split('T')[0];
-      doc.save(`staff-calendar-roster_${dateStr}.pdf`);
+      doc.save(`staff-calendar-roster_${activeTz}_${dateStr}.pdf`);
     } catch (err) {
       console.error('Failed to export calendar PDF:', err);
     }
@@ -515,6 +760,7 @@ export function StaffCalendar() {
             const dateStr = formatDateKey(cellDate);
             const isToday = dateStr === todayStr;
             const dayEvents = filteredEvents.filter(e => e.date === dateStr);
+            const dayHolidays = getApprovedHolidaysForDate(dateStr);
 
             return (
               <div
@@ -546,49 +792,79 @@ export function StaffCalendar() {
                     {cellDate.getDate()}
                   </span>
 
-                  <button
-                    onClick={() => handleOpenAddShift(dateStr)}
-                    style={{
-                      background: 'none', border: 'none', color: 'var(--text3)',
-                      cursor: 'pointer', padding: 2, borderRadius: 4, display: 'flex'
-                    }}
-                    title="Add Shift on this date"
-                  >
-                    <Plus size={13} />
-                  </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => handleOpenAddShift(dateStr)}
+                      style={{
+                        background: 'none', border: 'none', color: 'var(--text3)',
+                        cursor: 'pointer', padding: 2, borderRadius: 4, display: 'flex'
+                      }}
+                      title="Add Shift on this date"
+                    >
+                      <Plus size={13} />
+                    </button>
+                  )}
                 </div>
 
-                {/* Shift Pills */}
+                {/* Holiday & Shift Badges */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4, overflowY: 'auto', flex: 1 }}>
-                  {dayEvents.map(shift => (
+                  {/* Approved Holiday Badges */}
+                  {dayHolidays.map(h => (
                     <div
-                      key={shift.id || shift._id}
-                      onClick={() => handleOpenEditShift(shift)}
+                      key={h.id || h._id}
                       style={{
                         padding: '4px 6px',
                         borderRadius: 6,
-                        background: `${shift.color}22`,
-                        borderLeft: `3px solid ${shift.color}`,
-                        color: 'var(--text)',
-                        fontSize: 11,
-                        cursor: 'pointer',
-                        transition: 'transform 0.1s, box-shadow 0.1s'
+                        background: 'rgba(245, 158, 11, 0.15)',
+                        borderLeft: '3px solid #f59e0b',
+                        color: '#f59e0b',
+                        fontSize: 10.5,
+                        fontWeight: 800,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4
                       }}
-                      className="shift-card-hover"
+                      title={`Holiday for ${h.staffName}: ${h.reason || 'Approved leave'}`}
                     >
-                      {/* START & FINISH TIME (VISIBILITY HIGHLIGHT) */}
-                      <div style={{ fontSize: 10, fontWeight: 800, color: shift.color, display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <Clock size={10} /> {shift.startTime} – {shift.finishTime}
-                      </div>
-
-                      <div style={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>
-                        {shift.staffName}
-                      </div>
-                      <div style={{ fontSize: 10, color: 'var(--text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {shift.title}
-                      </div>
+                      <Umbrella size={10} /> 🏖️ Holiday: {h.staffName}
                     </div>
                   ))}
+
+                  {/* Shift Cards */}
+                  {dayEvents.map(shift => {
+                    const dispStart = convertShiftTime(shift.startTime, shift.timezone || 'CET', activeTz);
+                    const dispFinish = convertShiftTime(shift.finishTime, shift.timezone || 'CET', activeTz);
+
+                    return (
+                      <div
+                        key={shift.id || shift._id}
+                        onClick={() => isAdmin && handleOpenEditShift(shift)}
+                        style={{
+                          padding: '4px 6px',
+                          borderRadius: 6,
+                          background: `${shift.color}22`,
+                          borderLeft: `3px solid ${shift.color}`,
+                          color: 'var(--text)',
+                          fontSize: 11,
+                          cursor: isAdmin ? 'pointer' : 'default',
+                          transition: 'transform 0.1s, box-shadow 0.1s'
+                        }}
+                        className={isAdmin ? "shift-card-hover" : ""}
+                      >
+                        {/* START & FINISH TIME (VISIBILITY HIGHLIGHT CONVERTED TO ACTIVE TZ) */}
+                        <div style={{ fontSize: 10, fontWeight: 800, color: shift.color, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Clock size={10} /> {dispStart} – {dispFinish} <span style={{ opacity: 0.7, fontSize: 9 }}>({activeTz})</span>
+                        </div>
+
+                        <div style={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>
+                          {shift.staffName}
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {shift.title}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -598,35 +874,32 @@ export function StaffCalendar() {
     );
   };
 
-  // Render Week View (7 columns)
+  // Render Week View
   const renderWeekView = () => {
     const curr = new Date(currentDate);
     const first = curr.getDate() - ((curr.getDay() + 6) % 7); // Mon
-
-    const weekDays: Date[] = [];
+    const weekDates: Date[] = [];
     for (let i = 0; i < 7; i++) {
-      const d = new Date(curr);
+      const d = new Date(currentDate);
       d.setDate(first + i);
-      weekDays.push(d);
+      weekDates.push(d);
     }
-
     const todayStr = formatDateKey(new Date());
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%', overflow: 'hidden' }}>
-        {/* Week Day Header */}
+        {/* Header Days */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid var(--border)', background: 'var(--surface)' }}>
-          {weekDays.map(d => {
+          {weekDates.map(d => {
             const dateStr = formatDateKey(d);
             const isToday = dateStr === todayStr;
-            const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
             return (
               <div key={dateStr} style={{ padding: '10px 8px', textAlign: 'center', borderRight: '1px solid var(--border2)', background: isToday ? 'rgba(99,102,241,0.05)' : 'transparent' }}>
-                <div style={{ fontSize: 10, fontWeight: 800, color: isToday ? 'var(--indigo2)' : 'var(--text3)' }}>
-                  {dayNames[d.getDay()]}
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text2)' }}>
+                  {d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()}
                 </div>
-                <div style={{ fontSize: 16, fontWeight: 900, color: isToday ? 'var(--indigo)' : 'var(--text)', marginTop: 2 }}>
+                <div style={{ fontSize: 16, fontWeight: isToday ? 900 : 700, color: isToday ? 'var(--indigo)' : 'var(--text)' }}>
                   {d.getDate()}
                 </div>
               </div>
@@ -634,60 +907,51 @@ export function StaffCalendar() {
           })}
         </div>
 
-        {/* Week Columns Grid */}
+        {/* Days Columns */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', flex: 1, overflowY: 'auto', background: 'var(--bg)' }}>
-          {weekDays.map(d => {
+          {weekDates.map(d => {
             const dateStr = formatDateKey(d);
             const dayEvents = filteredEvents.filter(e => e.date === dateStr);
+            const dayHolidays = getApprovedHolidaysForDate(dateStr);
 
             return (
               <div key={dateStr} style={{ borderRight: '1px solid var(--border2)', padding: 8, display: 'flex', flexDirection: 'column', gap: 8, background: 'var(--surface)' }}>
-                <button
-                  onClick={() => handleOpenAddShift(dateStr)}
-                  className="btn btn-ghost btn-sm"
-                  style={{ fontSize: 10, padding: '3px 6px', width: '100%', justifyContent: 'center', gap: 4 }}
-                >
-                  <Plus size={11} /> Add Shift
-                </button>
-
-                {dayEvents.length === 0 ? (
-                  <div style={{ fontSize: 10.5, color: 'var(--text3)', textAlign: 'center', padding: '20px 0', fontStyle: 'italic' }}>
-                    No shifts
+                {/* Approved Holidays */}
+                {dayHolidays.map(h => (
+                  <div key={h.id || h._id} style={{ padding: '6px 8px', borderRadius: 6, background: 'rgba(245, 158, 11, 0.15)', borderLeft: '3px solid #f59e0b', color: '#f59e0b', fontSize: 11, fontWeight: 800 }}>
+                    🏖️ Holiday: {h.staffName}
                   </div>
-                ) : (
-                  dayEvents.map(shift => (
+                ))}
+
+                {/* Shift Cards */}
+                {dayEvents.map(shift => {
+                  const dispStart = convertShiftTime(shift.startTime, shift.timezone || 'CET', activeTz);
+                  const dispFinish = convertShiftTime(shift.finishTime, shift.timezone || 'CET', activeTz);
+
+                  return (
                     <div
                       key={shift.id || shift._id}
-                      onClick={() => handleOpenEditShift(shift)}
+                      onClick={() => isAdmin && handleOpenEditShift(shift)}
                       style={{
                         padding: 8,
                         borderRadius: 8,
-                        background: `${shift.color}15`,
+                        background: `${shift.color}18`,
                         borderLeft: `4px solid ${shift.color}`,
-                        border: `1px solid ${shift.color}33`,
-                        borderLeftWidth: 4,
-                        cursor: 'pointer',
+                        cursor: isAdmin ? 'pointer' : 'default'
                       }}
                     >
-                      {/* START & FINISH TIME (VISIBILITY HIGHLIGHT) */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 900, color: shift.color, marginBottom: 3 }}>
-                        <Clock size={11} /> {shift.startTime} – {shift.finishTime}
+                      <div style={{ fontSize: 11, fontWeight: 800, color: shift.color, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <Clock size={11} /> {dispStart} – {dispFinish} <span style={{ opacity: 0.7, fontSize: 9 }}>({activeTz})</span>
                       </div>
-
-                      <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text)' }}>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text)', marginTop: 2 }}>
                         {shift.staffName}
                       </div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)' }}>
+                      <div style={{ fontSize: 11, color: 'var(--text2)' }}>
                         {shift.title}
                       </div>
-                      {shift.location && (
-                        <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4 }}>
-                          📍 {shift.location}
-                        </div>
-                      )}
                     </div>
-                  ))
-                )}
+                  );
+                })}
               </div>
             );
           })}
@@ -700,80 +964,82 @@ export function StaffCalendar() {
   const renderDayView = () => {
     const dateStr = formatDateKey(currentDate);
     const dayEvents = filteredEvents.filter(e => e.date === dateStr);
+    const dayHolidays = getApprovedHolidaysForDate(dateStr);
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, padding: 16, overflowY: 'auto', background: 'var(--bg)' }}>
+      <div style={{ flex: 1, padding: 20, overflowY: 'auto', background: 'var(--bg)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <div>
-            <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
-              {currentDate.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-            </h2>
-            <p style={{ fontSize: 12, color: 'var(--text2)', margin: 0, marginTop: 2 }}>
-              {dayEvents.length} scheduled staff shifts
-            </p>
-          </div>
-          <button onClick={() => handleOpenAddShift(dateStr)} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
-            <Plus size={14} /> Add Shift
-          </button>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {dayEvents.length === 0 ? (
-            <div style={{ padding: 40, textAlign: 'center', background: 'var(--surface)', borderRadius: 12, border: '1px dashed var(--border)', color: 'var(--text3)' }}>
-              No shifts scheduled for this day. Click "+ Add Shift" above to schedule staff.
-            </div>
-          ) : (
-            dayEvents.map(shift => (
-              <div
-                key={shift.id || shift._id}
-                onClick={() => handleOpenEditShift(shift)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '14px 18px',
-                  borderRadius: 10,
-                  background: 'var(--surface)',
-                  borderLeft: `6px solid ${shift.color}`,
-                  border: '1px solid var(--border)',
-                  borderLeftWidth: 6,
-                  cursor: 'pointer'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  {/* START & FINISH TIME (VISIBILITY HIGHLIGHT) */}
-                  <div style={{
-                    padding: '8px 12px',
-                    borderRadius: 8,
-                    background: `${shift.color}20`,
-                    color: shift.color,
-                    fontWeight: 900,
-                    fontSize: 13,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6
-                  }}>
-                    <Clock size={14} /> {shift.startTime} – {shift.finishTime}
-                  </div>
-
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)' }}>
-                      {shift.staffName}
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 600 }}>
-                      {shift.title} • <span style={{ color: shift.color }}>{shift.department}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ fontSize: 12, color: 'var(--text3)', textAlign: 'right' }}>
-                  {shift.location && <div>📍 {shift.location}</div>}
-                  {shift.notes && <div style={{ fontSize: 11 }}>{shift.notes}</div>}
-                </div>
-              </div>
-            ))
+          <h3 style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
+            Shifts & Leave for {currentDate.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+          </h3>
+          {isAdmin && (
+            <button onClick={() => handleOpenAddShift(dateStr)} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
+              <Plus size={13} /> Add Shift
+            </button>
           )}
         </div>
+
+        {/* Approved Holidays */}
+        {dayHolidays.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+            {dayHolidays.map(h => (
+              <div key={h.id || h._id} style={{ padding: 12, borderRadius: 10, background: 'rgba(245, 158, 11, 0.15)', border: '1px solid #f59e0b', color: '#f59e0b', fontWeight: 800, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Umbrella size={18} /> 🏖️ Approved Holiday: {h.staffName} ({h.reason || 'Staff Leave'})
+              </div>
+            ))}
+          </div>
+        )}
+
+        {dayEvents.length === 0 ? (
+          <div style={{ padding: 30, textAlign: 'center', color: 'var(--text3)', background: 'var(--surface)', borderRadius: 12, border: '1px solid var(--border)' }}>
+            No shifts scheduled for this date.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {dayEvents.map(shift => {
+              const dispStart = convertShiftTime(shift.startTime, shift.timezone || 'CET', activeTz);
+              const dispFinish = convertShiftTime(shift.finishTime, shift.timezone || 'CET', activeTz);
+
+              return (
+                <div
+                  key={shift.id || shift._id}
+                  onClick={() => isAdmin && handleOpenEditShift(shift)}
+                  style={{
+                    padding: 14,
+                    borderRadius: 10,
+                    background: 'var(--surface)',
+                    borderLeft: `5px solid ${shift.color}`,
+                    borderTop: '1px solid var(--border)',
+                    borderRight: '1px solid var(--border)',
+                    borderBottom: '1px solid var(--border)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    cursor: isAdmin ? 'pointer' : 'default'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 8, background: `${shift.color}22`, color: shift.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>
+                      {shift.staffName.charAt(0)}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)' }}>
+                        {shift.staffName} <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)' }}>· {shift.department}</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--text2)' }}>
+                        {shift.title} {shift.location ? `(${shift.location})` : ''}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: 13, fontWeight: 900, color: shift.color, background: `${shift.color}15`, padding: '6px 12px', borderRadius: 8 }}>
+                    ⏰ {dispStart} – {dispFinish} ({activeTz})
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   };
@@ -782,48 +1048,53 @@ export function StaffCalendar() {
   const renderTimelineView = () => {
     return (
       <div style={{ flex: 1, padding: 16, overflowY: 'auto', background: 'var(--bg)' }}>
-        <h3 style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', marginBottom: 14 }}>
-          Upcoming Staff Shift Timeline
+        <h3 style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', marginBottom: 12 }}>
+          Roster Timeline View ({activeTz} Timezone)
         </h3>
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {filteredEvents.map(shift => (
-            <div
-              key={shift.id || shift._id}
-              onClick={() => handleOpenEditShift(shift)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '12px 16px',
-                borderRadius: 10,
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                cursor: 'pointer'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 12, height: 12, borderRadius: '50%', background: shift.color }} />
-                <div>
-                  <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)', marginRight: 10 }}>
-                    {shift.staffName}
+          {filteredEvents.map(shift => {
+            const dispStart = convertShiftTime(shift.startTime, shift.timezone || 'CET', activeTz);
+            const dispFinish = convertShiftTime(shift.finishTime, shift.timezone || 'CET', activeTz);
+
+            return (
+              <div
+                key={shift.id || shift._id}
+                onClick={() => isAdmin && handleOpenEditShift(shift)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '10px 14px',
+                  background: 'var(--surface)',
+                  borderRadius: 8,
+                  border: '1px solid var(--border)',
+                  cursor: isAdmin ? 'pointer' : 'default'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 12, height: 12, borderRadius: '50%', background: shift.color }} />
+                  <div>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)', marginRight: 10 }}>
+                      {shift.staffName}
+                    </span>
+                    <span style={{ fontSize: 12, color: 'var(--text2)' }}>
+                      {shift.title} ({shift.department})
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)' }}>
+                    📅 {shift.date}
                   </span>
-                  <span style={{ fontSize: 12, color: 'var(--text2)' }}>
-                    {shift.title} ({shift.department})
+                  <span style={{ fontSize: 12, fontWeight: 900, color: shift.color, background: `${shift.color}15`, padding: '4px 8px', borderRadius: 6 }}>
+                    ⏰ {dispStart} – {dispFinish} ({activeTz})
                   </span>
                 </div>
               </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)' }}>
-                  📅 {shift.date}
-                </span>
-                {/* START & FINISH TIME (VISIBILITY HIGHLIGHT) */}
-                <span style={{ fontSize: 12, fontWeight: 900, color: shift.color, background: `${shift.color}15`, padding: '4px 8px', borderRadius: 6 }}>
-                  ⏰ {shift.startTime} – {shift.finishTime}
-                </span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     );
@@ -831,7 +1102,7 @@ export function StaffCalendar() {
 
   return (
     <div style={{ display: 'flex', height: '100%', width: '100%', background: 'var(--bg)', overflow: 'hidden' }}>
-      {/* ════════════════════ LEFT SIDEBAR PANEL (TEAMUP STYLE) ════════════════════ */}
+      {/* ════════════════════ LEFT SIDEBAR PANEL ════════════════════ */}
       <div style={{
         width: 280,
         background: 'var(--surface)',
@@ -887,7 +1158,7 @@ export function StaffCalendar() {
           <div style={{ display: 'flex', gap: 4 }}>
             <button onClick={() => toggleAllStaff(true)} className="btn btn-ghost btn-sm" style={{ fontSize: 10, padding: '2px 5px' }}>All</button>
             <button onClick={() => toggleAllStaff(false)} className="btn btn-ghost btn-sm" style={{ fontSize: 10, padding: '2px 5px' }}>None</button>
-            {staffList.length > 0 && (
+            {isAdmin && staffList.length > 0 && (
               <button onClick={handleClearAllStaff} className="btn btn-ghost btn-sm" style={{ fontSize: 10, padding: '2px 5px', color: 'var(--red)' }} title="Clear all staff members">Clear</button>
             )}
           </div>
@@ -918,28 +1189,22 @@ export function StaffCalendar() {
                         borderRadius: 6,
                         background: isVisible ? `${staff.color}15` : 'transparent',
                         border: `1px solid ${isVisible ? `${staff.color}44` : 'transparent'}`,
-                        cursor: 'pointer',
-                        transition: 'all 0.12s'
+                        cursor: 'pointer'
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: staff.color, flexShrink: 0 }} />
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: 11.5, fontWeight: isVisible ? 700 : 500, color: isVisible ? 'var(--text)' : 'var(--text3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {staff.name}
-                          </div>
-                        </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: staff.color }} />
+                        <span style={{ fontSize: 12, fontWeight: 600, color: isVisible ? 'var(--text)' : 'var(--text3)' }}>
+                          {staff.name}
+                        </span>
                       </div>
-
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         {isVisible ? <Eye size={12} style={{ color: staff.color }} /> : <EyeOff size={12} style={{ color: 'var(--text3)' }} />}
-                        <button
-                          onClick={(e) => handleDeleteStaff(id, e)}
-                          style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', padding: 2, display: 'flex', opacity: 0.7 }}
-                          title="Delete Staff Member"
-                        >
-                          <Trash2 size={11} />
-                        </button>
+                        {isAdmin && (
+                          <button onClick={(e) => handleDeleteStaff(id, e)} style={{ background: 'none', border: 'none', padding: 2, color: 'var(--red)', cursor: 'pointer' }}>
+                            <Trash2 size={10} />
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -949,90 +1214,165 @@ export function StaffCalendar() {
           ))}
         </div>
 
-        {/* Add Staff Button */}
-        <button
-          onClick={() => setAddStaffModalOpen(true)}
-          className="btn btn-ghost btn-sm"
-          style={{ marginTop: 10, gap: 6, width: '100%', justifyContent: 'center', border: '1px dashed var(--border)' }}
-        >
-          <UserPlus size={13} /> Add Staff Member
-        </button>
+        {/* Add Staff Button (Admin Only) */}
+        {isAdmin && (
+          <button
+            onClick={() => setAddStaffModalOpen(true)}
+            className="btn btn-ghost btn-sm"
+            style={{ marginTop: 10, gap: 6, width: '100%', justifyContent: 'center', border: '1px dashed var(--border)' }}
+          >
+            <UserPlus size={13} /> Add Staff Member
+          </button>
+        )}
       </div>
 
       {/* ════════════════════ MAIN CALENDAR PANEL ════════════════════ */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-        {/* Top Control Bar */}
+        {/* Top Control Bar (Single Line Layout - Restored Order) */}
         <div style={{
-          padding: '12px 18px',
+          padding: '10px 16px',
           background: 'var(--surface)',
           borderBottom: '1px solid var(--border)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: 12
+          flexWrap: 'nowrap',
+          gap: 12,
+          overflowX: 'auto'
         }}>
           {/* Navigation & Range */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button onClick={handleToday} className="btn btn-ghost btn-sm" style={{ fontWeight: 700 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <button onClick={handleToday} className="btn btn-ghost btn-sm" style={{ fontWeight: 700, padding: '4px 10px' }}>
               Today
             </button>
             <div style={{ display: 'flex', gap: 2 }}>
-              <button onClick={handlePrevDate} className="btn btn-ghost btn-icon" style={{ padding: 6 }}>
-                <ChevronLeft size={16} />
+              <button onClick={handlePrevDate} className="btn btn-ghost btn-icon" style={{ padding: 4 }}>
+                <ChevronLeft size={15} />
               </button>
-              <button onClick={handleNextDate} className="btn btn-ghost btn-icon" style={{ padding: 6 }}>
-                <ChevronRight size={16} />
+              <button onClick={handleNextDate} className="btn btn-ghost btn-icon" style={{ padding: 4 }}>
+                <ChevronRight size={15} />
               </button>
             </div>
-            <span style={{ fontSize: 16, fontWeight: 900, color: 'var(--text)', marginLeft: 6 }}>
+            <span style={{ fontSize: 15, fontWeight: 900, color: 'var(--text)', marginLeft: 4, whiteSpace: 'nowrap' }}>
               {getDateRangeLabel()}
             </span>
           </div>
 
-          {/* View Switcher Tabs */}
-          <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg2)', padding: 3, borderRadius: 8, border: '1px solid var(--border)' }}>
-            {(['day', 'week', 'month', 'timeline'] as CalendarViewMode[]).map(v => (
+          {/* Right Side Controls Group (Timezone, View Switcher & Action Buttons) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            {/* CET / SLT Timezone Toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg2)', padding: 2, borderRadius: 8, border: '1px solid var(--border)' }}>
               <button
-                key={v}
-                onClick={() => setViewMode(v)}
+                onClick={() => setActiveTz('CET')}
                 style={{
-                  padding: '4px 12px',
+                  padding: '3px 8px',
                   borderRadius: 6,
                   border: 'none',
-                  background: viewMode === v ? 'var(--surface)' : 'transparent',
-                  color: viewMode === v ? 'var(--indigo2)' : 'var(--text2)',
-                  fontSize: 12,
-                  fontWeight: viewMode === v ? 800 : 600,
+                  background: activeTz === 'CET' ? 'var(--indigo)' : 'transparent',
+                  color: activeTz === 'CET' ? '#ffffff' : 'var(--text2)',
+                  fontSize: 11,
+                  fontWeight: activeTz === 'CET' ? 800 : 600,
                   cursor: 'pointer',
-                  textTransform: 'capitalize',
-                  boxShadow: viewMode === v ? '0 2px 6px rgba(0,0,0,0.1)' : 'none',
+                  whiteSpace: 'nowrap',
                   transition: 'all 0.15s'
                 }}
               >
-                {v}
+                CET (UTC+2)
               </button>
-            ))}
-          </div>
-
-          {/* Action Controls */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button onClick={() => handleOpenAddShift()} className="btn btn-primary btn-sm" style={{ gap: 6 }}>
-              <Plus size={13} /> Add Shift
-            </button>
-            {eventsList.length > 0 && (
               <button
-                onClick={handleClearAllShifts}
-                className="btn btn-ghost btn-sm"
-                style={{ gap: 6, color: 'var(--red)' }}
-                title="Remove all tasks/shifts from the calendar"
+                onClick={() => setActiveTz('SLT')}
+                style={{
+                  padding: '3px 8px',
+                  borderRadius: 6,
+                  border: 'none',
+                  background: activeTz === 'SLT' ? 'var(--indigo)' : 'transparent',
+                  color: activeTz === 'SLT' ? '#ffffff' : 'var(--text2)',
+                  fontSize: 11,
+                  fontWeight: activeTz === 'SLT' ? 800 : 600,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.15s'
+                }}
               >
-                <Trash2 size={13} /> Clear All Tasks
+                SLT (UTC+5:30)
               </button>
-            )}
-            <button onClick={handleExportPDF} className="btn btn-ghost btn-sm" style={{ gap: 6 }} title="Export Calendar Roster to PDF with Watermark">
-              <Download size={13} /> PDF
-            </button>
+            </div>
+
+            {/* View Switcher Tabs */}
+            <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg2)', padding: 2, borderRadius: 8, border: '1px solid var(--border)' }}>
+              {(['day', 'week', 'month', 'timeline'] as CalendarViewMode[]).map(v => (
+                <button
+                  key={v}
+                  onClick={() => setViewMode(v)}
+                  style={{
+                    padding: '3px 10px',
+                    borderRadius: 6,
+                    border: 'none',
+                    background: viewMode === v ? 'var(--surface)' : 'transparent',
+                    color: viewMode === v ? 'var(--indigo2)' : 'var(--text2)',
+                    fontSize: 11.5,
+                    fontWeight: viewMode === v ? 800 : 600,
+                    cursor: 'pointer',
+                    textTransform: 'capitalize',
+                    whiteSpace: 'nowrap',
+                    boxShadow: viewMode === v ? '0 2px 6px rgba(0,0,0,0.1)' : 'none',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+
+            {/* Action Controls (Role-Gated) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {isAdmin ? (
+                <>
+                  <button onClick={() => handleOpenAddShift()} className="btn btn-primary btn-sm" style={{ gap: 5, padding: '4px 10px', fontSize: 12 }}>
+                    <Plus size={13} /> Add Shift
+                  </button>
+                  {eventsList.length > 0 && (
+                    <button
+                      onClick={handleClearAllShifts}
+                      className="btn btn-ghost btn-sm"
+                      style={{ gap: 5, color: 'var(--red)', padding: '4px 10px', fontSize: 12 }}
+                      title="Remove all tasks/shifts"
+                    >
+                      <Trash2 size={13} /> Clear All Tasks
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setAdminHolidaysOpen(true)}
+                    className="btn btn-ghost btn-sm"
+                    style={{ gap: 5, position: 'relative', padding: '4px 10px', fontSize: 12 }}
+                    title="Manage Staff Holiday Requests"
+                  >
+                    <Umbrella size={13} /> Holiday Requests
+                    {pendingHolidaysCount > 0 && (
+                      <span style={{
+                        background: 'var(--red)', color: '#fff', borderRadius: '50%',
+                        padding: '1px 5px', fontSize: 10, fontWeight: 900
+                      }}>
+                        {pendingHolidaysCount}
+                      </span>
+                    )}
+                  </button>
+                </>
+              ) : (
+                /* Staff Role Controls */
+                <button
+                  onClick={handleOpenRequestHoliday}
+                  className="btn btn-primary btn-sm"
+                  style={{ gap: 5, background: 'linear-gradient(135deg, #059669, #10b981)', padding: '4px 10px', fontSize: 12 }}
+                >
+                  <Umbrella size={13} /> Request Holiday
+                </button>
+              )}
+
+              <button onClick={handleExportPDF} className="btn btn-ghost btn-sm" style={{ gap: 5, padding: '4px 10px', fontSize: 12 }} title="Export Calendar Roster to PDF">
+                <Download size={13} /> PDF
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1045,14 +1385,14 @@ export function StaffCalendar() {
         </div>
       </div>
 
-      {/* ════════════════════ ADD / EDIT SHIFT MODAL ════════════════════ */}
-      {shiftModalOpen && (
+      {/* ════════════════════ ADD / EDIT SHIFT MODAL (ADMIN ONLY) ════════════════════ */}
+      {shiftModalOpen && createPortal(
         <div style={{
           position: 'fixed', inset: 0, zIndex: 1000,
           background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16
         }}>
-          <div className="card fade-in" style={{ width: '100%', maxWidth: 460, background: 'var(--surface)', borderRadius: 14, padding: 22, border: '1px solid var(--border)' }}>
+          <div className="card fade-in" style={{ width: '100%', maxWidth: 480, background: 'var(--surface)', borderRadius: 14, padding: 22, border: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
               <h3 style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', margin: 0 }}>
                 {editingShift ? 'Edit Staff Shift' : 'Schedule Staff Shift'}
@@ -1090,6 +1430,7 @@ export function StaffCalendar() {
                 </select>
               </div>
 
+              {/* Timezone & Time Fields */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                 <div>
                   <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text2)', display: 'block', marginBottom: 4 }}>Date</label>
@@ -1103,6 +1444,18 @@ export function StaffCalendar() {
                 </div>
 
                 <div>
+                  <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text2)', display: 'block', marginBottom: 4 }}>Timezone</label>
+                  <select
+                    value={formTimezone}
+                    onChange={e => setFormTimezone(e.target.value as 'CET' | 'SLT')}
+                    style={{ width: '100%', padding: '8px 10px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 12 }}
+                  >
+                    <option value="CET">CET (Admin)</option>
+                    <option value="SLT">SLT (Staff)</option>
+                  </select>
+                </div>
+
+                <div>
                   <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text2)', display: 'block', marginBottom: 4 }}>Start Time</label>
                   <input
                     type="time"
@@ -1112,7 +1465,9 @@ export function StaffCalendar() {
                     style={{ width: '100%', padding: '8px 10px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 12 }}
                   />
                 </div>
+              </div>
 
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
                   <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text2)', display: 'block', marginBottom: 4 }}>Finish Time</label>
                   <input
@@ -1123,18 +1478,57 @@ export function StaffCalendar() {
                     style={{ width: '100%', padding: '8px 10px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 12 }}
                   />
                 </div>
+
+                <div>
+                  <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text2)', display: 'block', marginBottom: 4 }}>Location / Counter</label>
+                  <input
+                    type="text"
+                    value={formLocation}
+                    onChange={e => setFormLocation(e.target.value)}
+                    placeholder="e.g., Counter 3"
+                    style={{ width: '100%', padding: '8px 10px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 12 }}
+                  />
+                </div>
               </div>
 
-              <div>
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text2)', display: 'block', marginBottom: 4 }}>Location / Counter</label>
-                <input
-                  type="text"
-                  value={formLocation}
-                  onChange={e => setFormLocation(e.target.value)}
-                  placeholder="e.g., Ticketing Counter 3, Terminal Lounge"
-                  style={{ width: '100%', padding: '8px 12px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 13 }}
-                />
-              </div>
+              {/* Multi-Weekday Selection Picker (Admin feature for bulk shift assignment) */}
+              {!editingShift && (
+                <div style={{ background: 'var(--bg2)', padding: 12, borderRadius: 10, border: '1px solid var(--border)' }}>
+                  <label style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--indigo2)', display: 'block', marginBottom: 6 }}>
+                    📅 Appoint Shift across Weekdays (Optional)
+                  </label>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {WEEKDAYS.map(w => {
+                      const isSelected = formSelectedWeekdays.includes(w.value);
+                      return (
+                        <button
+                          key={w.value}
+                          type="button"
+                          onClick={() => toggleWeekdaySelection(w.value)}
+                          style={{
+                            padding: '4px 9px',
+                            borderRadius: 6,
+                            border: `1px solid ${isSelected ? 'var(--indigo)' : 'var(--border)'}`,
+                            background: isSelected ? 'var(--indigo)' : 'var(--surface)',
+                            color: isSelected ? '#ffffff' : 'var(--text)',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          {w.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {formSelectedWeekdays.length > 0 && (
+                    <div style={{ fontSize: 10.5, color: 'var(--text2)', marginTop: 6 }}>
+                      ⚡ Shift will be automatically created for all selected weekdays in the month!
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
                 {editingShift ? (
@@ -1159,11 +1553,225 @@ export function StaffCalendar() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* ════════════════════ ADD STAFF MODAL ════════════════════ */}
-      {addStaffModalOpen && (
+      {/* ════════════════════ STAFF HOLIDAY REQUEST MODAL ════════════════════ */}
+      {holidayModalOpen && createPortal(
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16
+        }}>
+          <div className="card fade-in" style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', borderRadius: 14, padding: 22, border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Umbrella size={18} style={{ color: '#10b981' }} /> Request Holiday Leave
+              </h3>
+              <button onClick={() => setHolidayModalOpen(false)} className="btn btn-ghost btn-icon" style={{ padding: 4 }}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveHolidayRequest} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text2)', display: 'block', marginBottom: 4 }}>Staff Member</label>
+                <select
+                  value={holidayStaffId}
+                  onChange={e => setHolidayStaffId(e.target.value)}
+                  style={{ width: '100%', padding: '8px 12px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 13 }}
+                >
+                  {staffList.map(s => (
+                    <option key={s.id || s._id} value={s.id || s._id}>
+                      {s.name} ({s.department})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text2)', display: 'block', marginBottom: 4 }}>Start Date</label>
+                  <input
+                    type="date"
+                    value={holidayStartDate}
+                    onChange={e => {
+                      const newStart = e.target.value;
+                      setHolidayStartDate(newStart);
+                      if (holidayEndDate < newStart) {
+                        setHolidayEndDate(newStart);
+                      }
+                    }}
+                    required
+                    style={{ width: '100%', padding: '8px 10px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 12 }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text2)', display: 'block', marginBottom: 4 }}>End Date</label>
+                  <input
+                    type="date"
+                    value={holidayEndDate}
+                    min={holidayStartDate}
+                    onChange={e => setHolidayEndDate(e.target.value)}
+                    required
+                    style={{ width: '100%', padding: '8px 10px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 12 }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text2)', display: 'block', marginBottom: 4 }}>Reason / Notes</label>
+                <textarea
+                  value={holidayReason}
+                  onChange={e => setHolidayReason(e.target.value)}
+                  placeholder="e.g. Annual leave, Personal holiday"
+                  rows={3}
+                  style={{ width: '100%', padding: '8px 12px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 12, resize: 'vertical' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
+                <button type="button" onClick={() => setHolidayModalOpen(false)} className="btn btn-ghost btn-sm">
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary btn-sm" style={{ gap: 6, background: 'linear-gradient(135deg, #059669, #10b981)' }}>
+                  <Check size={13} /> Submit Request
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ════════════════════ ADMIN HOLIDAY REQUESTS MANAGEMENT MODAL ════════════════════ */}
+      {adminHolidaysOpen && createPortal(
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16
+        }}>
+          <div className="card fade-in" style={{ width: '100%', maxWidth: 640, background: 'var(--surface)', borderRadius: 14, padding: 22, border: '1px solid var(--border)', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Umbrella size={18} style={{ color: 'var(--indigo2)' }} /> Staff Holiday Requests Management
+              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {holidaysList.length > 0 && (
+                  <button
+                    onClick={handleClearAllHolidays}
+                    className="btn btn-ghost btn-sm"
+                    style={{ color: 'var(--red)', fontSize: 11, gap: 4 }}
+                    title="Remove all holiday requests"
+                  >
+                    <Trash2 size={12} /> Clear All
+                  </button>
+                )}
+                <button onClick={() => setAdminHolidaysOpen(false)} className="btn btn-ghost btn-icon" style={{ padding: 4 }}>
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {holidaysList.length === 0 ? (
+                <div style={{ padding: 30, textAlign: 'center', color: 'var(--text3)' }}>
+                  No holiday requests found.
+                </div>
+              ) : (
+                holidaysList.map(req => {
+                  const id = req.id || req._id || '';
+                  const isPending = req.status === 'Pending';
+                  const isApproved = req.status === 'Approved';
+
+                  return (
+                    <div
+                      key={id}
+                      style={{
+                        padding: 14,
+                        borderRadius: 10,
+                        background: 'var(--bg2)',
+                        border: '1px solid var(--border)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 12
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {req.staffName}
+                          <span style={{
+                            fontSize: 10,
+                            padding: '2px 8px',
+                            borderRadius: 12,
+                            fontWeight: 800,
+                            background: isPending ? 'rgba(245, 158, 11, 0.15)' : isApproved ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                            color: isPending ? '#f59e0b' : isApproved ? '#10b981' : '#ef4444'
+                          }}>
+                            {req.status}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 11.5, color: 'var(--text2)', marginTop: 4 }}>
+                          📅 <b>{req.startDate}</b> to <b>{req.endDate}</b>
+                        </div>
+                        {req.reason && (
+                          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, fontStyle: 'italic' }}>
+                            "{req.reason}"
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {isPending && (
+                          <>
+                            <button
+                              onClick={() => handleUpdateHolidayStatus(id, 'Approved')}
+                              className="btn btn-primary btn-sm"
+                              style={{ background: '#10b981', gap: 4, padding: '4px 10px', fontSize: 11 }}
+                            >
+                              <CheckCircle size={12} /> Approve
+                            </button>
+                            <button
+                              onClick={() => handleUpdateHolidayStatus(id, 'Rejected')}
+                              className="btn btn-ghost btn-sm"
+                              style={{ color: '#ef4444', gap: 4, padding: '4px 10px', fontSize: 11 }}
+                            >
+                              <XCircle size={12} /> Reject
+                            </button>
+                          </>
+                        )}
+                        {!isPending && (
+                          <button
+                            onClick={() => handleUpdateHolidayStatus(id, isApproved ? 'Rejected' : 'Approved')}
+                            className="btn btn-ghost btn-sm"
+                            style={{ fontSize: 11 }}
+                          >
+                            Set to {isApproved ? 'Rejected' : 'Approved'}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleDeleteHoliday(id)}
+                          style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', padding: 4 }}
+                          title="Delete Request"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ════════════════════ ADD STAFF MODAL (ADMIN ONLY) ════════════════════ */}
+      {addStaffModalOpen && createPortal(
         <div style={{
           position: 'fixed', inset: 0, zIndex: 1000,
           background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
@@ -1238,7 +1846,8 @@ export function StaffCalendar() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

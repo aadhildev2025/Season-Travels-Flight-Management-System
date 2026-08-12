@@ -14,7 +14,7 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/', requireAuth, requireAdmin, async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   try {
     const { title, username, password, notes, folder } = req.body;
     if (!title || !password) {
@@ -51,7 +51,7 @@ router.put('/reorder', requireAuth, async (req, res) => {
   }
 });
 
-router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
+router.put('/:id', requireAuth, async (req, res) => {
   try {
     const { title, username, password, notes, folder } = req.body;
     const credential = await CredentialModel.findCredentialById(req.params.id);
@@ -74,7 +74,7 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
-router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
+router.delete('/:id', requireAuth, async (req, res) => {
   try {
     const credential = await CredentialModel.findCredentialById(req.params.id);
     if (!credential) {

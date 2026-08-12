@@ -50,44 +50,63 @@ interface SpreadsheetState {
   setSaveStatus: (status: string) => void;
 }
 
+const getInitialActiveSpreadsheet = (): SpreadsheetData | null => {
+  try {
+    const cached = localStorage.getItem('st_cached_spreadsheet_v1');
+    if (cached) {
+      return JSON.parse(cached);
+    }
+  } catch (e) {
+    // Ignore cache parse error
+  }
+  return null;
+};
+
+const cacheActiveSpreadsheet = (spreadsheet: SpreadsheetData | null) => {
+  try {
+    if (spreadsheet) {
+      localStorage.setItem('st_cached_spreadsheet_v1', JSON.stringify(spreadsheet));
+    } else {
+      localStorage.removeItem('st_cached_spreadsheet_v1');
+    }
+  } catch (e) {
+    // Ignore storage quota error
+  }
+};
+
 export const useSpreadsheetStore = create<SpreadsheetState>((set, get) => ({
   spreadsheets: [],
-  activeSpreadsheet: null,
+  activeSpreadsheet: getInitialActiveSpreadsheet(),
   loading: false,
   isSaving: false,
   saveStatus: 'All changes saved',
 
   fetchSpreadsheets: async () => {
-    set({ loading: true });
     try {
       const data = await apiFetch('/api/spreadsheets');
-      set({ spreadsheets: data.spreadsheets || [] });
+      const list = data.spreadsheets || [];
+      set({ spreadsheets: list });
     } catch (err) {
       console.error('Failed to fetch spreadsheets:', err);
-    } finally {
-      set({ loading: false });
     }
   },
 
   fetchSpreadsheetById: async (id: string) => {
-    set({ loading: true });
     try {
       const data = await apiFetch(`/api/spreadsheets/${id}`);
       const spreadsheet = data.spreadsheet || null;
       set({ activeSpreadsheet: spreadsheet });
+      cacheActiveSpreadsheet(spreadsheet);
       return spreadsheet;
     } catch (err) {
       console.error(`Failed to fetch spreadsheet ${id}:`, err);
       return null;
-    } finally {
-      set({ loading: false });
     }
   },
 
   createSpreadsheet: async (title: string) => {
     set({ loading: true });
     try {
-      // Default with a clean empty sheet
       const defaultSheets: SheetData[] = [
         {
           name: 'Sheet 1',
@@ -119,6 +138,7 @@ export const useSpreadsheetStore = create<SpreadsheetState>((set, get) => ({
           spreadsheets: [spreadsheet, ...state.spreadsheets],
           activeSpreadsheet: spreadsheet,
         }));
+        cacheActiveSpreadsheet(spreadsheet);
       }
       return spreadsheet;
     } catch (err) {
@@ -131,15 +151,14 @@ export const useSpreadsheetStore = create<SpreadsheetState>((set, get) => ({
 
   updateSpreadsheet: async (id: string, data: { title?: string; sheets?: SheetData[] }) => {
     set({ isSaving: true, saveStatus: 'Saving...' });
+    // Cache local active spreadsheet state immediately for 0ms latency
+    cacheActiveSpreadsheet(get().activeSpreadsheet);
     try {
       const result = await apiFetch(`/api/spreadsheets/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),
       });
       if (result.success) {
-        // Only update the list entry — do NOT replace activeSpreadsheet from the
-        // server response.  We already hold the correct latest data locally.
-        // Replacing it would trigger a full re-render and interrupt ongoing edits.
         set((state) => ({
           spreadsheets: state.spreadsheets.map((s) =>
             s.id === id ? { ...s, updatedAt: result.spreadsheet?.updatedAt ?? s.updatedAt } : s
@@ -161,11 +180,12 @@ export const useSpreadsheetStore = create<SpreadsheetState>((set, get) => ({
       await apiFetch(`/api/spreadsheets/${id}`, {
         method: 'DELETE',
       });
+      const newActive = get().activeSpreadsheet?.id === id ? null : get().activeSpreadsheet;
       set((state) => ({
         spreadsheets: state.spreadsheets.filter((s) => s.id !== id),
-        activeSpreadsheet:
-          state.activeSpreadsheet?.id === id ? null : state.activeSpreadsheet,
+        activeSpreadsheet: newActive,
       }));
+      cacheActiveSpreadsheet(newActive);
     } catch (err) {
       console.error(`Failed to delete spreadsheet ${id}:`, err);
     }
@@ -173,6 +193,7 @@ export const useSpreadsheetStore = create<SpreadsheetState>((set, get) => ({
 
   setActiveSpreadsheet: (spreadsheet: SpreadsheetData | null) => {
     set({ activeSpreadsheet: spreadsheet });
+    cacheActiveSpreadsheet(spreadsheet);
   },
 
   setSaveStatus: (status: string) => {

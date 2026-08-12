@@ -6,11 +6,15 @@ import {
   deleteAllCalendarStaff,
   findAllCalendarEvents,
   createCalendarEvent,
+  createManyCalendarEvents,
   updateCalendarEvent,
   deleteCalendarEvent,
   deleteAllCalendarEvents,
-  CalendarStaff,
-  CalendarEvent,
+  findAllHolidayRequests,
+  createHolidayRequest,
+  updateHolidayRequestStatus,
+  deleteHolidayRequest,
+  deleteAllHolidayRequests,
 } from '../models/StaffCalendar.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -91,13 +95,36 @@ router.delete('/events', requireAuth, async (_req, res) => {
   }
 });
 
-// POST /api/staff-calendar/events
+// POST /api/staff-calendar/events (Supports single creation or array of dates for multi-weekday creation)
 router.post('/events', requireAuth, async (req, res) => {
   try {
-    const { title, staffId, staffName, date, startTime, finishTime, department, color, location, notes } = req.body;
-    if (!title || !date || !startTime || !finishTime || !staffName) {
+    const { title, staffId, staffName, date, dates, startTime, finishTime, timezone, department, color, location, notes } = req.body;
+    if (!title || !startTime || !finishTime || !staffName) {
       return res.status(400).json({ error: 'Missing required shift fields' });
     }
+
+    if (Array.isArray(dates) && dates.length > 0) {
+      const eventsData = dates.map(d => ({
+        title: title.trim(),
+        staffId,
+        staffName,
+        date: d,
+        startTime,
+        finishTime,
+        timezone: timezone || 'CET',
+        department: department || 'General',
+        color: color || '#6366f1',
+        location: location || '',
+        notes: notes || '',
+      }));
+      const events = await createManyCalendarEvents(eventsData);
+      return res.json({ events, success: true });
+    }
+
+    if (!date) {
+      return res.status(400).json({ error: 'Date or dates array is required' });
+    }
+
     const event = await createCalendarEvent({
       title: title.trim(),
       staffId,
@@ -105,12 +132,13 @@ router.post('/events', requireAuth, async (req, res) => {
       date,
       startTime,
       finishTime,
+      timezone: timezone || 'CET',
       department: department || 'General',
       color: color || '#6366f1',
       location: location || '',
       notes: notes || '',
     });
-    return res.json({ event, success: true });
+    return res.json({ event, events: [event], success: true });
   } catch (err) {
     console.error('Create calendar event error:', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -139,15 +167,73 @@ router.delete('/events/:id', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/staff-calendar/seed
-router.post('/seed', requireAuth, async (_req, res) => {
+// ════════════════════ HOLIDAY REQUESTS ════════════════════
+
+// GET /api/staff-calendar/holidays
+router.get('/holidays', requireAuth, async (_req, res) => {
   try {
-    await seedDefaultCalendar();
-    const staff = await findAllCalendarStaff();
-    const events = await findAllCalendarEvents();
-    return res.json({ staff, events, success: true });
+    const holidays = await findAllHolidayRequests();
+    return res.json({ holidays });
   } catch (err) {
-    console.error('Seed calendar error:', err);
+    console.error('Get holiday requests error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/staff-calendar/holidays (Create Holiday Request)
+router.post('/holidays', requireAuth, async (req, res) => {
+  try {
+    const { staffId, staffName, startDate, endDate, reason } = req.body;
+    if (!staffId || !staffName || !startDate || !endDate) {
+      return res.status(400).json({ error: 'Missing required holiday fields' });
+    }
+    const holiday = await createHolidayRequest({
+      staffId,
+      staffName,
+      startDate,
+      endDate,
+      reason: reason || ''
+    });
+    return res.json({ holiday, success: true });
+  } catch (err) {
+    console.error('Create holiday request error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/staff-calendar/holidays/:id/status (Approve or Reject)
+router.put('/holidays/:id/status', requireAuth, async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!['Approved', 'Rejected', 'Pending'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+    const holiday = await updateHolidayRequestStatus(req.params.id, status);
+    return res.json({ holiday, success: true });
+  } catch (err) {
+    console.error('Update holiday status error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/staff-calendar/holidays (Clear all holiday requests)
+router.delete('/holidays', requireAuth, async (_req, res) => {
+  try {
+    await deleteAllHolidayRequests();
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('Delete all holiday requests error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/staff-calendar/holidays/:id
+router.delete('/holidays/:id', requireAuth, async (req, res) => {
+  try {
+    await deleteHolidayRequest(req.params.id);
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('Delete holiday request error:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

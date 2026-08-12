@@ -90,6 +90,7 @@ export const PasswordCredential: React.FC = () => {
   const isSelectionChange = useRef(false);
   const debouncedSaveRef = useRef<NodeJS.Timeout | null>(null);
   const editorRef = useRef<HTMLDivElement>(null);
+  const lastCaretRange = useRef<Range | null>(null);
 
   // Monitor screen width for mobile responsiveness
   useEffect(() => {
@@ -114,12 +115,13 @@ export const PasswordCredential: React.FC = () => {
   }, []);
 
   // Load credentials from API (Background Sync pattern)
-  const fetchCredentials = useCallback(async () => {
+  const fetchCredentials = useCallback(async (silent = false) => {
     try {
-      // Only set blocking loading spinner if no cached items exist at all
-      const cached = localStorage.getItem(CACHE_KEY);
-      if (!cached || JSON.parse(cached).length === 0) {
-        setLoading(true);
+      if (!silent) {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (!cached || JSON.parse(cached).length === 0) {
+          setLoading(true);
+        }
       }
 
       const data = await apiFetch('/api/credentials');
@@ -137,15 +139,34 @@ export const PasswordCredential: React.FC = () => {
         return prev;
       });
     } catch {
-      showToast('Failed to load notes', 'error');
+      if (!silent) {
+        showToast('Failed to load notes', 'error');
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [showToast]);
 
   useEffect(() => {
     fetchCredentials();
-  }, []);
+
+    // 3-second background polling for multi-user sync between Staff & Admin
+    const interval = setInterval(() => {
+      fetchCredentials(true);
+    }, 3000);
+
+    const handleFocus = () => {
+      fetchCredentials(true);
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [fetchCredentials]);
 
   // Update editor innerHTML ONLY when selectedId changes (ignores typings/re-renders)
   useEffect(() => {
@@ -170,18 +191,62 @@ export const PasswordCredential: React.FC = () => {
           const newCard = document.createElement('div');
           newCard.className = 'password-box-widget';
           newCard.setAttribute('contenteditable', 'false');
-          newCard.style.cssText = 'display: inline-flex; align-items: center; gap: 10px; background: rgba(30, 41, 59, 0.65); backdrop-filter: blur(12px); border: 1px solid rgba(59, 130, 246, 0.35); border-radius: 12px; padding: 8px 14px; margin: 8px 0; max-width: 100%; vertical-align: middle; user-select: none; box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15);';
+          newCard.style.cssText = 'display: inline-flex; align-items: center; gap: 8px; background: transparent; border: 1px solid rgba(59, 130, 246, 0.45); border-radius: 8px; padding: 6px 12px; margin: 8px 0; max-width: 100%; vertical-align: middle; user-select: none;';
           
-          newCard.innerHTML = `<span class="pass-box-badge" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 4px 10px; color: #3b82f6; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>PASSWORD</span><span class="pass-box-input pass-masked" contenteditable="true" data-placeholder="Set password..." style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 8px; color: #f8fafc; padding: 6px 14px; font-size: 13px; font-family: monospace; outline: none; min-width: 160px; cursor: text; display: inline-block; vertical-align: middle; text-align: left; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3); -webkit-text-security: disc; text-security: disc;">${cleanVal}</span><button class="pass-box-btn pass-verify-btn" type="button" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border: none; color: #ffffff; border-radius: 8px; padding: 6px 14px; font-size: 11.5px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35); transition: all 0.15s ease;">Verify</button><button class="pass-box-btn pass-copy-btn" type="button" style="background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.18); color: #cbd5e1; border-radius: 8px; padding: 6px 12px; font-size: 11.5px; font-weight: 600; cursor: pointer; transition: all 0.15s ease;">Copy</button><button class="pass-box-btn pass-remove-btn" type="button" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; border-radius: 8px; padding: 6px 10px; font-size: 11.5px; font-weight: 700; cursor: pointer; transition: all 0.15s ease;" title="Remove password box">X</button>`;
+          newCard.innerHTML = `<span class="pass-box-input pass-revealed" contenteditable="true" data-placeholder="Set password..." style="background: transparent; border: 1px solid rgba(59, 130, 246, 0.55); border-radius: 6px; color: #f8fafc; padding: 4px 10px; font-size: 13px; font-family: monospace; outline: none; min-width: 160px; cursor: text; display: inline-block; vertical-align: middle; text-align: left; -webkit-text-security: none; text-security: none;">${cleanVal}</span><button class="pass-box-btn pass-verify-btn" type="button" style="background: transparent; border: 1px solid #3b82f6; color: #3b82f6; border-radius: 6px; padding: 4px 10px; font-size: 11.5px; font-weight: 700; cursor: pointer; transition: all 0.15s ease;">Verify</button><button class="pass-box-btn pass-copy-btn" type="button" style="background: transparent; border: 1px solid rgba(255, 255, 255, 0.25); color: #cbd5e1; border-radius: 6px; padding: 4px 10px; font-size: 11.5px; font-weight: 600; cursor: pointer; transition: all 0.15s ease;">Copy</button><button class="pass-box-btn pass-remove-btn" type="button" style="background: transparent; border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; border-radius: 6px; padding: 4px 8px; font-size: 11.5px; font-weight: 700; cursor: pointer; transition: all 0.15s ease;" title="Remove password box">X</button>`;
           
           widget.replaceWith(newCard);
         });
-        initialHtml = tempDiv.innerHTML;
       }
 
-      editorRef.current.innerHTML = initialHtml;
+      // Ensure all password box inputs in saved note are visible & remove badge labels
+      tempDiv.querySelectorAll('.pass-box-badge').forEach(badge => badge.remove());
+      tempDiv.querySelectorAll('.pass-box-input').forEach(input => {
+        input.classList.remove('pass-masked');
+        input.classList.add('pass-revealed');
+        (input as HTMLElement).style.setProperty('-webkit-text-security', 'none');
+        (input as HTMLElement).style.setProperty('text-security', 'none');
+        (input as HTMLElement).style.setProperty('border', '1px solid rgba(59, 130, 246, 0.55)');
+      });
+      // Fix theme text color incompatibilities during theme switching
+      if (theme === 'dark') {
+        tempDiv.querySelectorAll('font[color="#000000"], font[color="black"], font[color="#000"], font[color="#05050a"], font[color="#1e293b"], font[color="#0f172a"]').forEach(el => {
+          el.removeAttribute('color');
+        });
+      } else {
+        tempDiv.querySelectorAll('font[color="#ffffff"], font[color="white"], font[color="#fff"], font[color="#f8fafc"]').forEach(el => {
+          el.removeAttribute('color');
+        });
+      }
+
+      initialHtml = tempDiv.innerHTML;
+
+      if (editorRef.current) {
+        editorRef.current.innerHTML = initialHtml;
+        // Ensure all password box input spans remain editable for staff
+        editorRef.current.querySelectorAll('.pass-box-input').forEach(input => {
+          (input as HTMLElement).setAttribute('contenteditable', 'true');
+          (input as HTMLElement).style.cursor = 'text';
+        });
+      }
     }
-  }, [selectedId]);
+  }, [selectedId, theme]);
+
+  // Keep active editor HTML in sync with server updates when not actively typing
+  useEffect(() => {
+    if (!selectedId || !editorRef.current || syncStatus === 'Saving...') return;
+    const current = credentials.find(c => c.id === selectedId || c._id === selectedId);
+    if (current && current.notes) {
+      const currentHtml = editorRef.current.innerHTML;
+      if (current.notes !== currentHtml && !editorRef.current.contains(document.activeElement)) {
+        editorRef.current.innerHTML = current.notes;
+        editorRef.current.querySelectorAll('.pass-box-input').forEach(input => {
+          (input as HTMLElement).setAttribute('contenteditable', 'true');
+          (input as HTMLElement).style.cursor = 'text';
+        });
+      }
+    }
+  }, [credentials, selectedId, syncStatus]);
 
   // API save helper
   const saveStateToDB = useCallback(async (id: string, updates: { title: string; notes: string; folder: string }) => {
@@ -269,13 +334,13 @@ export const PasswordCredential: React.FC = () => {
     setDragOverIdx(null);
   };
 
-  // Queue saving with 800ms debounce
+  // Queue saving with 300ms fast debounce
   const queueAutoSave = useCallback((id: string, updates: { title: string; notes: string; folder: string }) => {
     if (debouncedSaveRef.current) clearTimeout(debouncedSaveRef.current);
     setSyncStatus('Saving...');
     debouncedSaveRef.current = setTimeout(() => {
       saveStateToDB(id, updates);
-    }, 800);
+    }, 300);
   }, [saveStateToDB]);
 
   // Handle typing inside contentEditable div
@@ -304,24 +369,83 @@ export const PasswordCredential: React.FC = () => {
     });
   };
 
-  // Focus editor when clicking anywhere on the notepad background
+  // Focus editor or save selection when clicking anywhere inside note
   const handleContainerClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('.password-box-widget')) {
       return;
     }
     if (editorRef.current) {
-      editorRef.current.focus();
+      if (document.caretRangeFromPoint) {
+        try {
+          const range = document.caretRangeFromPoint(e.clientX, e.clientY);
+          if (range && editorRef.current.contains(range.commonAncestorContainer)) {
+            lastCaretRange.current = range;
+          }
+        } catch {}
+      } else {
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0 && editorRef.current.contains(sel.anchorNode)) {
+          lastCaretRange.current = sel.getRangeAt(0).cloneRange();
+        }
+      }
+      if (isAdmin) {
+        editorRef.current.focus();
+      }
     }
   };
 
-  // Handle inserting password box widget at current caret position
+  // Handle inserting password box widget at current caret position or clicked position
   const handleInsertPasswordBox = useCallback(() => {
     if (!editorRef.current) return;
+
+    const passwordBoxHtml = `<div class="password-box-widget" contenteditable="false" style="display: inline-flex; align-items: center; gap: 8px; background: transparent; border: 1px solid rgba(59, 130, 246, 0.45); border-radius: 8px; padding: 6px 12px; margin: 8px 0; max-width: 100%; vertical-align: middle; user-select: none;"><span class="pass-box-input pass-revealed" contenteditable="true" data-placeholder="Set password..." style="background: transparent; border: 1px solid rgba(59, 130, 246, 0.55); border-radius: 6px; color: #f8fafc; padding: 4px 10px; font-size: 13px; font-family: monospace; outline: none; min-width: 160px; cursor: text; display: inline-block; vertical-align: middle; text-align: left; -webkit-text-security: none; text-security: none;"></span><button class="pass-box-btn pass-verify-btn" type="button" style="background: transparent; border: 1px solid #3b82f6; color: #3b82f6; border-radius: 6px; padding: 4px 10px; font-size: 11.5px; font-weight: 700; cursor: pointer; transition: all 0.15s ease;">Verify</button><button class="pass-box-btn pass-copy-btn" type="button" style="background: transparent; border: 1px solid rgba(255, 255, 255, 0.25); color: #cbd5e1; border-radius: 6px; padding: 4px 10px; font-size: 11.5px; font-weight: 600; cursor: pointer; transition: all 0.15s ease;">Copy</button><button class="pass-box-btn pass-remove-btn" type="button" style="background: transparent; border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; border-radius: 6px; padding: 4px 8px; font-size: 11.5px; font-weight: 700; cursor: pointer; transition: all 0.15s ease;" title="Remove password box">X</button></div>&nbsp;`;
+
     editorRef.current.focus();
+    let inserted = false;
+    const sel = window.getSelection();
 
-    const passwordBoxHtml = `<div class="password-box-widget" contenteditable="false" style="display: inline-flex; align-items: center; gap: 10px; background: rgba(30, 41, 59, 0.65); backdrop-filter: blur(12px); border: 1px solid rgba(59, 130, 246, 0.35); border-radius: 12px; padding: 8px 14px; margin: 8px 0; max-width: 100%; vertical-align: middle; user-select: none; box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15);"><span class="pass-box-badge" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 4px 10px; color: #3b82f6; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>PASSWORD</span><span class="pass-box-input pass-masked" contenteditable="true" data-placeholder="Set password..." style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 8px; color: #f8fafc; padding: 6px 14px; font-size: 13px; font-family: monospace; outline: none; min-width: 160px; cursor: text; display: inline-block; vertical-align: middle; text-align: left; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3); -webkit-text-security: disc; text-security: disc;"></span><button class="pass-box-btn pass-verify-btn" type="button" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border: none; color: #ffffff; border-radius: 8px; padding: 6px 14px; font-size: 11.5px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35); transition: all 0.15s ease;">Verify</button><button class="pass-box-btn pass-copy-btn" type="button" style="background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.18); color: #cbd5e1; border-radius: 8px; padding: 6px 12px; font-size: 11.5px; font-weight: 600; cursor: pointer; transition: all 0.15s ease;">Copy</button><button class="pass-box-btn pass-remove-btn" type="button" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; border-radius: 8px; padding: 6px 10px; font-size: 11.5px; font-weight: 700; cursor: pointer; transition: all 0.15s ease;" title="Remove password box">X</button></div>&nbsp;`;
+    if (sel && sel.rangeCount > 0 && editorRef.current.contains(sel.anchorNode)) {
+      try {
+        document.execCommand('insertHTML', false, passwordBoxHtml);
+        inserted = true;
+      } catch {}
+    }
 
-    document.execCommand('insertHTML', false, passwordBoxHtml);
+    if (!inserted && lastCaretRange.current && editorRef.current.contains(lastCaretRange.current.commonAncestorContainer)) {
+      try {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = passwordBoxHtml;
+        const fragment = document.createDocumentFragment();
+        while (tempDiv.firstChild) {
+          fragment.appendChild(tempDiv.firstChild);
+        }
+        const r = lastCaretRange.current.cloneRange();
+        r.collapse(false);
+        r.insertNode(fragment);
+        inserted = true;
+      } catch {}
+    }
+
+    if (!inserted) {
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = passwordBoxHtml;
+      while (tempDiv.firstChild) {
+        editorRef.current.appendChild(tempDiv.firstChild);
+      }
+    }
+
+    // Ensure all pass-box-input spans remain editable and focus the newest input box
+    const inputs = editorRef.current.querySelectorAll('.pass-box-input');
+    inputs.forEach(input => {
+      (input as HTMLElement).setAttribute('contenteditable', 'true');
+      (input as HTMLElement).style.cursor = 'text';
+    });
+
+    const lastInput = inputs[inputs.length - 1] as HTMLElement | undefined;
+    if (lastInput) {
+      setTimeout(() => lastInput.focus(), 50);
+    }
+
     handleInput();
   }, [handleInput]);
 
@@ -339,30 +463,32 @@ export const PasswordCredential: React.FC = () => {
         e.preventDefault();
         e.stopPropagation();
         if (!isAdmin) {
-          showToast('Only Admin can verify and view passwords', 'error');
+          showToast('Only Admin can verify passwords', 'error');
           return;
         }
         const widget = verifyBtn.closest('.password-box-widget');
         const passInput = widget?.querySelector('.pass-box-input') as HTMLElement | null;
         if (passInput) {
-          const isRevealed = passInput.classList.contains('pass-revealed');
-          if (!isRevealed) {
-            passInput.classList.add('pass-revealed');
-            passInput.classList.remove('pass-masked');
-            passInput.style.setProperty('-webkit-text-security', 'none');
-            passInput.style.setProperty('text-security', 'none');
-            verifyBtn.textContent = 'Hide';
-            verifyBtn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
-            verifyBtn.style.boxShadow = '0 2px 8px rgba(16, 185, 129, 0.35)';
-            showToast('Password verified & revealed', 'success');
+          // Keep password text 100% visible and unmasked (never convert to dots)
+          passInput.classList.add('pass-revealed');
+          passInput.classList.remove('pass-masked');
+          passInput.style.setProperty('-webkit-text-security', 'none');
+          passInput.style.setProperty('text-security', 'none');
+
+          const isVerified = verifyBtn.classList.contains('pass-is-verified') || verifyBtn.textContent?.includes('Verified');
+          if (!isVerified) {
+            verifyBtn.classList.add('pass-is-verified');
+            verifyBtn.textContent = '✓ Verified';
+            verifyBtn.style.borderColor = '#10b981';
+            verifyBtn.style.color = '#10b981';
+            verifyBtn.style.background = 'rgba(16, 185, 129, 0.1)';
+            showToast('Password verified', 'success');
           } else {
-            passInput.classList.remove('pass-revealed');
-            passInput.classList.add('pass-masked');
-            passInput.style.setProperty('-webkit-text-security', 'disc');
-            passInput.style.setProperty('text-security', 'disc');
+            verifyBtn.classList.remove('pass-is-verified');
             verifyBtn.textContent = 'Verify';
-            verifyBtn.style.background = 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
-            verifyBtn.style.boxShadow = '0 2px 8px rgba(37, 99, 235, 0.35)';
+            verifyBtn.style.borderColor = '#3b82f6';
+            verifyBtn.style.color = '#3b82f6';
+            verifyBtn.style.background = 'transparent';
           }
           handleInput();
         }
@@ -397,10 +523,6 @@ export const PasswordCredential: React.FC = () => {
       if (removeBtn) {
         e.preventDefault();
         e.stopPropagation();
-        if (!isAdmin) {
-          showToast('Only Admin can remove password box', 'error');
-          return;
-        }
         const widget = removeBtn.closest('.password-box-widget');
         if (widget) {
           widget.remove();
@@ -413,8 +535,34 @@ export const PasswordCredential: React.FC = () => {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
+      if (!isAdmin) {
+        // Navigation keys allowed for staff
+        if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Tab', 'Escape'].includes(e.key)) {
+          return;
+        }
+        // Allow typing/editing inside password input box for staff
+        if (target && target.closest('.pass-box-input')) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+          }
+          return;
+        }
+        // Block altering note text outside password boxes for staff
+        e.preventDefault();
+        return;
+      }
+
       if (target && target.classList.contains('pass-box-input')) {
         if (e.key === 'Enter') {
+          e.preventDefault();
+        }
+      }
+    };
+
+    const handleBeforeInput = (e: Event) => {
+      if (!isAdmin) {
+        const target = e.target as HTMLElement;
+        if (!target || !target.closest('.pass-box-input')) {
           e.preventDefault();
         }
       }
@@ -427,13 +575,37 @@ export const PasswordCredential: React.FC = () => {
       }
     };
 
+    const handleSelectionOrClick = (e: Event) => {
+      if ((e.target as HTMLElement)?.closest('.password-box-widget')) return;
+      const mouseEv = e as MouseEvent;
+      if (mouseEv.clientX !== undefined && document.caretRangeFromPoint) {
+        try {
+          const range = document.caretRangeFromPoint(mouseEv.clientX, mouseEv.clientY);
+          if (range && editorRef.current?.contains(range.commonAncestorContainer)) {
+            lastCaretRange.current = range;
+            return;
+          }
+        } catch {}
+      }
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0 && editorRef.current?.contains(sel.anchorNode)) {
+        lastCaretRange.current = sel.getRangeAt(0).cloneRange();
+      }
+    };
+
     editor.addEventListener('click', handleClick);
+    editor.addEventListener('mouseup', handleSelectionOrClick);
+    editor.addEventListener('keyup', handleSelectionOrClick);
     editor.addEventListener('keydown', handleKeyDown);
+    editor.addEventListener('beforeinput', handleBeforeInput);
     editor.addEventListener('input', handleInputEvent);
 
     return () => {
       editor.removeEventListener('click', handleClick);
+      editor.removeEventListener('mouseup', handleSelectionOrClick);
+      editor.removeEventListener('keyup', handleSelectionOrClick);
       editor.removeEventListener('keydown', handleKeyDown);
+      editor.removeEventListener('beforeinput', handleBeforeInput);
       editor.removeEventListener('input', handleInputEvent);
     };
   }, [isAdmin, showToast, handleInput]);
@@ -599,7 +771,7 @@ export const PasswordCredential: React.FC = () => {
   const renderNotesColumn = () => (
     <div className="apple-notes-sidebar" style={{
       width: isMobile ? '100%' : 260,
-      background: theme === 'dark' ? '#05050a' : 'rgba(244, 244, 247, 0.95)',
+      background: theme === 'dark' ? '#111120' : 'rgba(244, 244, 247, 0.95)',
       backdropFilter: 'blur(30px)',
       borderRight: '1px solid var(--border)',
       display: 'flex',
@@ -800,7 +972,7 @@ export const PasswordCredential: React.FC = () => {
   const renderEditorColumn = () => (
     <div style={{
       flex: 1,
-      background: theme === 'dark' ? '#05050a' : '#ffffff',
+      background: theme === 'dark' ? '#111120' : '#ffffff',
       display: 'flex',
       flexDirection: 'column',
       overflow: 'hidden',
@@ -813,7 +985,7 @@ export const PasswordCredential: React.FC = () => {
           justifyContent: 'space-between',
           padding: '10px 16px',
           borderBottom: '1px solid var(--border)',
-          background: theme === 'dark' ? '#05050a' : 'rgba(255, 255, 255, 0.5)',
+          background: theme === 'dark' ? '#111120' : 'rgba(255, 255, 255, 0.5)',
         }}>
           <button
             onClick={() => setMobileView('notes')}
@@ -840,7 +1012,7 @@ export const PasswordCredential: React.FC = () => {
         </div>
       )}
 
-      {/* Rich Text Format Toolbar */}
+      {/* Top Toolbar for Editor (Full formatting for Admin, Password section insertion for Staff) */}
       {activeCred && (
         <div style={{
           display: 'flex',
@@ -849,224 +1021,254 @@ export const PasswordCredential: React.FC = () => {
           gap: 10,
           padding: '8px 24px',
           borderBottom: '1px solid var(--border)',
-          background: theme === 'dark' ? '#05050a' : '#f5f5f7'
+          background: theme === 'dark' ? '#111120' : '#f5f5f7'
         }}>
-          {/* Format Styles */}
-          <button
-            onMouseDown={(e) => { e.preventDefault(); document.execCommand('bold', false); handleInput(); }}
-            className="format-btn"
-            style={{ fontWeight: 800 }}
-            title="Bold"
-          >
-            B
-          </button>
-          
-          <button
-            onMouseDown={(e) => { e.preventDefault(); document.execCommand('italic', false); handleInput(); }}
-            className="format-btn"
-            style={{ fontStyle: 'italic' }}
-            title="Italic"
-          >
-            I
-          </button>
+          {isAdmin ? (
+            <>
+              {/* Format Styles */}
+              <button
+                onMouseDown={(e) => { e.preventDefault(); document.execCommand('bold', false); handleInput(); }}
+                className="format-btn"
+                style={{ fontWeight: 800 }}
+                title="Bold"
+              >
+                B
+              </button>
+              
+              <button
+                onMouseDown={(e) => { e.preventDefault(); document.execCommand('italic', false); handleInput(); }}
+                className="format-btn"
+                style={{ fontStyle: 'italic' }}
+                title="Italic"
+              >
+                I
+              </button>
 
-          <button
-            onMouseDown={(e) => { e.preventDefault(); document.execCommand('underline', false); handleInput(); }}
-            className="format-btn"
-            style={{ textDecoration: 'underline' }}
-            title="Underline"
-          >
-            U
-          </button>
+              <button
+                onMouseDown={(e) => { e.preventDefault(); document.execCommand('underline', false); handleInput(); }}
+                className="format-btn"
+                style={{ textDecoration: 'underline' }}
+                title="Underline"
+              >
+                U
+              </button>
 
-          <button
-            onMouseDown={(e) => { e.preventDefault(); document.execCommand('strikeThrough', false); handleInput(); }}
-            className="format-btn"
-            style={{ textDecoration: 'line-through' }}
-            title="Strikethrough"
-          >
-            S
-          </button>
+              <button
+                onMouseDown={(e) => { e.preventDefault(); document.execCommand('strikeThrough', false); handleInput(); }}
+                className="format-btn"
+                style={{ textDecoration: 'line-through' }}
+                title="Strikethrough"
+              >
+                S
+              </button>
 
-          <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
+              <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
 
-          {/* Custom Selection-Preserving Font Size Dropdown menu */}
-          <span style={{ fontSize: 11, color: 'var(--text3)' }}>Size:</span>
-          <div ref={sizeMenuRef} style={{ position: 'relative' }}>
-            <button
-              onMouseDown={(e) => {
-                e.preventDefault();
-                setSizeMenuOpen(!sizeMenuOpen);
-              }}
-              style={{
-                padding: '3px 8px',
-                borderRadius: 6,
-                border: '1px solid var(--border)',
-                background: theme === 'dark' ? '#2c2c2e' : '#f2f2f7',
-                color: 'var(--text)',
-                fontSize: 12,
-                fontWeight: 600,
-                outline: 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4
-              }}
-            >
-              <span>Size</span>
-              <span style={{ fontSize: 8 }}>▼</span>
-            </button>
-            
-            {sizeMenuOpen && (
-              <div style={{
-                position: 'absolute',
-                top: 'calc(100% + 4px)',
-                left: 0,
-                background: theme === 'dark' ? '#2c2c2e' : '#ffffff',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-                boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-                padding: 4,
-                zIndex: 100,
-                display: 'flex',
-                flexDirection: 'column',
-                minWidth: 130
-              }}>
-                {[
-                  { label: 'Small (13px)', val: '2' },
-                  { label: 'Normal (16px)', val: '3' },
-                  { label: 'Large (18px)', val: '4' },
-                  { label: 'Extra Large (24px)', val: '5' },
-                  { label: 'Title (32px)', val: '6' },
-                  { label: 'Huge (48px)', val: '7' }
-                ].map(opt => (
-                  <button
-                    key={opt.val}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      document.execCommand('fontSize', false, opt.val);
-                      handleInput();
-                      setSizeMenuOpen(false);
-                    }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--text)',
-                      padding: '6px 10px',
-                      textAlign: 'left',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      borderRadius: 4
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(120, 120, 120, 0.15)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+              {/* Custom Selection-Preserving Font Size Dropdown menu */}
+              <span style={{ fontSize: 11, color: 'var(--text3)' }}>Size:</span>
+              <div ref={sizeMenuRef} style={{ position: 'relative' }}>
+                <button
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setSizeMenuOpen(!sizeMenuOpen);
+                  }}
+                  style={{
+                    padding: '3px 8px',
+                    borderRadius: 6,
+                    border: '1px solid var(--border)',
+                    background: theme === 'dark' ? '#2c2c2e' : '#f2f2f7',
+                    color: 'var(--text)',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    outline: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4
+                  }}
+                >
+                  <span>Size</span>
+                  <span style={{ fontSize: 8 }}>▼</span>
+                </button>
+                
+                {sizeMenuOpen && (
+                  <div style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 4px)',
+                    left: 0,
+                    background: theme === 'dark' ? '#2c2c2e' : '#ffffff',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+                    padding: 4,
+                    zIndex: 100,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    minWidth: 130
+                  }}>
+                    {[
+                      { label: 'Small (13px)', val: '2' },
+                      { label: 'Normal (16px)', val: '3' },
+                      { label: 'Large (18px)', val: '4' },
+                      { label: 'Extra Large (24px)', val: '5' },
+                      { label: 'Title (32px)', val: '6' },
+                      { label: 'Huge (48px)', val: '7' }
+                    ].map(opt => (
+                      <button
+                        key={opt.val}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          document.execCommand('fontSize', false, opt.val);
+                          handleInput();
+                          setSizeMenuOpen(false);
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--text)',
+                          padding: '6px 10px',
+                          textAlign: 'left',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          borderRadius: 4
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(120, 120, 120, 0.15)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
+              <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
 
-          {/* Alignment & Lists */}
-          <button
-            onMouseDown={(e) => { e.preventDefault(); document.execCommand('insertUnorderedList', false); handleInput(); }}
-            className="format-btn"
-            title="Unordered Bullet List"
-          >
-            •=
-          </button>
-          
-          <button
-            onMouseDown={(e) => { e.preventDefault(); document.execCommand('insertOrderedList', false); handleInput(); }}
-            className="format-btn"
-            title="Numbered List"
-          >
-            1.
-          </button>
+              {/* Alignment & Lists */}
+              <button
+                onMouseDown={(e) => { e.preventDefault(); document.execCommand('insertUnorderedList', false); handleInput(); }}
+                className="format-btn"
+                title="Unordered Bullet List"
+              >
+                •=
+              </button>
+              
+              <button
+                onMouseDown={(e) => { e.preventDefault(); document.execCommand('insertOrderedList', false); handleInput(); }}
+                className="format-btn"
+                title="Numbered List"
+              >
+                1.
+              </button>
 
-          <button
-            onMouseDown={(e) => { e.preventDefault(); document.execCommand('justifyLeft', false); handleInput(); }}
-            className="format-btn"
-            title="Align Left"
-          >
-            ⇇
-          </button>
+              <button
+                onMouseDown={(e) => { e.preventDefault(); document.execCommand('justifyLeft', false); handleInput(); }}
+                className="format-btn"
+                title="Align Left"
+              >
+                ⇇
+              </button>
 
-          <button
-            onMouseDown={(e) => { e.preventDefault(); document.execCommand('justifyCenter', false); handleInput(); }}
-            className="format-btn"
-            title="Align Center"
-          >
-            ≡
-          </button>
+              <button
+                onMouseDown={(e) => { e.preventDefault(); document.execCommand('justifyCenter', false); handleInput(); }}
+                className="format-btn"
+                title="Align Center"
+              >
+                ≡
+              </button>
 
-          <button
-            onMouseDown={(e) => { e.preventDefault(); document.execCommand('justifyRight', false); handleInput(); }}
-            className="format-btn"
-            title="Align Right"
-          >
-            ⇉
-          </button>
+              <button
+                onMouseDown={(e) => { e.preventDefault(); document.execCommand('justifyRight', false); handleInput(); }}
+                className="format-btn"
+                title="Align Right"
+              >
+                ⇉
+              </button>
 
-          <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
+              <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
 
-          {/* Font Color Palette & Custom Picker */}
-          <span style={{ fontSize: 11, color: 'var(--text3)' }}>Color:</span>
-          {['inherit', '#007aff', '#22d3ee', '#34d399', '#f43f5e', '#fbbf24', '#a78bfa', '#9ca3af'].map(color => (
+              {/* Font Color Palette & Custom Picker */}
+              <span style={{ fontSize: 11, color: 'var(--text3)' }}>Color:</span>
+              {['inherit', '#007aff', '#22d3ee', '#34d399', '#f43f5e', '#fbbf24', '#a78bfa', '#9ca3af'].map(color => (
+                <button
+                  key={color}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    const targetColor = color === 'inherit' ? (theme === 'dark' ? '#ffffff' : '#000000') : color;
+                    document.execCommand('foreColor', false, targetColor);
+                    handleInput();
+                  }}
+                  style={{
+                    width: 14,
+                    height: 14,
+                    borderRadius: '50%',
+                    background: color === 'inherit' 
+                      ? (theme === 'dark' ? '#ffffff' : '#000000') 
+                      : color,
+                    border: '1px solid rgba(120, 120, 120, 0.4)',
+                    cursor: 'pointer',
+                    padding: 0
+                  }}
+                  title={color === 'inherit' ? 'Default Theme Color' : color}
+                />
+              ))}
+
+              <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
+
+              {/* Password Box Button */}
+              <button
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handleInsertPasswordBox();
+                }}
+                className="format-btn"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  background: 'rgba(0, 122, 255, 0.12)',
+                  color: '#007aff',
+                  fontWeight: 600,
+                  padding: '3px 8px',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  border: '1px solid rgba(0, 122, 255, 0.25)',
+                  cursor: 'pointer'
+                }}
+                title="Insert Password Box at cursor position"
+              >
+                <Lock size={12} />
+                <span>Password</span>
+              </button>
+            </>
+          ) : (
+            /* Staff Toolbar: Dedicated button to add password box */
             <button
-              key={color}
               onMouseDown={(e) => {
                 e.preventDefault();
-                const targetColor = color === 'inherit' ? (theme === 'dark' ? '#ffffff' : '#000000') : color;
-                document.execCommand('foreColor', false, targetColor);
-                handleInput();
+                handleInsertPasswordBox();
               }}
               style={{
-                width: 14,
-                height: 14,
-                borderRadius: '50%',
-                background: color === 'inherit' 
-                  ? (theme === 'dark' ? '#ffffff' : '#000000') 
-                  : color,
-                border: '1px solid rgba(120, 120, 120, 0.4)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                background: 'rgba(0, 122, 255, 0.15)',
+                color: '#007aff',
+                fontWeight: 700,
+                padding: '5px 12px',
+                borderRadius: 7,
+                fontSize: 12.5,
+                border: '1px solid rgba(0, 122, 255, 0.35)',
                 cursor: 'pointer',
-                padding: 0
+                transition: 'all 0.15s ease'
               }}
-              title={color === 'inherit' ? 'Default Theme Color' : color}
-            />
-          ))}
-
-          <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
-
-          {/* Password Box Button */}
-          <button
-            onMouseDown={(e) => {
-              e.preventDefault();
-              handleInsertPasswordBox();
-            }}
-            className="format-btn"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-              background: 'rgba(0, 122, 255, 0.12)',
-              color: '#007aff',
-              fontWeight: 600,
-              padding: '3px 8px',
-              borderRadius: 6,
-              fontSize: 12,
-              border: '1px solid rgba(0, 122, 255, 0.25)',
-              cursor: 'pointer'
-            }}
-            title="Insert Password Box at cursor position"
-          >
-            <Lock size={12} />
-            <span>Password</span>
-          </button>
+              title="Add a new password box section to this note"
+            >
+              <Lock size={13} />
+              <span>Add Password Section</span>
+            </button>
+          )}
 
           <div style={{ marginLeft: 'auto' }}>
             {activeCred && (
@@ -1197,41 +1399,56 @@ export const PasswordCredential: React.FC = () => {
         .apple-notes-sidebar::-webkit-scrollbar {
           width: 5px;
         }
-        .password-box-widget {
-          user-select: auto !important;
-          transition: all 0.2s ease-in-out;
+        /* Theme Switching Color Fixes for Apple Notes Editor */
+        .apple-notes-editor {
+          color: var(--text, inherit);
         }
-        .password-box-widget:hover {
-          border-color: rgba(59, 130, 246, 0.6) !important;
-          box-shadow: 0 6px 24px -2px rgba(0, 0, 0, 0.4), 0 0 12px rgba(59, 130, 246, 0.2) !important;
+        [data-theme="dark"] .apple-notes-editor font[color="#000000"],
+        [data-theme="dark"] .apple-notes-editor font[color="#000"],
+        [data-theme="dark"] .apple-notes-editor font[color="black"],
+        [data-theme="dark"] .apple-notes-editor font[color="#05050a"],
+        [data-theme="dark"] .apple-notes-editor font[color="#1e293b"],
+        [data-theme="dark"] .apple-notes-editor font[color="#0f172a"],
+        [data-theme="dark"] .apple-notes-editor font[color="#334155"],
+        [data-theme="dark"] .apple-notes-editor [style*="color: rgb(0, 0, 0)"],
+        [data-theme="dark"] .apple-notes-editor [style*="color: rgb(5, 5, 10)"],
+        [data-theme="dark"] .apple-notes-editor [style*="color: rgb(30, 41, 59)"],
+        [data-theme="dark"] .apple-notes-editor [style*="color: rgb(15, 23, 42)"],
+        [data-theme="dark"] .apple-notes-editor [style*="color:#000000"],
+        [data-theme="dark"] .apple-notes-editor [style*="color: #000000"],
+        [data-theme="dark"] .apple-notes-editor [style*="color:#000"],
+        [data-theme="dark"] .apple-notes-editor [style*="color: #000"] {
+          color: var(--text, #f8fafc) !important;
         }
-        .pass-box-input {
-          user-select: text !important;
-          pointer-events: auto !important;
-          -webkit-user-select: text !important;
-          white-space: nowrap !important;
-          transition: all 0.2s ease;
+
+        [data-theme="light"] .apple-notes-editor font[color="#ffffff"],
+        [data-theme="light"] .apple-notes-editor font[color="#fff"],
+        [data-theme="light"] .apple-notes-editor font[color="white"],
+        [data-theme="light"] .apple-notes-editor font[color="#f8fafc"],
+        [data-theme="light"] .apple-notes-editor [style*="color: rgb(255, 255, 255)"],
+        [data-theme="light"] .apple-notes-editor [style*="color: rgb(248, 250, 252)"],
+        [data-theme="light"] .apple-notes-editor [style*="color:#ffffff"],
+        [data-theme="light"] .apple-notes-editor [style*="color: #ffffff"],
+        [data-theme="light"] .apple-notes-editor [style*="color:#fff"],
+        [data-theme="light"] .apple-notes-editor [style*="color: #fff"] {
+          color: var(--text, #0f172a) !important;
         }
-        .pass-box-input:hover {
-          border-color: rgba(59, 130, 246, 0.5) !important;
-          background: rgba(15, 23, 42, 0.85) !important;
+
+        /* Password Box Widget Light Mode Adjustments */
+        [data-theme="light"] .password-box-widget {
+          border-color: rgba(0, 122, 255, 0.45) !important;
         }
-        .pass-box-btn:hover {
-          transform: translateY(-1px);
+        [data-theme="light"] .pass-box-input {
+          color: var(--text, #0f172a) !important;
+          border-color: rgba(0, 122, 255, 0.55) !important;
         }
-        .pass-box-btn:active {
-          transform: translateY(0);
+        [data-theme="light"] .pass-copy-btn {
+          border-color: rgba(0, 0, 0, 0.25) !important;
+          color: #334155 !important;
         }
-        .pass-verify-btn:hover {
-          filter: brightness(1.1);
-        }
-        .pass-copy-btn:hover {
-          background: rgba(255, 255, 255, 0.15) !important;
-          color: #ffffff !important;
-        }
-        .pass-remove-btn:hover {
-          background: rgba(239, 68, 68, 0.28) !important;
-          color: #ef4444 !important;
+        [data-theme="light"] .pass-copy-btn:hover {
+          background: rgba(0, 0, 0, 0.08) !important;
+          color: #0f172a !important;
         }
         .apple-notes-sidebar::-webkit-scrollbar-thumb {
           background: rgba(120, 120, 120, 0.25);

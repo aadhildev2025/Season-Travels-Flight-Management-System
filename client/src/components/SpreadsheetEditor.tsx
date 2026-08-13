@@ -10,7 +10,7 @@ interface SpreadsheetEditorProps {
 }
 
 export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
-  const { activeSpreadsheet, updateSpreadsheet, setActiveSpreadsheet, saveStatus } = useSpreadsheetStore();
+  const { activeSpreadsheet, updateSpreadsheet, setActiveSpreadsheet, saveStatus, fetchSpreadsheetById, fetchSpreadsheets } = useSpreadsheetStore();
   
   const [activeSheetIdx, setActiveSheetIdx] = useState(0);
   const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null);
@@ -81,6 +81,20 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
       window.removeEventListener('mousemove', handleMouseMove);
     };
   }, []);
+
+  // Listen for global app:refresh event triggered by the header refresh button
+  useEffect(() => {
+    const handleAppRefresh = () => {
+      const activeId = activeSpreadsheet?.id || activeSpreadsheet?._id;
+      if (activeId) {
+        fetchSpreadsheetById(activeId);
+      } else {
+        fetchSpreadsheets();
+      }
+    };
+    window.addEventListener('app:refresh', handleAppRefresh);
+    return () => window.removeEventListener('app:refresh', handleAppRefresh);
+  }, [activeSpreadsheet, fetchSpreadsheetById, fetchSpreadsheets]);
 
   // Register Ctrl+Z (Undo) and Ctrl+Y (Redo) keyboard shortcuts
   // Register Ctrl+Z (Undo), Ctrl+Y (Redo), and Backspace/Delete cell clearing

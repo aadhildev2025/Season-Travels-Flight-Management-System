@@ -17,10 +17,19 @@ const rowSchema = new mongoose.Schema({
   height: { type: Number, default: 30 },
 }, { _id: false });
 
+const rangeSchema = new mongoose.Schema({
+  startRow: { type: Number, required: true },
+  startCol: { type: Number, required: true },
+  endRow: { type: Number, required: true },
+  endCol: { type: Number, required: true },
+}, { _id: false });
+
 const sheetSchema = new mongoose.Schema({
   name: { type: String, default: 'Sheet 1' },
   rows: [rowSchema],
   colWidths: [{ type: Number }],
+  merges: [rangeSchema],
+  tables: [rangeSchema],
 }, { _id: false });
 
 const spreadsheetSchema = new mongoose.Schema({
@@ -60,6 +69,18 @@ function formatSheet(doc) {
     name: doc.name || 'Sheet 1',
     rows: (doc.rows || []).map(formatRow),
     colWidths: doc.colWidths || [],
+    merges: (doc.merges || []).map(m => ({
+      startRow: m.startRow,
+      startCol: m.startCol,
+      endRow: m.endRow,
+      endCol: m.endCol,
+    })),
+    tables: (doc.tables || []).map(t => ({
+      startRow: t.startRow,
+      startCol: t.startCol,
+      endRow: t.endRow,
+      endCol: t.endCol,
+    })),
   };
 }
 

@@ -18,10 +18,19 @@ export interface RowData {
   height?: number;
 }
 
+export interface RangeData {
+  startRow: number;
+  startCol: number;
+  endRow: number;
+  endCol: number;
+}
+
 export interface SheetData {
   name: string;
   rows: RowData[];
   colWidths?: number[];
+  merges?: RangeData[];
+  tables?: RangeData[];
 }
 
 export interface SpreadsheetData {

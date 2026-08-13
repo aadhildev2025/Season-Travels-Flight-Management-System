@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useFlightStore } from './store/flightStore';
+import { useSpreadsheetStore } from './store/spreadsheetStore';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import TicketForm from './components/TicketForm';
@@ -188,7 +189,12 @@ export default function App() {
     setIsRefreshing(true);
     try {
       window.dispatchEvent(new CustomEvent('app:refresh'));
-      await fetchTickets();
+      const activeSheetId = useSpreadsheetStore.getState().activeSpreadsheet?.id || useSpreadsheetStore.getState().activeSpreadsheet?._id;
+      await Promise.all([
+        fetchTickets(),
+        useSpreadsheetStore.getState().fetchSpreadsheets(),
+        activeSheetId ? useSpreadsheetStore.getState().fetchSpreadsheetById(activeSheetId) : Promise.resolve(),
+      ]);
     } catch (err) {
       console.error('Refresh error:', err);
     } finally {

@@ -1,47 +1,18 @@
 import React, { useState } from 'react';
-import { Sparkles, Copy, Check, Trash2, FileText, ArrowRight, Wand2 } from 'lucide-react';
+import { Sparkles, Copy, Check, Trash2, FileText, ArrowRight } from 'lucide-react';
 
 interface FlightSegment {
   segNo: string;
+  airline: string;
+  flightNum: string;
   flightNo: string;
   date: string;
   route: string;
   times: string;
+  depTime: string;
+  arrTime: string;
   rawLine: string;
 }
-
-const SAMPLE_PNR_NOTE = `1  QR 162 T 11SEP 5 CPHDOH HK1       2  0905 1605   788 E 0 M
-
-     MANDATORY REQUIRED DOCS DOCO DOCA CTCM CTCE
-
-     PLS ENTER SSR CTCM OR CTCE FOR IROP ALERTS
-
-     SEE RTSVC
-
-  2  QR 662 T 11SEP 5 DOHCMB HK1          1840 0205+1 789 E 0 M
-
-     MANDATORY REQUIRED DOCS DOCO DOCA CTCM CTCE
-
-     PLS ENTER SSR CTCM OR CTCE FOR IROP ALERTS
-
-     SEE RTSVC
-
-  3  QR 659 T 09OCT 5 CMBDOH HK1          0435 0655   788 E 0 M
-
-     MANDATORY REQUIRED DOCS DOCO DOCA CTCM CTCE
-
-     PLS ENTER SSR CTCM OR CTCE FOR IROP ALERTS
-
-     SEE RTSVC
-
-  4  QR 159 T 09OCT 5 DOHCPH HK1          0840 1405   788 E 0 M
-
-  AMADEUS FORMAT EXAMPLE:
-
-  1   QR      4  T  27SEP LHR DOH   1505  2350    SU   388    TLGBP1RE
-  2   QR    664  T  28SEP DOH CMB   0135  0900    MO   789    TLGBP1RE
-  3   QR    659  O  15OCT CMB DOH   0435  0655    TH   788    OLGBP1RE
-  4   QR      7  O  15OCT DOH LHR   0855  1410`;
 
 export const NoteSummarizer: React.FC = () => {
   const [inputText, setInputText] = useState('');
@@ -59,37 +30,39 @@ export const NoteSummarizer: React.FC = () => {
     const months = 'JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC';
     
     // Pattern matching standard GDS segment lines:
+    // e.g., "1  EK    2 T 27SEP 5 LHRDXB HK1          2125 0740+1 788 E 0 M"
     // e.g., "1  QR 162 T 11SEP 5 CPHDOH HK1       2  0905 1605   788 E 0 M"
     const gdsRegex = new RegExp(
       `^\\s*(\\d{1,2})\\s+` +                                     // 1. Seg No
-      `([A-Z0-9]{2}\\s*\\d{1,4})` +                               // 2. Flight No
+      `([A-Z0-9]{2})\\s*(\\d{1,4})` +                             // 2. Airline & 3. Flight Num
       `\\s+[A-Z0-9]{1,2}\\s+` +                                   // Class
-      `(\\d{1,2}(?:${months}))` +                                 // 3. Date
+      `(\\d{1,2}(?:${months}))` +                                 // 4. Date
       `(?:\\s+\\d)?\\s+` +                                        // Day of week (optional)
-      `([A-Z]{6})` +                                             // 4. Route (e.g. CPHDOH)
+      `([A-Z]{6}|[A-Z]{3}[\\s\\/\\-][A-Z]{3})` +                   // 5. Route
       `.*?` +                                                    // Status code & extra spacing
-      `(\\d{4}\\s+\\d{4}(?:\\+\\d)?|\\d{2}:\\d{2}\\s+\\d{2}:\\d{2}(?:\\+\\d)?)`, // 5. Times
+      `(\\d{4}|\\d{2}:\\d{2})\\s+(\\d{4}(?:\\+\\d)?|\\d{2}:\\d{2}(?:\\+\\d)?)`, // 6. Dep Time & 7. Arr Time
       'i'
     );
 
     // Pattern matching Amadeus segment lines:
     // e.g., "1   QR      4  T  27SEP LHR DOH   1505  2350    SU   388    TLGBP1RE"
+    // e.g., "2   QR    664  T  28SEP DOH CMB   0135  0900    MO   789    TLGBP1RE"
     const amadeusRegex = new RegExp(
       `^\\s*(\\d{1,2})\\s+` +                                     // 1. Seg No
-      `([A-Z]{2})\\s+` +                                          // Airline code
-      `(\\d{1,4})\\s+` +                                          // Flight No
+      `([A-Z]{2})\\s+` +                                          // 2. Airline code
+      `(\\d{1,4})\\s+` +                                          // 3. Flight Num
       `[A-Z]{1,2}\\s+` +                                          // Class
-      `(\\d{1,2}(?:${months}))\\s+` +                             // Date
+      `(\\d{1,2}(?:${months}))\\s+` +                             // 4. Date
       `([A-Z]{3})\\s+` +                                          // Departure airport
       `([A-Z]{3})\\s+` +                                          // Arrival airport
-      `(\\d{4})\\s+` +                                            // Departure time
-      `(\\d{4}(?:\\+\\d)?)`,                                      // Arrival time
+      `(\\d{4})\\s+` +                                            // 5. Departure time
+      `(\\d{4}(?:\\+\\d)?)`,                                      // 6. Arrival time
       'i'
     );
 
     // Fallback regex for less structured lines
     const fallbackRegex = new RegExp(
-      `(\\d{1,2})?\\s*([A-Z0-9]{2}\\s*\\d{1,4})\\s+.*?(\\d{1,2}(?:${months}))\\s+.*?([A-Z]{6})\\s+.*?(\\d{4}\\s+\\d{4}(?:\\+\\d)?|\\d{2}:\\d{2}\\s+\\d{2}:\\d{2}(?:\\+\\d)?)`,
+      `(\\d{1,2})?\\s*([A-Z0-9]{2})\\s*(\\d{1,4})\\s+.*?(\\d{1,2}(?:${months}))\\s+.*?([A-Z]{6}|[A-Z]{3}[\\s\\/\\-][A-Z]{3})\\s+.*?(\\d{4}|\\d{2}:\\d{2})\\s+(\\d{4}(?:\\+\\d)?|\\d{2}:\\d{2}(?:\\+\\d)?)`,
       'i'
     );
 
@@ -102,13 +75,16 @@ export const NoteSummarizer: React.FC = () => {
       let match = trimmed.match(gdsRegex);
       if (match) {
         const segNo = match[1];
-        const rawFlight = match[2].toUpperCase();
-        const flightNo = rawFlight.replace(/^([A-Z0-9]{2})(\d+)/, '$1 $2');
-        const date = match[3].toUpperCase();
-        const route = match[4].toUpperCase();
-        const times = match[5].toUpperCase();
+        const airline = match[2].toUpperCase();
+        const flightNum = match[3].toUpperCase();
+        const flightNo = `${airline} ${flightNum}`;
+        const date = match[4].toUpperCase();
+        const route = match[5].toUpperCase().replace(/[\s\/\-]/g, '');
+        const depTime = match[6].toUpperCase();
+        const arrTime = match[7].toUpperCase();
+        const times = `${depTime} ${arrTime}`;
 
-        segments.push({ segNo, flightNo, date, route, times, rawLine: trimmed });
+        segments.push({ segNo, airline, flightNum, flightNo, date, route, times, depTime, arrTime, rawLine: trimmed });
         continue;
       }
 
@@ -121,25 +97,28 @@ export const NoteSummarizer: React.FC = () => {
         const date = amadeusMatch[4].toUpperCase();
         const depAirport = amadeusMatch[5].toUpperCase();
         const arrAirport = amadeusMatch[6].toUpperCase();
+        const route = `${depAirport}${arrAirport}`;
         const depTime = amadeusMatch[7].toUpperCase();
         const arrTime = amadeusMatch[8].toUpperCase();
-        const route = `${depAirport}${arrAirport}`;
-        const times = `${depTime}  ${arrTime}`;
+        const times = `${depTime} ${arrTime}`;
 
-        segments.push({ segNo, flightNo, date, route, times, rawLine: trimmed });
+        segments.push({ segNo, airline, flightNum, flightNo, date, route, times, depTime, arrTime, rawLine: trimmed });
         continue;
       }
 
       const fallMatch = trimmed.match(fallbackRegex);
       if (fallMatch) {
         const segNo = fallMatch[1] || String(autoSegCounter++);
-        const rawFlight = fallMatch[2].toUpperCase();
-        const flightNo = rawFlight.replace(/^([A-Z0-9]{2})(\d+)/, '$1 $2');
-        const date = fallMatch[3].toUpperCase();
-        const route = fallMatch[4].toUpperCase();
-        const times = fallMatch[5].toUpperCase();
+        const airline = fallMatch[2].toUpperCase();
+        const flightNum = fallMatch[3].toUpperCase();
+        const flightNo = `${airline} ${flightNum}`;
+        const date = fallMatch[4].toUpperCase();
+        const route = fallMatch[5].toUpperCase().replace(/[\s\/\-]/g, '');
+        const depTime = fallMatch[6].toUpperCase();
+        const arrTime = fallMatch[7].toUpperCase();
+        const times = `${depTime} ${arrTime}`;
 
-        segments.push({ segNo, flightNo, date, route, times, rawLine: trimmed });
+        segments.push({ segNo, airline, flightNum, flightNo, date, route, times, depTime, arrTime, rawLine: trimmed });
       }
     }
 
@@ -148,31 +127,34 @@ export const NoteSummarizer: React.FC = () => {
 
   const parsedSegments = parseFlightSegments(inputText);
 
+  // Format matching requested text column layout:
+  // 1  EK    2  27SEP   LHRDXB   2125  0740+1
+  // 2  EK  650  28SEP   DXBCMB   1620  2200
   const generateFormattedSummary = (segs: FlightSegment[]): string => {
     if (segs.length === 0) return '';
 
-    const maxSeg    = Math.max(1, ...segs.map(s => s.segNo.length));
-    const maxFlight = Math.max(6, ...segs.map(s => s.flightNo.length));
-    const maxDate   = Math.max(5, ...segs.map(s => s.date.length));
-    const maxRoute  = Math.max(6, ...segs.map(s => s.route.length));
+    const maxSeg       = Math.max(1, ...segs.map(s => s.segNo.length));
+    const maxAirline   = Math.max(2, ...segs.map(s => s.airline.length));
+    const maxFlightNum = Math.max(3, ...segs.map(s => s.flightNum.length));
+    const maxDate      = Math.max(5, ...segs.map(s => s.date.length));
+    const maxRoute     = Math.max(6, ...segs.map(s => s.route.length));
+    const maxDep       = Math.max(4, ...segs.map(s => s.depTime.length));
 
     return segs.map(s => {
-      const timeParts = s.times.trim().split(/\s+/);
-      const depTime = timeParts[0] || '';
-      const arrTime = timeParts[1] || '';
+      const segPadded       = s.segNo.padEnd(maxSeg);
+      const airlinePadded   = s.airline.padEnd(maxAirline);
+      const flightNumPadded = s.flightNum.padStart(maxFlightNum);
+      const datePadded      = s.date.padEnd(maxDate);
+      const routePadded     = s.route.padEnd(maxRoute);
+      const depPadded       = s.depTime.padEnd(maxDep);
 
-      const segPadded    = s.segNo.padEnd(maxSeg);
-      const flightPadded = s.flightNo.padEnd(maxFlight);
-      const datePadded   = s.date.padEnd(maxDate);
-      const routePadded  = s.route.padEnd(maxRoute);
-      const depPadded    = depTime.padEnd(5);
-
-      return `${segPadded}  ${flightPadded}  ${datePadded}  ${routePadded}  ${depPadded} ${arrTime}`;
+      return `${segPadded}  ${airlinePadded}  ${flightNumPadded}  ${datePadded}   ${routePadded}   ${depPadded}  ${s.arrTime}`;
     }).join('\n');
   };
 
   const formattedOutput = generateFormattedSummary(parsedSegments);
 
+  // Pure text format copy ONLY (no HTML / Excel table formatting)
   const handleCopy = async () => {
     if (!formattedOutput) return;
 
@@ -197,10 +179,6 @@ export const NoteSummarizer: React.FC = () => {
 
     setInputCopied(true);
     setTimeout(() => setInputCopied(false), 2000);
-  };
-
-  const handleLoadSample = () => {
-    setInputText(SAMPLE_PNR_NOTE);
   };
 
   const handleClear = () => {
@@ -228,18 +206,6 @@ export const NoteSummarizer: React.FC = () => {
               Paste GDS / Amadeus flight booking notes to automatically extract clean flight details
             </p>
           </div>
-        </div>
-
-        {/* Action Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button
-            onClick={handleLoadSample}
-            className="btn btn-ghost btn-sm"
-            style={{ gap: 6 }}
-            title="Load sample GDS / Amadeus text to try it out"
-          >
-            <Wand2 size={13} /> Load Sample Note
-          </button>
         </div>
       </div>
 
@@ -269,10 +235,10 @@ export const NoteSummarizer: React.FC = () => {
                   alignItems: 'center',
                   background: inputCopied ? 'var(--green)' : undefined
                 }}
-                title="Copy raw text to clipboard"
+                title="Copy raw input text to clipboard"
               >
                 {inputCopied ? <Check size={12} /> : <Copy size={12} />}
-                {inputCopied ? 'Copied!' : 'Copy'}
+                {inputCopied ? 'Copied!' : 'Copy Input'}
               </button>
               <button
                 onClick={handleClear}
@@ -299,7 +265,7 @@ export const NoteSummarizer: React.FC = () => {
           <textarea
             value={inputText}
             onChange={e => setInputText(e.target.value)}
-             placeholder={`Paste raw GDS / Amadeus flight details here...\n\nGDS Example:\n1  QR 162 T 11SEP 5 CPHDOH HK1       2  0905 1605   788 E 0 M\n\nAmadeus Example:\n1   QR      4  T  27SEP LHR DOH   1505  2350    SU   388    TLGBP1RE`}
+            placeholder={`Paste raw GDS / Amadeus flight details here...\n\nGDS Example:\n1  EK    2 T 27SEP 5 LHRDXB HK1          2125 0740+1 788 E 0 M\n2  EK  650 T 28SEP 5 DXBCMB HK1          1620 2200   789 E 0 M\n\nAmadeus Example:\n1   QR      4  T  27SEP LHR DOH   1505  2350    SU   388    TLGBP1RE\n2   QR    664  T  28SEP DOH CMB   0135  0900    MO   789    TLGBP1RE`}
             style={{
               width: '100%',
               height: 380,
@@ -321,10 +287,29 @@ export const NoteSummarizer: React.FC = () => {
 
         {/* Right Pane: Summarized Result */}
         <div className="card" style={{ display: 'flex', flexDirection: 'column', padding: 18, background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Sparkles size={15} style={{ color: 'var(--green)' }} /> Extracted Flight Summary
             </span>
+
+            {parsedSegments.length > 0 && (
+              <button
+                onClick={handleCopy}
+                className="btn btn-primary btn-sm"
+                style={{
+                  gap: 5,
+                  padding: '5px 12px',
+                  fontSize: 12,
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: copied ? 'var(--green)' : undefined
+                }}
+                title="Copy plain text summary to clipboard"
+              >
+                {copied ? <Check size={13} /> : <Copy size={13} />}
+                {copied ? 'Copied!' : 'Copy Summary'}
+              </button>
+            )}
           </div>
 
           {parsedSegments.length === 0 ? (
@@ -348,7 +333,7 @@ export const NoteSummarizer: React.FC = () => {
                 No flight details detected yet
               </p>
               <p style={{ fontSize: 11.5, color: 'var(--text3)', margin: 0, marginTop: 4, maxWidth: 280 }}>
-                Paste GDS / Amadeus notes on the left or click <strong>Load Sample Note</strong> above to see instant summarization.
+                Paste GDS / Amadeus notes on the left to see instant summarization.
               </p>
             </div>
           ) : (
@@ -390,6 +375,22 @@ export const NoteSummarizer: React.FC = () => {
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text2)', marginBottom: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span>CLEAN TEXT OUTPUT (READY TO COPY)</span>
+                  <button
+                    onClick={handleCopy}
+                    className="btn btn-ghost btn-sm"
+                    style={{
+                      gap: 4,
+                      padding: '2px 8px',
+                      fontSize: 11,
+                      color: copied ? 'var(--green)' : 'var(--text2)',
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
+                    title="Copy clean text output"
+                  >
+                    {copied ? <Check size={12} /> : <Copy size={12} />}
+                    {copied ? 'Copied' : 'Copy'}
+                  </button>
                 </div>
                 <pre style={{
                   background: 'var(--bg2)',

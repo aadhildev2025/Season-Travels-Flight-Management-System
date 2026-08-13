@@ -243,7 +243,12 @@ export function StaffCalendar({ currentUser }: StaffCalendarProps) {
   }, []);
 
   // Format Helper: YYYY-MM-DD
-  const formatDateKey = (d: Date) => d.toISOString().split('T')[0];
+  const formatDateKey = (d: Date) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
   // Pending Holidays Count
   const pendingHolidaysCount = useMemo(() => {

@@ -57,6 +57,7 @@ export default function App() {
   // Sidebar always starts collapsed; user opens it manually
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [focusRemarks, setFocusRemarks] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('currentView', view);
@@ -97,21 +98,33 @@ export default function App() {
     return () => { document.body.style.overflow = ''; };
   }, [view]);
 
-  // Reset view and sidebar on login
+  // Feature permission check helper
+  const isViewPermitted = (targetView: View): boolean => {
+    if (!currentUser) return false;
+    if (currentUser.role === 'Admin') return true;
+    if (targetView === 'profile') return true;
+
+    const adminOnlyViews: View[] = ['audit-logs', 'staff'];
+    if (adminOnlyViews.includes(targetView)) return false;
+
+    const checkKey = targetView === 'ticket-form' ? 'dashboard' : targetView;
+
+    const userPerms = currentUser.permissions && currentUser.permissions.length > 0
+      ? currentUser.permissions
+      : ['dashboard', 'note-summarizer', 'password-credential', 'spreadsheets', 'staff-calendar'];
+
+    return userPerms.includes(checkKey);
+  };
+
+  // Reset view and sidebar on login, checking permissions
   useEffect(() => {
     if (isAuthenticated && currentUser) {
-      const isAdmin = currentUser.role === 'Admin';
       const saved = localStorage.getItem('currentView') as View;
-      const adminOnlyViews: View[] = ['audit-logs', 'staff', 'profile'];
-      
-      if (saved) {
-        if (adminOnlyViews.includes(saved) && !isAdmin) {
-          setView('dashboard');
-        } else {
-          setView(saved);
-        }
+      if (saved && isViewPermitted(saved)) {
+        setView(saved);
       } else {
-        setView('dashboard');
+        const firstPermitted = sidebarNavItems.find(item => isViewPermitted(item.id as View))?.id as View || 'dashboard';
+        setView(firstPermitted);
       }
       setSidebarOpen(false);
       setSidebarCollapsed(true);
@@ -171,7 +184,17 @@ export default function App() {
   const handleAddNew = () => { setEditingTicket(null); setFocusRemarks(false); setView('ticket-form'); };
   const handleEdit = (t: Ticket, focusRemarks?: boolean) => { setEditingTicket(t); setFocusRemarks(!!focusRemarks); setView('ticket-form'); };
   const handleBack = () => { setEditingTicket(null); setFocusRemarks(false); setView('dashboard'); };
-  const handleRefresh = () => fetchTickets();
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      window.dispatchEvent(new CustomEvent('app:refresh'));
+      await fetchTickets();
+    } catch (err) {
+      console.error('Refresh error:', err);
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 500);
+    }
+  };
   const handleTicketSuccess = (msg: string, keepFormOpen?: boolean) => {
     showToast(msg);
     if (!keepFormOpen) {
@@ -197,6 +220,7 @@ export default function App() {
 
       autoTable(doc, {
         startY: 24,
+        margin: { top: 24, bottom: 15, left: 14, right: 14 },
         head: [['Date', 'Name', 'From', 'To', 'CET', 'SLT Time', 'Flight No.', 'PNR', 'Checkin', 'Remind']],
         body: rows,
         styles: { fontSize: 8.5, cellPadding: 3, textColor: [30, 41, 59] },
@@ -291,7 +315,7 @@ export default function App() {
         <nav className="sidebar-nav">
           <div className="sidebar-section">Main Workspace</div>
           {sidebarNavItems.map(item => {
-            if (item.adminOnly && !isAdmin) return null;
+            if (!isViewPermitted(item.id as View)) return null;
             const isActive = activeTab === item.id;
             return (
                <button
@@ -405,21 +429,51 @@ export default function App() {
             {pageTitle}
           </div>
 
-          <button
-            onClick={toggleTheme}
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            style={{
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              width: 36, height: 36, borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)',
-              background: theme === 'dark' ? 'rgba(34,211,238,0.12)' : 'rgba(15,23,42,0.08)',
-              color: theme === 'dark' ? '#22d3ee' : '#4f46e5',
-              cursor: 'pointer', transition: 'all 0.2s', marginLeft: 10, flexShrink: 0,
-            }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.background = theme === 'dark' ? 'rgba(34,211,238,0.22)' : 'rgba(15,23,42,0.14)'; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = theme === 'dark' ? 'rgba(34,211,238,0.12)' : 'rgba(15,23,42,0.08)'; }}
-          >
-            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-          </button>
+          {/* Theme Switch & Global Refresh Button Group */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 10, flexShrink: 0 }}>
+            <button
+              onClick={toggleTheme}
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                width: 36, height: 36, borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)',
+                background: theme === 'dark' ? 'rgba(34,211,238,0.12)' : 'rgba(15,23,42,0.08)',
+                color: theme === 'dark' ? '#22d3ee' : '#4f46e5',
+                cursor: 'pointer', transition: 'all 0.2s', flexShrink: 0,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.background = theme === 'dark' ? 'rgba(34,211,238,0.22)' : 'rgba(15,23,42,0.14)'; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = theme === 'dark' ? 'rgba(34,211,238,0.12)' : 'rgba(15,23,42,0.08)'; }}
+            >
+              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
+
+            <button
+              onClick={handleRefresh}
+              title="Refresh Data"
+              disabled={loading || isRefreshing}
+              style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                width: 36, height: 36, borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)',
+                background: theme === 'dark' ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.08)',
+                color: theme === 'dark' ? '#818cf8' : '#4f46e5',
+                cursor: (loading || isRefreshing) ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s', flexShrink: 0,
+                opacity: (loading || isRefreshing) ? 0.7 : 1,
+              }}
+              onMouseEnter={e => {
+                if (!loading && !isRefreshing) {
+                  e.currentTarget.style.transform = 'scale(1.08)';
+                  e.currentTarget.style.background = theme === 'dark' ? 'rgba(99,102,241,0.22)' : 'rgba(99,102,241,0.14)';
+                }
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.background = theme === 'dark' ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.08)';
+              }}
+            >
+              <RefreshCw size={16} className={(loading || isRefreshing) ? "spin" : ""} />
+            </button>
+          </div>
 
           {/* Spacer to push search and actions to the right */}
           <div style={{ flex: 1 }} />
@@ -469,9 +523,6 @@ export default function App() {
                 <button onClick={handleAddNew} className="btn btn-primary btn-sm" style={{ gap: 4 }}>
                   <Plus size={12} /> Add Ticket
                 </button>
-                <button onClick={handleRefresh} className="btn btn-ghost btn-icon" style={{ padding: '6px' }} title="Refresh" disabled={loading}>
-                  <RefreshCw size={13} className={loading ? "spin" : ""} />
-                </button>
                 <button onClick={handlePDF} className="btn btn-ghost btn-sm" style={{ gap: 4 }}>
                   <Download size={12} /> PDF
                 </button>
@@ -488,7 +539,7 @@ export default function App() {
         {/* ════════════════════ MAIN CONTENT AREA ════════════════════ */}
         <main className="main-content-area" style={{ flex: 1, position: 'relative', padding: view === 'staff-calendar' ? 0 : undefined, overflow: (view === 'ticket-form' || view === 'spreadsheets' || view === 'staff-calendar') ? 'hidden' : 'visible' }}>
           <div key={view} className="view-transition" style={{ height: '100%' }}>
-          {view === 'dashboard' && (
+          {view === 'dashboard' && isViewPermitted('dashboard') && (
             <Dashboard 
               onEdit={handleEdit} 
               tz={tz} 
@@ -499,7 +550,7 @@ export default function App() {
               onPDF={handlePDF}
             />
           )}
-          {view === 'ticket-form' && (
+          {view === 'ticket-form' && isViewPermitted('ticket-form') && (
             <TicketForm 
               editingTicket={editingTicket} 
               onBack={handleBack}
@@ -507,7 +558,7 @@ export default function App() {
               focusRemarks={focusRemarks}
             />
           )}
-          {view === 'staff-calendar' && (
+          {view === 'staff-calendar' && isViewPermitted('staff-calendar') && (
             <StaffCalendar currentUser={currentUser} />
           )}
           {view === 'audit-logs' && isAdmin && (
@@ -516,13 +567,13 @@ export default function App() {
           {view === 'staff' && isAdmin && (
             <Staff tz={tz} />
           )}
-          {view === 'note-summarizer' && (
+          {view === 'note-summarizer' && isViewPermitted('note-summarizer') && (
             <NoteSummarizer />
           )}
-          {view === 'password-credential' && (
+          {view === 'password-credential' && isViewPermitted('password-credential') && (
             <PasswordCredential />
           )}
-          {view === 'spreadsheets' && (
+          {view === 'spreadsheets' && isViewPermitted('spreadsheets') && (
             <SpreadsheetConsole />
           )}
           </div>

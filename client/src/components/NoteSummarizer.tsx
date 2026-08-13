@@ -151,15 +151,24 @@ export const NoteSummarizer: React.FC = () => {
   const generateFormattedSummary = (segs: FlightSegment[]): string => {
     if (segs.length === 0) return '';
 
-    const maxSeg    = Math.max(...segs.map(s => s.segNo.length));
-    const maxFlight = Math.max(...segs.map(s => s.flightNo.length));
-    const maxDate   = Math.max(...segs.map(s => s.date.length));
-    const maxRoute  = Math.max(...segs.map(s => s.route.length));
-    const maxTimes  = Math.max(...segs.map(s => s.times.length));
+    const maxSeg    = Math.max(1, ...segs.map(s => s.segNo.length));
+    const maxFlight = Math.max(6, ...segs.map(s => s.flightNo.length));
+    const maxDate   = Math.max(5, ...segs.map(s => s.date.length));
+    const maxRoute  = Math.max(6, ...segs.map(s => s.route.length));
 
-    return segs.map(s =>
-      `${s.segNo.padEnd(maxSeg)}  ${s.flightNo.padEnd(maxFlight)}  ${s.date.padEnd(maxDate)}   ${s.route.padEnd(maxRoute)}   ${s.times.padEnd(maxTimes)}`
-    ).join('\n');
+    return segs.map(s => {
+      const timeParts = s.times.trim().split(/\s+/);
+      const depTime = timeParts[0] || '';
+      const arrTime = timeParts[1] || '';
+
+      const segPadded    = s.segNo.padEnd(maxSeg);
+      const flightPadded = s.flightNo.padEnd(maxFlight);
+      const datePadded   = s.date.padEnd(maxDate);
+      const routePadded  = s.route.padEnd(maxRoute);
+      const depPadded    = depTime.padEnd(5);
+
+      return `${segPadded}  ${flightPadded}  ${datePadded}  ${routePadded}  ${depPadded} ${arrTime}`;
+    }).join('\n');
   };
 
   const formattedOutput = generateFormattedSummary(parsedSegments);
@@ -249,19 +258,20 @@ export const NoteSummarizer: React.FC = () => {
               <button
                 onClick={handleCopyInput}
                 disabled={!inputText}
-                className="btn btn-ghost btn-sm"
+                className="btn btn-primary btn-sm"
                 style={{
                   gap: 5,
-                  padding: '3px 8px',
+                  padding: '4px 10px',
                   fontSize: 11,
                   opacity: inputText ? 1 : 0.4,
                   cursor: inputText ? 'pointer' : 'not-allowed',
                   display: 'flex',
-                  alignItems: 'center'
+                  alignItems: 'center',
+                  background: inputCopied ? 'var(--green)' : undefined
                 }}
                 title="Copy raw text to clipboard"
               >
-                {inputCopied ? <Check size={12} style={{ color: 'var(--green)' }} /> : <Copy size={12} />}
+                {inputCopied ? <Check size={12} /> : <Copy size={12} />}
                 {inputCopied ? 'Copied!' : 'Copy'}
               </button>
               <button
@@ -315,19 +325,6 @@ export const NoteSummarizer: React.FC = () => {
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Sparkles size={15} style={{ color: 'var(--green)' }} /> Extracted Flight Summary
             </span>
-
-            {parsedSegments.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <button
-                  onClick={handleCopy}
-                  className="btn btn-primary btn-sm"
-                  style={{ gap: 6, background: copied ? 'var(--green)' : undefined }}
-                >
-                  {copied ? <Check size={13} /> : <Copy size={13} />}
-                  {copied ? 'Copied!' : 'Copy Text'}
-                </button>
-              </div>
-            )}
           </div>
 
           {parsedSegments.length === 0 ? (
@@ -404,7 +401,8 @@ export const NoteSummarizer: React.FC = () => {
                   fontSize: 12,
                   lineHeight: 1.8,
                   color: 'var(--text)',
-                  whiteSpace: 'pre-wrap',
+                  whiteSpace: 'pre',
+                  overflowX: 'auto',
                   maxHeight: 160,
                   overflowY: 'auto'
                 }}>

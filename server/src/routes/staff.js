@@ -14,6 +14,7 @@ router.get('/', requireAuth, requireAdmin, async (req, res) => {
       email: u.email,
       role: u.role?.name || u.role,
       timezone: u.timezone,
+      permissions: u.permissions,
       createdAt: u.createdAt,
       updatedAt: u.updatedAt,
     }));
@@ -26,7 +27,7 @@ router.get('/', requireAuth, requireAdmin, async (req, res) => {
 
 router.post('/', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { name, email, password, role, timezone } = req.body;
+    const { name, email, password, role, timezone, permissions } = req.body;
     if (!name || !email) {
       return res.status(400).json({ error: 'Name and email are required' });
     }
@@ -42,6 +43,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
       password: password || 'staff123',
       role: role || 'Staff',
       timezone: timezone || 'Europe/Stockholm',
+      permissions: Array.isArray(permissions) ? permissions : undefined,
     });
 
     return res.json({ id: user.id.toString(), success: true });
@@ -67,7 +69,7 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
 
 router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { name, email, role, timezone, password } = req.body;
+    const { name, email, role, timezone, password, permissions } = req.body;
     const user = await UserModel.findUserById(req.params.id);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });

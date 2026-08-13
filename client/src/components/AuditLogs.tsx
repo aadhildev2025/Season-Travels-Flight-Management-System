@@ -67,6 +67,14 @@ export default function AuditLogs({ tz }: AuditLogsProps) {
     load(1, activeQuery);
   }, [load, activeQuery]);
 
+  useEffect(() => {
+    const handleAppRefresh = () => {
+      load(page, activeQuery);
+    };
+    window.addEventListener('app:refresh', handleAppRefresh);
+    return () => window.removeEventListener('app:refresh', handleAppRefresh);
+  }, [load, page, activeQuery]);
+
   const handleSearchSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setActiveQuery(searchTerm);
@@ -174,6 +182,7 @@ export default function AuditLogs({ tz }: AuditLogsProps) {
 
       autoTable(doc, {
         startY: 24,
+        margin: { top: 24, bottom: 15, left: 14, right: 14 },
         head: [['Time (CET)', 'Action', 'User', 'Target / PNR', 'Details']],
         body: rows,
         styles: { fontSize: 8.5, cellPadding: 3, textColor: [30, 41, 59] },

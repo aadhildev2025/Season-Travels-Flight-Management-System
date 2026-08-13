@@ -19,10 +19,16 @@ export default function Analytics({ slClockTime, slClockDate }: AnalyticsProps) 
   const [copiedPnr, setCopiedPnr] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchAnalytics()
-      .then(setData)
-      .catch(e => setError(e.message))
-      .finally(() => setLoading(false));
+    const runFetch = () => {
+      setLoading(true);
+      fetchAnalytics()
+        .then(setData)
+        .catch(e => setError(e.message))
+        .finally(() => setLoading(false));
+    };
+    runFetch();
+    window.addEventListener('app:refresh', runFetch);
+    return () => window.removeEventListener('app:refresh', runFetch);
   }, [fetchAnalytics]);
 
   const handleCopyPnr = (pnr: string) => {

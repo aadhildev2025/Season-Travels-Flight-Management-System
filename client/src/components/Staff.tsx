@@ -9,7 +9,18 @@ interface StaffUser {
   email: string;
   role: string;
   timezone?: string;
+  permissions?: string[];
 }
+
+const ALL_PERMISSIONS = [
+  { id: 'dashboard', label: 'Flight Departure', badge: 'Departures' },
+  { id: 'note-summarizer', label: 'AI Summarization', badge: 'AI Summary' },
+  { id: 'password-credential', label: 'Notepad', badge: 'Notepad' },
+  { id: 'spreadsheets', label: 'Spreadsheets', badge: 'Spreadsheets' },
+  { id: 'staff-calendar', label: 'Staff Calendar', badge: 'Calendar' },
+];
+
+const DEFAULT_PERMISSIONS = ['dashboard', 'note-summarizer', 'password-credential', 'spreadsheets', 'staff-calendar'];
 
 interface StaffProps {
   tz: string;
@@ -28,6 +39,7 @@ export default function Staff({ tz }: StaffProps) {
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole]         = useState('Staff');
+  const [permissions, setPermissions] = useState<string[]>(DEFAULT_PERMISSIONS);
   const [adding, setAdding]     = useState(false);
   
   const [editingUser, setEditingUser] = useState<StaffUser | null>(null);
@@ -48,11 +60,20 @@ export default function Staff({ tz }: StaffProps) {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    const handleAppRefresh = () => {
+      load();
+    };
+    window.addEventListener('app:refresh', handleAppRefresh);
+    return () => window.removeEventListener('app:refresh', handleAppRefresh);
+  }, [load]);
+
   const handleSelectUser = (user: StaffUser) => {
     setEditingUser(user);
     setName(user.name);
     setEmail(user.email);
     setRole(user.role);
+    setPermissions(user.permissions || DEFAULT_PERMISSIONS);
     setPassword('');
     setShowPassword(false);
     setError('');
@@ -64,6 +85,7 @@ export default function Staff({ tz }: StaffProps) {
     setName('');
     setEmail('');
     setRole('Staff');
+    setPermissions(DEFAULT_PERMISSIONS);
     setPassword('');
     setShowPassword(false);
     setError('');
@@ -73,6 +95,12 @@ export default function Staff({ tz }: StaffProps) {
   const handleAddClick = () => {
     handleCancelEdit();
     setTimeout(() => nameRef.current?.focus(), 50);
+  };
+
+  const togglePermission = (id: string) => {
+    setPermissions(prev =>
+      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
+    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -87,13 +115,14 @@ export default function Staff({ tz }: StaffProps) {
           email: email.trim().toLowerCase() !== editingUser.email ? email.trim() : undefined,
           role: role !== editingUser.role ? role : undefined,
           password: password ? password : undefined,
+          permissions,
         });
         setSuccess(`User "${name.trim()}" updated successfully.`);
         setEditingUser(null);
-        setName(''); setEmail(''); setPassword(''); setRole('Staff');
+        setName(''); setEmail(''); setPassword(''); setRole('Staff'); setPermissions(DEFAULT_PERMISSIONS);
       } else {
-        await createStaff({ name: name.trim(), email: email.trim(), password: password || 'staff123', role });
-        setName(''); setEmail(''); setPassword(''); setRole('Staff');
+        await createStaff({ name: name.trim(), email: email.trim(), password: password || 'staff123', role, permissions });
+        setName(''); setEmail(''); setPassword(''); setRole('Staff'); setPermissions(DEFAULT_PERMISSIONS);
         setSuccess(`User "${name.trim()}" added successfully.`);
       }
       await load();
@@ -134,7 +163,7 @@ export default function Staff({ tz }: StaffProps) {
           </div>
           <div>
             <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em' }}>Staff Management</h2>
-            <p style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2 }}>Add, view and remove system users · Admin only</p>
+            <p style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2 }}>Add, edit and manage permissions for system users · Admin only</p>
           </div>
         </div>
       </div>
@@ -206,6 +235,43 @@ export default function Staff({ tz }: StaffProps) {
                 <option value="Admin">Admin</option>
               </select>
             </div>
+
+            {/* Page Access Permissions Checklist */}
+            <div>
+              <label style={label}>Feature Access Permissions</label>
+              <div style={{
+                display: 'flex', flexDirection: 'column', gap: 7,
+                background: 'var(--bg2)', padding: 12, borderRadius: 10,
+                border: '1px solid var(--border)'
+              }}>
+                {ALL_PERMISSIONS.map(p => {
+                  const isChecked = role === 'Admin' || permissions.includes(p.id);
+                  const isDisabled = role === 'Admin';
+                  return (
+                    <label
+                      key={p.id}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 9,
+                        fontSize: 12, fontWeight: 600,
+                        color: isChecked ? 'var(--text)' : 'var(--text3)',
+                        cursor: isDisabled ? 'default' : 'pointer',
+                        userSelect: 'none',
+                        opacity: isDisabled ? 0.8 : 1
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        disabled={isDisabled}
+                        onChange={() => togglePermission(p.id)}
+                        style={{ accentColor: 'var(--indigo)', width: 15, height: 15, cursor: isDisabled ? 'default' : 'pointer' }}
+                      />
+                      <span>{p.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
             
             <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
               {editingUser && (
@@ -256,6 +322,8 @@ export default function Staff({ tz }: StaffProps) {
                 const uid = u._id || u.id || '';
                 const isSelf = uid === currentUser?.id;
                 const isSelected = editingUser?.email === u.email;
+                const uPerms = u.permissions || DEFAULT_PERMISSIONS;
+
                 return (
                   <div key={uid || i} style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -296,6 +364,27 @@ export default function Staff({ tz }: StaffProps) {
                           {isSelf && <span style={{ fontSize: 8, fontWeight: 800, color: 'var(--amber)', background: 'rgba(245,158,11,0.1)', padding: '1px 5px', borderRadius: 3 }}>YOU</span>}
                         </div>
                         <p style={{ fontSize: 11, color: 'var(--text2)', marginTop: 1 }}>{u.email}</p>
+
+                        {/* Permission Pills */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
+                          {ALL_PERMISSIONS.map(p => {
+                            const hasPerm = u.role === 'Admin' || uPerms.includes(p.id);
+                            if (!hasPerm) return null;
+                            return (
+                              <span
+                                key={p.id}
+                                style={{
+                                  fontSize: 9, fontWeight: 700,
+                                  padding: '1px 5px', borderRadius: 4,
+                                  background: 'rgba(99,102,241,0.1)', color: '#818cf8',
+                                  border: '1px solid rgba(99,102,241,0.2)'
+                                }}
+                              >
+                                {p.badge}
+                              </span>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
 

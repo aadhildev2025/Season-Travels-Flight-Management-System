@@ -4,6 +4,7 @@ export interface User {
   email: string;
   role: 'Admin' | 'Staff';
   timezone: string;
+  permissions?: string[];
 }
 
 export interface Ticket {

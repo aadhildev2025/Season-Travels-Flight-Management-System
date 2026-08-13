@@ -50,6 +50,18 @@ export function SpreadsheetConsole() {
     return () => { isMounted = false; };
   }, []);
 
+  useEffect(() => {
+    const handleAppRefresh = async () => {
+      try {
+        const data = await apiFetch('/api/spreadsheets');
+        const list: SpreadsheetData[] = data.spreadsheets || [];
+        useSpreadsheetStore.setState({ spreadsheets: list });
+      } catch {}
+    };
+    window.addEventListener('app:refresh', handleAppRefresh);
+    return () => window.removeEventListener('app:refresh', handleAppRefresh);
+  }, []);
+
   // Show loading spinner ONLY if there is no active/cached spreadsheet yet
   if (initializing && !activeSpreadsheet) {
     return (

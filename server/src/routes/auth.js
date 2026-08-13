@@ -103,7 +103,8 @@ router.post('/login', async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role || 'Staff',
-        timezone: user.timezone
+        timezone: user.timezone,
+        permissions: user.permissions,
       }
     });
   } catch (err) {
@@ -135,6 +136,7 @@ router.get('/me', async (req, res) => {
         email: user.email,
         role: user.role || 'Staff',
         timezone: user.timezone,
+        permissions: user.permissions,
       }
     });
   } catch {

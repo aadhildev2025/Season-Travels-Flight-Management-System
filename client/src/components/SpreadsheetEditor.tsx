@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useSpreadsheetStore, SpreadsheetData, SheetData, CellData, RowData } from '../store/spreadsheetStore';
 import { 
   ArrowLeft, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, 
-  Plus, Trash2, Download, RefreshCw, Type, Save, Grid, Undo, Redo, FileText
+  Plus, Trash2, Download, RefreshCw, Type, Save, Grid, Undo, Redo, FileText, Sigma, Calculator
 } from 'lucide-react';
 
 interface SpreadsheetEditorProps {
@@ -525,6 +525,56 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     triggerAutosave(updated);
   };
 
+  // ════════════════════ AUTOSUM & FORMULA CALCULATION HELPERS ════════════════════
+
+  const insertAutoSum = (calcType: 'SUM' | 'AVERAGE' | 'COUNT' | 'MIN' | 'MAX' = 'SUM') => {
+    if (!selectedRange || !activeSpreadsheet) return;
+
+    const minRow = Math.min(selectedRange.startRow, selectedRange.endRow);
+    const maxRow = Math.max(selectedRange.startRow, selectedRange.endRow);
+    const minCol = Math.min(selectedRange.startCol, selectedRange.endCol);
+    const maxCol = Math.max(selectedRange.startCol, selectedRange.endCol);
+
+    let targetRow = maxRow + 1;
+    let targetCol = minCol;
+
+    const startRef = `${indexToColLabel(minCol)}${minRow + 1}`;
+    const endRef = `${indexToColLabel(maxCol)}${maxRow + 1}`;
+    const formula = (minRow === maxRow && minCol === maxCol)
+      ? `=${calcType}(${startRef})`
+      : `=${calcType}(${startRef}:${endRef})`;
+
+    saveHistoryState();
+
+    const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
+    const sheet = updated.sheets[activeSheetIdx];
+
+    while (sheet.rows.length <= targetRow) {
+      const numCols = sheet.rows[0]?.cells.length || 15;
+      const newCells: CellData[] = Array.from({ length: numCols }, () => ({
+        value: '', bold: false, italic: false, underline: false,
+        fontSize: 14, fontFamily: 'sans-serif', backgroundColor: '', fontColor: '', align: 'left'
+      }));
+      sheet.rows.push({ height: 30, cells: newCells });
+    }
+
+    const targetCell = sheet.rows[targetRow].cells[targetCol] || {
+      value: '', bold: true, italic: false, underline: false,
+      fontSize: 14, fontFamily: 'sans-serif', backgroundColor: '', fontColor: '', align: 'left'
+    };
+
+    targetCell.value = formula;
+    targetCell.bold = true;
+    sheet.rows[targetRow].cells[targetCol] = targetCell;
+
+    setActiveSpreadsheet(updated);
+    triggerAutosave(updated);
+
+    setSelectedCell({ row: targetRow, col: targetCol });
+    setSelectedRangeExpanded({ startRow: targetRow, startCol: targetCol, endRow: targetRow, endCol: targetCol });
+    setEditValue(formula);
+  };
+
   // ════════════════════ MERGE CELLS ACTIONS ════════════════════
 
   const mergeSelectedCells = () => {
@@ -1041,6 +1091,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
 
       autoTable(doc, {
         startY: 24,
+        margin: { top: 24, bottom: 15, left: 14, right: 14 },
         head: [finalHeaders],
         body: finalBody,
         styles: {
@@ -1318,6 +1369,19 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
 
         <div style={{ height: 20, width: 1, background: 'var(--border)' }} />
 
+        {/* AutoSum Quick Action Button */}
+        <button
+          onClick={() => insertAutoSum('SUM')}
+          disabled={!selectedRange}
+          className="btn btn-sm btn-ghost"
+          style={{ fontSize: 11, gap: 4, color: 'var(--indigo2)', fontWeight: 700 }}
+          title="Insert SUM total formula into blank cell below selection"
+        >
+          <Sigma size={13} /> AutoSum
+        </button>
+
+        <div style={{ height: 20, width: 1, background: 'var(--border)' }} />
+
         {/* Row/Col Modifiers */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <button 
@@ -1571,15 +1635,11 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                       const minCol = Math.min(selectedRange.startCol, selectedRange.endCol);
                       const maxCol = Math.max(selectedRange.startCol, selectedRange.endCol);
 
-                      if (cellStartRow === minRow) borderTop = '2px solid var(--indigo)';
-                      if (cellEndRow === maxRow) borderBottom = '2px solid var(--indigo)';
-                      if (cellStartCol === minCol) borderLeft = '2px solid var(--indigo)';
-                      if (cellEndCol === maxCol) borderRight = '2px solid var(--indigo)';
+                      if (cellStartRow === minRow) borderTop = '1px solid var(--indigo)';
+                      if (cellEndRow === maxRow) borderBottom = '1px solid var(--indigo)';
+                      if (cellStartCol === minCol) borderLeft = '1px solid var(--indigo)';
+                      if (cellEndCol === maxCol) borderRight = '1px solid var(--indigo)';
                     }
-                    
-                    // Determine merge box rectangular outline color based on theme
-                    const isLightTheme = document.documentElement.getAttribute('data-theme') === 'light';
-                    const mergeBoxColor = isLightTheme ? '#000000' : '#ffffff';
 
                     const cellStyle: React.CSSProperties = {
                       width: colWidth,
@@ -1588,7 +1648,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                       borderBottom,
                       borderLeft,
                       borderRight,
-                      boxShadow: merge ? `inset 0 0 0 2px ${mergeBoxColor}` : 'none',
+                      boxShadow: 'none',
                       padding: '4px 8px',
                       fontSize: `${cell.fontSize || 14}px`,
                       fontFamily: cell.fontFamily || 'sans-serif',
@@ -1599,8 +1659,8 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                       color: cell.fontColor || 'var(--text)',
                       textAlign: cell.align || 'left',
                       verticalAlign: 'middle',
-                      outline: isSelected ? '2px solid var(--indigo)' : 'none',
-                      outlineOffset: -2,
+                      outline: isSelected ? '1px solid var(--indigo)' : 'none',
+                      outlineOffset: -1,
                       cursor: 'cell',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
@@ -1889,7 +1949,15 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
               borderRadius: 6,
               border: '1px solid rgba(99, 102, 241, 0.2)'
             }}>
-              {stats.sum !== undefined && <span>SUM: {stats.sum}</span>}
+              {stats.sum !== undefined && (
+                <span
+                  onClick={() => insertAutoSum('SUM')}
+                  style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--indigo2)', background: 'rgba(99,102,241,0.15)', padding: '2px 6px', borderRadius: 4 }}
+                  title="Click to insert total formula (=SUM) into cell below selection"
+                >
+                  <Sigma size={11} /> SUM: {stats.sum} ↙
+                </span>
+              )}
               {stats.avg !== undefined && <span>AVG: {stats.avg}</span>}
               <span>COUNT: {stats.count}</span>
               {stats.min !== undefined && <span>MIN: {stats.min}</span>}

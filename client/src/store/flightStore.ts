@@ -101,9 +101,9 @@ interface FlightState {
   sendUpcomingReminders: () => Promise<void>;
 
   showToast: (message: string, type?: 'success' | 'error') => void;
-  fetchStaff:  () => Promise<{ id: string; name: string; email: string; role: string }[]>;
-  createStaff: (data: { name: string; email: string; password: string; role: string }) => Promise<void>;
-  updateStaff: (id: string, data: { name?: string; email?: string; password?: string; role?: string }) => Promise<void>;
+  fetchStaff:  () => Promise<{ id: string; name: string; email: string; role: string; permissions?: string[] }[]>;
+  createStaff: (data: { name: string; email: string; password: string; role: string; permissions?: string[] }) => Promise<void>;
+  updateStaff: (id: string, data: { name?: string; email?: string; password?: string; role?: string; permissions?: string[] }) => Promise<void>;
   deleteStaff: (id: string) => Promise<void>;
 
   fetchTickets:        () => Promise<void>;

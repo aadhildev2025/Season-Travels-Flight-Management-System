@@ -7,6 +7,7 @@ const userSchema = new mongoose.Schema({
   passwordHash: { type: String, required: true },
   role: { type: String, default: 'Staff' },
   timezone: { type: String, default: 'Europe/Stockholm' },
+  permissions: { type: [String], default: ['dashboard', 'note-summarizer', 'password-credential', 'spreadsheets', 'staff-calendar'] },
 }, { timestamps: true });
 
 export const User = mongoose.models.User || mongoose.model('User', userSchema);
@@ -33,6 +34,7 @@ export async function createUser(data) {
     passwordHash,
     role: data.role || 'Staff',
     timezone: data.timezone || 'Europe/Stockholm',
+    permissions: data.permissions || ['dashboard', 'note-summarizer', 'password-credential', 'spreadsheets', 'staff-calendar'],
   });
   return formatUser(user);
 }
@@ -43,6 +45,7 @@ export async function updateUser(id, data) {
   if (data.email) updateData.email = data.email.toLowerCase().trim();
   if (data.timezone) updateData.timezone = data.timezone;
   if (data.role) updateData.role = data.role;
+  if (data.permissions !== undefined) updateData.permissions = data.permissions;
   if (data.password) {
     updateData.passwordHash = await bcrypt.hash(data.password, 10);
   }
@@ -81,6 +84,7 @@ function formatUser(doc) {
   const obj = doc.toObject ? doc.toObject() : doc;
   const idStr = obj._id ? obj._id.toString() : (obj.id ? String(obj.id) : '');
   const roleName = typeof obj.role === 'object' && obj.role ? (obj.role.name || 'Staff') : (obj.role || 'Staff');
+  const defaultPerms = ['dashboard', 'note-summarizer', 'password-credential', 'spreadsheets', 'staff-calendar'];
   return {
     id: idStr,
     _id: idStr,
@@ -89,6 +93,7 @@ function formatUser(doc) {
     passwordHash: obj.passwordHash,
     role: roleName,
     timezone: obj.timezone || 'Europe/Stockholm',
+    permissions: Array.isArray(obj.permissions) ? obj.permissions : defaultPerms,
     createdAt: obj.createdAt,
     updatedAt: obj.updatedAt,
   };

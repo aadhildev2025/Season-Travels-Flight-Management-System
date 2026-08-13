@@ -162,9 +162,14 @@ export const PasswordCredential: React.FC = () => {
     };
 
     window.addEventListener('focus', handleFocus);
+    const handleAppRefresh = () => {
+      fetchCredentials(true);
+    };
+    window.addEventListener('app:refresh', handleAppRefresh);
     return () => {
       clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('app:refresh', handleAppRefresh);
     };
   }, [fetchCredentials]);
 
@@ -715,21 +720,38 @@ export const PasswordCredential: React.FC = () => {
     const rawText = tmp.innerText || tmp.textContent || '';
     const lines = rawText.split(/\n/);
 
+    // Strip trailing empty lines to prevent blank pages at the end
+    while (lines.length > 0 && !lines[lines.length - 1].trim()) {
+      lines.pop();
+    }
+
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
     doc.setTextColor(30, 41, 59);
 
     let y = marginTop;
 
-    for (const line of lines) {
-      const wrapped = doc.splitTextToSize(line.trimEnd() || ' ', maxLineW);
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trimEnd();
+
+      // Skip empty line if at the top of a page or near bottom to avoid empty page triggers
+      if (!trimmed) {
+        if (y === marginTop || y + 6 > pageH - marginBottom) {
+          continue;
+        }
+        y += 4;
+        continue;
+      }
+
+      const wrapped: string[] = doc.splitTextToSize(trimmed, maxLineW);
       for (const wl of wrapped) {
         if (y + 6 > pageH - marginBottom) {
           doc.addPage();
           y = marginTop;
         }
         doc.text(wl, marginLeft, y);
-        y += 6;
+        y += 5.5;
       }
     }
 

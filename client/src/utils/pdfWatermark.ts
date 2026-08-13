@@ -54,7 +54,7 @@ export function applySeasonTravelsWatermark(doc: any, title: string) {
 
     // Header Divider Line
     doc.setDrawColor(226, 232, 240);
-    doc.setLineWidth(0.4);
+    doc.setLineWidth(0.15);
     doc.line(14, 19, pageWidth - 14, 19);
 
     // 3. Footer

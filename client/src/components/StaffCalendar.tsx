@@ -133,8 +133,8 @@ export function StaffCalendar({ currentUser }: StaffCalendarProps) {
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
 
-  // Timezone View Toggle State (CET vs SLT)
-  const [activeTz, setActiveTz] = useState<'CET' | 'SLT'>('CET');
+  // Timezone View (Locked: CET for Admin, SLT for Staff)
+  const activeTz: 'CET' | 'SLT' = isAdmin ? 'CET' : 'SLT';
 
   const [staffList, setStaffList] = useState<CalendarStaffMember[]>([]);
   const [eventsList, setEventsList] = useState<CalendarShiftEvent[]>([]);
@@ -206,6 +206,14 @@ export function StaffCalendar({ currentUser }: StaffCalendarProps) {
     loadData();
   }, []);
 
+  useEffect(() => {
+    const handleAppRefresh = () => {
+      loadData();
+    };
+    window.addEventListener('app:refresh', handleAppRefresh);
+    return () => window.removeEventListener('app:refresh', handleAppRefresh);
+  }, []);
+
   // Format Helper: YYYY-MM-DD
   const formatDateKey = (d: Date) => d.toISOString().split('T')[0];
 
@@ -264,10 +272,10 @@ export function StaffCalendar({ currentUser }: StaffCalendarProps) {
     });
   }, [eventsList, visibleStaffIds, searchFilter]);
 
-  // Approved Holidays helper
-  const getApprovedHolidaysForDate = (dateStr: string) => {
+  // Holidays helper for date cells (Pending & Approved show; Rejected disappears)
+  const getHolidaysForDate = (dateStr: string) => {
     return holidaysList.filter(h => {
-      if (h.status !== 'Approved') return false;
+      if (h.status === 'Rejected') return false; // Rejected holidays disappear completely
       return dateStr >= h.startDate && dateStr <= h.endDate;
     });
   };
@@ -594,6 +602,7 @@ export function StaffCalendar({ currentUser }: StaffCalendarProps) {
 
       autoTable(doc, {
         startY: 24,
+        margin: { top: 24, bottom: 15, left: 14, right: 14 },
         head: [['Date', `Time (${activeTz})`, 'Staff Name', 'Department', 'Shift Title', 'Location']],
         body: tableRows,
         styles: { fontSize: 8.5, cellPadding: 3, textColor: [30, 41, 59] },
@@ -760,7 +769,7 @@ export function StaffCalendar({ currentUser }: StaffCalendarProps) {
             const dateStr = formatDateKey(cellDate);
             const isToday = dateStr === todayStr;
             const dayEvents = filteredEvents.filter(e => e.date === dateStr);
-            const dayHolidays = getApprovedHolidaysForDate(dateStr);
+            const dayHolidays = getHolidaysForDate(dateStr);
 
             return (
               <div
@@ -808,27 +817,38 @@ export function StaffCalendar({ currentUser }: StaffCalendarProps) {
 
                 {/* Holiday & Shift Badges */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4, overflowY: 'auto', flex: 1 }}>
-                  {/* Approved Holiday Badges */}
-                  {dayHolidays.map(h => (
-                    <div
-                      key={h.id || h._id}
-                      style={{
-                        padding: '4px 6px',
-                        borderRadius: 6,
-                        background: 'rgba(245, 158, 11, 0.15)',
-                        borderLeft: '3px solid #f59e0b',
-                        color: '#f59e0b',
-                        fontSize: 10.5,
-                        fontWeight: 800,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 4
-                      }}
-                      title={`Holiday for ${h.staffName}: ${h.reason || 'Approved leave'}`}
-                    >
-                      <Umbrella size={10} /> 🏖️ Holiday: {h.staffName}
-                    </div>
-                  ))}
+                  {/* Holiday Badges */}
+                  {dayHolidays.map(h => {
+                    const isPending = h.status === 'Pending';
+                    return (
+                      <div
+                        key={h.id || h._id}
+                        style={{
+                          padding: '4px 6px',
+                          borderRadius: 6,
+                          background: isPending ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                          borderLeft: isPending ? '3px solid #f59e0b' : '3px solid #10b981',
+                          color: isPending ? '#f59e0b' : '#10b981',
+                          fontSize: 10.5,
+                          fontWeight: 800,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4
+                        }}
+                        title={`${isPending ? 'Pending Holiday' : 'Holiday'} for ${h.staffName}: ${h.reason || (isPending ? 'Pending approval' : 'Approved leave')}`}
+                      >
+                        {isPending ? (
+                          <>
+                            <Clock size={10} /> Pending: {h.staffName}
+                          </>
+                        ) : (
+                          <>
+                            <Umbrella size={10} /> Holiday: {h.staffName}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
 
                   {/* Shift Cards */}
                   {dayEvents.map(shift => {
@@ -912,16 +932,42 @@ export function StaffCalendar({ currentUser }: StaffCalendarProps) {
           {weekDates.map(d => {
             const dateStr = formatDateKey(d);
             const dayEvents = filteredEvents.filter(e => e.date === dateStr);
-            const dayHolidays = getApprovedHolidaysForDate(dateStr);
+            const dayHolidays = getHolidaysForDate(dateStr);
 
             return (
               <div key={dateStr} style={{ borderRight: '1px solid var(--border2)', padding: 8, display: 'flex', flexDirection: 'column', gap: 8, background: 'var(--surface)' }}>
-                {/* Approved Holidays */}
-                {dayHolidays.map(h => (
-                  <div key={h.id || h._id} style={{ padding: '6px 8px', borderRadius: 6, background: 'rgba(245, 158, 11, 0.15)', borderLeft: '3px solid #f59e0b', color: '#f59e0b', fontSize: 11, fontWeight: 800 }}>
-                    🏖️ Holiday: {h.staffName}
-                  </div>
-                ))}
+                {/* Holiday Badges */}
+                {dayHolidays.map(h => {
+                  const isPending = h.status === 'Pending';
+                  return (
+                    <div
+                      key={h.id || h._id}
+                      style={{
+                        padding: '6px 8px',
+                        borderRadius: 6,
+                        background: isPending ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                        borderLeft: isPending ? '3px solid #f59e0b' : '3px solid #10b981',
+                        color: isPending ? '#f59e0b' : '#10b981',
+                        fontSize: 11,
+                        fontWeight: 800,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }}
+                      title={`${isPending ? 'Pending Holiday' : 'Holiday'} for ${h.staffName}`}
+                    >
+                      {isPending ? (
+                        <>
+                          <Clock size={11} /> Pending: {h.staffName}
+                        </>
+                      ) : (
+                        <>
+                          <Umbrella size={11} /> Holiday: {h.staffName}
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
 
                 {/* Shift Cards */}
                 {dayEvents.map(shift => {
@@ -964,7 +1010,7 @@ export function StaffCalendar({ currentUser }: StaffCalendarProps) {
   const renderDayView = () => {
     const dateStr = formatDateKey(currentDate);
     const dayEvents = filteredEvents.filter(e => e.date === dateStr);
-    const dayHolidays = getApprovedHolidaysForDate(dateStr);
+    const dayHolidays = getHolidaysForDate(dateStr);
 
     return (
       <div style={{ flex: 1, padding: 20, overflowY: 'auto', background: 'var(--bg)' }}>
@@ -979,14 +1025,32 @@ export function StaffCalendar({ currentUser }: StaffCalendarProps) {
           )}
         </div>
 
-        {/* Approved Holidays */}
+        {/* Holiday Badges */}
         {dayHolidays.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-            {dayHolidays.map(h => (
-              <div key={h.id || h._id} style={{ padding: 12, borderRadius: 10, background: 'rgba(245, 158, 11, 0.15)', border: '1px solid #f59e0b', color: '#f59e0b', fontWeight: 800, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Umbrella size={18} /> 🏖️ Approved Holiday: {h.staffName} ({h.reason || 'Staff Leave'})
-              </div>
-            ))}
+            {dayHolidays.map(h => {
+              const isPending = h.status === 'Pending';
+              return (
+                <div
+                  key={h.id || h._id}
+                  style={{
+                    padding: 12,
+                    borderRadius: 10,
+                    background: isPending ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                    border: isPending ? '1px solid #f59e0b' : '1px solid #10b981',
+                    color: isPending ? '#f59e0b' : '#10b981',
+                    fontWeight: 800,
+                    fontSize: 13,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8
+                  }}
+                >
+                  {isPending ? <Clock size={18} /> : <Umbrella size={18} />}
+                  {isPending ? `Pending: ${h.staffName}` : `Holiday: ${h.staffName}`} ({h.reason || (isPending ? 'Awaiting Admin Approval' : 'Approved Leave')})
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -1260,42 +1324,20 @@ export function StaffCalendar({ currentUser }: StaffCalendarProps) {
 
           {/* Right Side Controls Group (Timezone, View Switcher & Action Buttons) */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-            {/* CET / SLT Timezone Toggle */}
-            <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg2)', padding: 2, borderRadius: 8, border: '1px solid var(--border)' }}>
-              <button
-                onClick={() => setActiveTz('CET')}
-                style={{
-                  padding: '3px 8px',
-                  borderRadius: 6,
-                  border: 'none',
-                  background: activeTz === 'CET' ? 'var(--indigo)' : 'transparent',
-                  color: activeTz === 'CET' ? '#ffffff' : 'var(--text2)',
-                  fontSize: 11,
-                  fontWeight: activeTz === 'CET' ? 800 : 600,
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  transition: 'all 0.15s'
-                }}
-              >
-                CET (UTC+2)
-              </button>
-              <button
-                onClick={() => setActiveTz('SLT')}
-                style={{
-                  padding: '3px 8px',
-                  borderRadius: 6,
-                  border: 'none',
-                  background: activeTz === 'SLT' ? 'var(--indigo)' : 'transparent',
-                  color: activeTz === 'SLT' ? '#ffffff' : 'var(--text2)',
-                  fontSize: 11,
-                  fontWeight: activeTz === 'SLT' ? 800 : 600,
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  transition: 'all 0.15s'
-                }}
-              >
-                SLT (UTC+5:30)
-              </button>
+            {/* Timezone Indicator Badge (CET for Admin, SLT for Staff) */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              background: 'rgba(99, 102, 241, 0.12)',
+              padding: '4px 10px',
+              borderRadius: 8,
+              border: '1px solid rgba(99, 102, 241, 0.25)',
+              fontSize: 11,
+              fontWeight: 800,
+              color: 'var(--indigo2)',
+              whiteSpace: 'nowrap'
+            }}>
+              <Globe size={12} style={{ marginRight: 4 }} /> {activeTz === 'CET' ? 'CET (UTC+2)' : 'SLT (UTC+5:30)'}
             </div>
 
             {/* View Switcher Tabs */}

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useSpreadsheetStore, SpreadsheetData, SheetData, CellData, RowData } from '../store/spreadsheetStore';
 import { 
   ArrowLeft, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, 
-  Plus, Trash2, Download, RefreshCw, Type, Save, Grid, Undo, Redo, FileText, Sigma, Calculator, ChevronDown
+  Plus, Trash2, Download, RefreshCw, Type, Save, Grid, Undo, Redo, FileText, Sigma, Calculator, ChevronDown, Table
 } from 'lucide-react';
 
 interface SpreadsheetEditorProps {
@@ -408,13 +408,19 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
       saveCellEdit();
     }
 
+    const merge = getMergeCell(rowIdx, colIdx);
+    const targetRow = merge ? merge.startRow : rowIdx;
+    const targetCol = merge ? merge.startCol : colIdx;
+
     setIsSelecting(true);
-    setSelectedCell({ row: rowIdx, col: colIdx });
+    setSelectedCell({ row: targetRow, col: targetCol });
     
-    const range = { startRow: rowIdx, startCol: colIdx, endRow: rowIdx, endCol: colIdx };
+    const range = merge
+      ? { startRow: merge.startRow, startCol: merge.startCol, endRow: merge.endRow, endCol: merge.endCol }
+      : { startRow: rowIdx, startCol: colIdx, endRow: rowIdx, endCol: colIdx };
     setSelectedRangeExpanded(range);
 
-    const cell = currentSheet.rows[rowIdx]?.cells[colIdx];
+    const cell = currentSheet.rows[targetRow]?.cells[targetCol];
     setEditValue(cell ? cell.value : '');
     setIsEditing(false);
   };
@@ -426,17 +432,27 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
       setIsSelecting(false);
       return;
     }
+    const merge = getMergeCell(rowIdx, colIdx);
     const range = {
       ...selectedRange,
-      endRow: rowIdx,
-      endCol: colIdx
+      endRow: merge ? merge.endRow : rowIdx,
+      endCol: merge ? merge.endCol : colIdx
     };
     setSelectedRangeExpanded(range);
   };
 
   const handleCellDoubleClick = (rowIdx: number, colIdx: number) => {
-    setSelectedCell({ row: rowIdx, col: colIdx });
-    const cell = currentSheet.rows[rowIdx]?.cells[colIdx];
+    const merge = getMergeCell(rowIdx, colIdx);
+    const targetRow = merge ? merge.startRow : rowIdx;
+    const targetCol = merge ? merge.startCol : colIdx;
+
+    setSelectedCell({ row: targetRow, col: targetCol });
+    const range = merge 
+      ? { startRow: merge.startRow, startCol: merge.startCol, endRow: merge.endRow, endCol: merge.endCol }
+      : { startRow: targetRow, startCol: targetCol, endRow: targetRow, endCol: targetCol };
+    setSelectedRangeExpanded(range);
+
+    const cell = currentSheet.rows[targetRow]?.cells[targetCol];
     setEditValue(cell ? cell.value : '');
     setIsEditing(true);
     setTimeout(() => editInputRef.current?.focus(), 50);
@@ -549,7 +565,84 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     setEditValue(formula);
   };
 
-  // ════════════════════ MERGE CELLS ACTIONS ════════════════════
+  // ════════════════════ CREATE TABLE & MERGE ACTIONS ════════════════════
+
+  const createTableFromSelection = () => {
+    if (!activeSpreadsheet) return;
+    saveHistoryState(); // Save undo checkpoint
+
+    const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
+    const sheet = updated.sheets[activeSheetIdx] as any;
+    if (!sheet.merges) sheet.merges = [];
+
+    let minRow = 0;
+    let maxRow = 4;
+    let minCol = 0;
+    let maxCol = 4;
+
+    if (selectedRange) {
+      minRow = Math.min(selectedRange.startRow, selectedRange.endRow);
+      maxRow = Math.max(selectedRange.startRow, selectedRange.endRow);
+      minCol = Math.min(selectedRange.startCol, selectedRange.endCol);
+      maxCol = Math.max(selectedRange.startCol, selectedRange.endCol);
+
+      // If single cell selected, default to a 5x4 table starting at selected cell
+      if (minRow === maxRow && minCol === maxCol) {
+        maxRow = Math.min(minRow + 4, sheet.rows.length - 1);
+        maxCol = Math.min(minCol + 4, (sheet.rows[0]?.cells.length || 15) - 1);
+      }
+    } else if (selectedCell) {
+      minRow = selectedCell.row;
+      minCol = selectedCell.col;
+      maxRow = Math.min(minRow + 4, sheet.rows.length - 1);
+      maxCol = Math.min(minCol + 4, (sheet.rows[0]?.cells.length || 15) - 1);
+    } else {
+      // Default A1..E5 table
+      minRow = 0;
+      minCol = 0;
+      maxRow = 4;
+      maxCol = 4;
+    }
+
+    // 1. Format Top Row (Header Row)
+    for (let c = minCol; c <= maxCol; c++) {
+      const cell = sheet.rows[minRow]?.cells[c];
+      if (cell) {
+        cell.bold = true;
+        cell.align = 'center';
+        if (!cell.backgroundColor) cell.backgroundColor = '#f1f5f9';
+        if (!cell.value || cell.value.trim() === '') {
+          cell.value = `Header ${c - minCol + 1}`;
+        }
+      }
+    }
+
+    // 2. Create Table Body Columns: Merge rows minRow+1 to maxRow for each column in table
+    if (maxRow > minRow) {
+      const bodyStartRow = minRow + 1;
+      
+      for (let c = minCol; c <= maxCol; c++) {
+        // Remove any overlapping merges in this column range
+        sheet.merges = sheet.merges.filter((m: any) => {
+          const isOverlapping = !(maxRow < m.startRow || bodyStartRow > m.endRow || c < m.startCol || c > m.endCol);
+          return !isOverlapping;
+        });
+
+        // Push column body merge
+        sheet.merges.push({
+          startRow: bodyStartRow,
+          startCol: c,
+          endRow: maxRow,
+          endCol: c
+        });
+      }
+    }
+
+    setActiveSpreadsheet(updated);
+    setSelectedCell({ row: minRow, col: minCol });
+    setSelectedRangeExpanded({ startRow: minRow, startCol: minCol, endRow: maxRow, endCol: maxCol });
+    triggerAutosave(updated);
+  };
 
   const mergeSelectedCells = () => {
     if (!selectedRange) return;
@@ -570,7 +663,6 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     sheet.merges = sheet.merges.filter((m: any) => {
       const isIdentical = m.startRow === minRow && m.endRow === maxRow && m.startCol === minCol && m.endCol === maxCol;
       const isChild = m.startRow >= minRow && m.endRow <= maxRow && m.startCol >= minCol && m.endCol <= maxCol;
-      // Keep all parent containers, sibling sub-merges, and touching sub-merges intact!
       return !isIdentical && !isChild;
     });
 
@@ -1413,39 +1505,32 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
           )}
         </div>
 
-        {/* Merge / Unmerge Cells in Toolbar */}
-        {selectedRange && (
-          <>
-            <div style={{ height: 20, width: 1, background: 'var(--border)' }} />
-            <button
-              onClick={mergeSelectedCells}
-              disabled={
-                Math.min(selectedRange.startRow, selectedRange.endRow) === Math.max(selectedRange.startRow, selectedRange.endRow) &&
-                Math.min(selectedRange.startCol, selectedRange.endCol) === Math.max(selectedRange.startCol, selectedRange.endCol)
-              }
-              className="btn btn-sm btn-ghost"
-              style={{ fontSize: 11, gap: 4 }}
-              title="Merge selected cells"
-            >
-              Merge
-            </button>
-            {((currentSheet as any).merges || []).some((m: any) => {
-              const minRow = Math.min(selectedRange.startRow, selectedRange.endRow);
-              const maxRow = Math.max(selectedRange.startRow, selectedRange.endRow);
-              const minCol = Math.min(selectedRange.startCol, selectedRange.endCol);
-              const maxCol = Math.max(selectedRange.startCol, selectedRange.endCol);
-              return !(maxRow < m.startRow || minRow > m.endRow || maxCol < m.startCol || minCol > m.endCol);
-            }) && (
-              <button
-                onClick={unmergeSelectedCells}
-                className="btn btn-sm btn-ghost"
-                style={{ fontSize: 11, gap: 4, color: 'var(--indigo)' }}
-                title="Unmerge selected cells"
-              >
-                Unmerge
-              </button>
-            )}
-          </>
+        {/* Table Button in Toolbar */}
+        <div style={{ height: 20, width: 1, background: 'var(--border)' }} />
+        <button
+          onClick={createTableFromSelection}
+          className="btn btn-sm btn-accent"
+          style={{ fontSize: 11, gap: 4, display: 'flex', alignItems: 'center', fontWeight: 600 }}
+          title="Create Table from selection (Drag range and click)"
+        >
+          <Table size={13} />
+          Table
+        </button>
+        {selectedRange && ((currentSheet as any).merges || []).some((m: any) => {
+          const minRow = Math.min(selectedRange.startRow, selectedRange.endRow);
+          const maxRow = Math.max(selectedRange.startRow, selectedRange.endRow);
+          const minCol = Math.min(selectedRange.startCol, selectedRange.endCol);
+          const maxCol = Math.max(selectedRange.startCol, selectedRange.endCol);
+          return !(maxRow < m.startRow || minRow > m.endRow || maxCol < m.startCol || minCol > m.endCol);
+        }) && (
+          <button
+            onClick={unmergeSelectedCells}
+            className="btn btn-sm btn-ghost"
+            style={{ fontSize: 11, gap: 4, color: 'var(--indigo)' }}
+            title="Clear Table Format / Unmerge"
+          >
+            Clear Table
+          </button>
         )}
 
         <div style={{ height: 20, width: 1, background: 'var(--border)' }} />
@@ -1670,10 +1755,22 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                     
                     const merge = getMergeCell(rowIdx, colIdx);
                     const isMergeRoot = merge && rowIdx === merge.startRow && colIdx === merge.startCol;
-                    const rootCell = merge ? (currentSheet.rows[merge.startRow]?.cells[merge.startCol] || cell) : cell;
+                    const mRootCell = merge ? (currentSheet.rows[merge.startRow]?.cells[merge.startCol] || cell) : cell;
 
                     const colWidth = currentSheet.colWidths?.[colIdx] || 120;
                     const calculatedRowHeight = rowHeight;
+
+                    // Calculate total width and height of merge block if this is root
+                    let mTotalW = 0;
+                    let mTotalH = 0;
+                    if (isMergeRoot && merge) {
+                      for (let c = merge.startCol; c <= merge.endCol; c++) {
+                        mTotalW += currentSheet.colWidths?.[c] || 120;
+                      }
+                      for (let r = merge.startRow; r <= merge.endRow; r++) {
+                        mTotalH += currentSheet.rows[r]?.height || 30;
+                      }
+                    }
 
                     // Calculate perimeter borders across all merges (outer containers & sub-merges)
                     const mergesList = (currentSheet as any).merges || [];
@@ -1717,7 +1814,8 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
 
                     const rootMerges = getRootMerges(rowIdx, colIdx);
                     const hasRootMerges = rootMerges.length > 0;
-                    const effectiveBgColor = cell.backgroundColor || '';
+                    const effectiveBgColor = (merge ? mRootCell.backgroundColor : cell.backgroundColor) || '';
+                    const activeCellFormat = merge ? mRootCell : cell;
 
                     const cellStyle: React.CSSProperties = {
                       width: colWidth,
@@ -1728,14 +1826,14 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                       borderRight,
                       boxShadow: 'none',
                       padding: '4px 8px',
-                      fontSize: `${cell.fontSize || 14}px`,
-                      fontFamily: cell.fontFamily || 'sans-serif',
-                      fontWeight: cell.bold ? 'bold' : 'normal',
-                      fontStyle: cell.italic ? 'italic' : 'normal',
-                      textDecoration: cell.underline ? 'underline' : 'none',
+                      fontSize: `${activeCellFormat.fontSize || 14}px`,
+                      fontFamily: activeCellFormat.fontFamily || 'sans-serif',
+                      fontWeight: activeCellFormat.bold ? 'bold' : 'normal',
+                      fontStyle: activeCellFormat.italic ? 'italic' : 'normal',
+                      textDecoration: activeCellFormat.underline ? 'underline' : 'none',
                       backgroundColor: isSelected ? 'rgba(99, 102, 241, 0.2)' : (inSel ? 'rgba(99, 102, 241, 0.12)' : (effectiveBgColor || 'transparent')),
-                      color: cell.fontColor || 'var(--text)',
-                      textAlign: cell.align || 'left',
+                      color: activeCellFormat.fontColor || 'var(--text)',
+                      textAlign: activeCellFormat.align || 'left',
                       verticalAlign: 'middle',
                       outline: isSelected ? '2px solid var(--indigo)' : 'none',
                       outlineOffset: -2,
@@ -1744,7 +1842,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
                       position: 'relative',
-                      zIndex: isSelected ? 8 : (merge ? 2 : 1)
+                      zIndex: isSelected ? 18 : (isMergeRoot ? 15 : (merge ? 1 : 2))
                     };
 
                     const isEditingCell = isSelected && isEditing;
@@ -1759,15 +1857,15 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                       >
                         {/* Full continuous outer border box and text overlay for all merges starting at this root cell */}
                         {rootMerges.map((m: any) => {
-                          let mTotalW = 0;
-                          let mTotalH = 0;
+                          let rTotalW = 0;
+                          let rTotalH = 0;
                           for (let c = m.startCol; c <= m.endCol; c++) {
-                            mTotalW += currentSheet.colWidths?.[c] || 120;
+                            rTotalW += currentSheet.colWidths?.[c] || 120;
                           }
                           for (let r = m.startRow; r <= m.endRow; r++) {
-                            mTotalH += currentSheet.rows[r]?.height || 30;
+                            rTotalH += currentSheet.rows[r]?.height || 30;
                           }
-                          const mRootCell = currentSheet.rows[m.startRow]?.cells[m.startCol] || cell;
+                          const rootCellObj = currentSheet.rows[m.startRow]?.cells[m.startCol] || cell;
 
                           return (
                             <React.Fragment key={`merge-root-${m.startRow}-${m.startCol}-${m.endRow}-${m.endCol}`}>
@@ -1775,20 +1873,20 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                                 <div 
                                   style={{
                                     position: 'absolute', top: 0, left: 0,
-                                    width: mTotalW, height: mTotalH,
-                                    pointerEvents: 'none', zIndex: 7,
+                                    width: rTotalW, height: rTotalH,
+                                    pointerEvents: 'none', zIndex: 16,
                                     display: 'flex', alignItems: 'center',
-                                    justifyContent: mRootCell.align === 'center' ? 'center' : (mRootCell.align === 'right' ? 'flex-end' : 'flex-start'),
-                                    padding: '4px 8px', fontSize: `${mRootCell.fontSize || 14}px`,
-                                    fontFamily: mRootCell.fontFamily || 'sans-serif',
-                                    fontWeight: mRootCell.bold ? 'bold' : 'normal',
-                                    fontStyle: mRootCell.italic ? 'italic' : 'normal',
-                                    textDecoration: mRootCell.underline ? 'underline' : 'none',
-                                    color: mRootCell.fontColor || 'var(--text)',
+                                    justifyContent: rootCellObj.align === 'center' ? 'center' : (rootCellObj.align === 'right' ? 'flex-end' : 'flex-start'),
+                                    padding: '4px 8px', fontSize: `${rootCellObj.fontSize || 14}px`,
+                                    fontFamily: rootCellObj.fontFamily || 'sans-serif',
+                                    fontWeight: rootCellObj.bold ? 'bold' : 'normal',
+                                    fontStyle: rootCellObj.italic ? 'italic' : 'normal',
+                                    textDecoration: rootCellObj.underline ? 'underline' : 'none',
+                                    color: rootCellObj.fontColor || 'var(--text)',
                                     overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis'
                                   }}
                                 >
-                                  <span>{getDisplayValue(mRootCell)}</span>
+                                  <span>{getDisplayValue(rootCellObj)}</span>
                                 </div>
                               )}
                             </React.Fragment>
@@ -1807,13 +1905,17 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                               else if (e.key === 'Escape') setIsEditing(false);
                             }}
                             style={{
-                              position: 'absolute', inset: 0, width: '100%', height: '100%',
-                              background: 'var(--bg)', color: 'var(--text)', border: 'none',
-                              outline: 'none', padding: '4px 8px', fontSize: `${cell.fontSize || 14}px`,
-                              fontFamily: cell.fontFamily || 'sans-serif',
-                              fontWeight: cell.bold ? 'bold' : 'normal',
-                              fontStyle: cell.italic ? 'italic' : 'normal',
-                              boxSizing: 'border-box', zIndex: 10
+                              position: 'absolute', top: 0, left: 0,
+                              width: (isMergeRoot && merge) ? mTotalW : '100%',
+                              height: (isMergeRoot && merge) ? mTotalH : '100%',
+                              background: 'var(--bg)', color: activeCellFormat.fontColor || 'var(--text)',
+                              border: 'none', outline: 'none', padding: '4px 8px',
+                              fontSize: `${activeCellFormat.fontSize || 14}px`,
+                              fontFamily: activeCellFormat.fontFamily || 'sans-serif',
+                              fontWeight: activeCellFormat.bold ? 'bold' : 'normal',
+                              fontStyle: activeCellFormat.italic ? 'italic' : 'normal',
+                              textAlign: activeCellFormat.align || 'left',
+                              boxSizing: 'border-box', zIndex: 20
                             }}
                           />
                         ) : (

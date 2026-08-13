@@ -243,10 +243,31 @@ export function StaffCalendar({ currentUser }: StaffCalendarProps) {
     });
   }, [eventsList, visibleStaffIds, searchFilter]);
 
-  // Holidays helper for date cells (Pending & Approved show; Rejected disappears)
+  // Helper to get staff member's chosen color for holiday tags
+  const getStaffColorForHoliday = (staffId: string, staffName: string): string => {
+    const staff = staffList.find(
+      s => (s.id && String(s.id) === String(staffId)) ||
+           (s._id && String(s._id) === String(staffId)) ||
+           (s.name && s.name.toLowerCase().trim() === (staffName || '').toLowerCase().trim())
+    );
+    return staff?.color || '#10b981';
+  };
+
+  // Holidays helper for date cells (Pending & Approved show; Rejected disappears; respects staff filter)
   const getHolidaysForDate = (dateStr: string) => {
     return holidaysList.filter(h => {
       if (h.status === 'Rejected') return false; // Rejected holidays disappear completely
+      if (h.staffId || h.staffName) {
+        const staff = staffList.find(
+          s => (s.id && String(s.id) === String(h.staffId)) ||
+               (s._id && String(s._id) === String(h.staffId)) ||
+               (s.name && s.name.toLowerCase().trim() === (h.staffName || '').toLowerCase().trim())
+        );
+        if (staff) {
+          const staffIdStr = String(staff.id || staff._id || '');
+          if (!visibleStaffIds.has(staffIdStr)) return false;
+        }
+      }
       return dateStr >= h.startDate && dateStr <= h.endDate;
     });
   };
@@ -791,15 +812,16 @@ export function StaffCalendar({ currentUser }: StaffCalendarProps) {
                   {/* Holiday Badges */}
                   {dayHolidays.map(h => {
                     const isPending = h.status === 'Pending';
+                    const staffColor = getStaffColorForHoliday(h.staffId, h.staffName);
                     return (
                       <div
                         key={h.id || h._id}
                         style={{
                           padding: '4px 6px',
                           borderRadius: 6,
-                          background: isPending ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                          borderLeft: isPending ? '3px solid #f59e0b' : '3px solid #10b981',
-                          color: isPending ? '#f59e0b' : '#10b981',
+                          background: `${staffColor}20`,
+                          borderLeft: `3px solid ${staffColor}`,
+                          color: staffColor,
                           fontSize: 10.5,
                           fontWeight: 800,
                           display: 'flex',
@@ -910,15 +932,16 @@ export function StaffCalendar({ currentUser }: StaffCalendarProps) {
                 {/* Holiday Badges */}
                 {dayHolidays.map(h => {
                   const isPending = h.status === 'Pending';
+                  const staffColor = getStaffColorForHoliday(h.staffId, h.staffName);
                   return (
                     <div
                       key={h.id || h._id}
                       style={{
                         padding: '6px 8px',
                         borderRadius: 6,
-                        background: isPending ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                        borderLeft: isPending ? '3px solid #f59e0b' : '3px solid #10b981',
-                        color: isPending ? '#f59e0b' : '#10b981',
+                        background: `${staffColor}20`,
+                        borderLeft: `3px solid ${staffColor}`,
+                        color: staffColor,
                         fontSize: 11,
                         fontWeight: 800,
                         display: 'flex',
@@ -1001,15 +1024,17 @@ export function StaffCalendar({ currentUser }: StaffCalendarProps) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
             {dayHolidays.map(h => {
               const isPending = h.status === 'Pending';
+              const staffColor = getStaffColorForHoliday(h.staffId, h.staffName);
               return (
                 <div
                   key={h.id || h._id}
                   style={{
                     padding: 12,
                     borderRadius: 10,
-                    background: isPending ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                    border: isPending ? '1px solid #f59e0b' : '1px solid #10b981',
-                    color: isPending ? '#f59e0b' : '#10b981',
+                    background: `${staffColor}20`,
+                    border: `1px solid ${staffColor}55`,
+                    borderLeft: `5px solid ${staffColor}`,
+                    color: staffColor,
                     fontWeight: 800,
                     fontSize: 13,
                     display: 'flex',
@@ -1698,6 +1723,7 @@ export function StaffCalendar({ currentUser }: StaffCalendarProps) {
                   const id = req.id || req._id || '';
                   const isPending = req.status === 'Pending';
                   const isApproved = req.status === 'Approved';
+                  const staffColor = getStaffColorForHoliday(req.staffId, req.staffName);
 
                   return (
                     <div
@@ -1707,6 +1733,7 @@ export function StaffCalendar({ currentUser }: StaffCalendarProps) {
                         borderRadius: 10,
                         background: 'var(--bg2)',
                         border: '1px solid var(--border)',
+                        borderLeft: `4px solid ${staffColor}`,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
@@ -1715,14 +1742,15 @@ export function StaffCalendar({ currentUser }: StaffCalendarProps) {
                     >
                       <div>
                         <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 8, height: 8, borderRadius: '50%', background: staffColor }} />
                           {req.staffName}
                           <span style={{
                             fontSize: 10,
                             padding: '2px 8px',
                             borderRadius: 12,
                             fontWeight: 800,
-                            background: isPending ? 'rgba(245, 158, 11, 0.15)' : isApproved ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                            color: isPending ? '#f59e0b' : isApproved ? '#10b981' : '#ef4444'
+                            background: isPending ? 'rgba(245, 158, 11, 0.15)' : isApproved ? `${staffColor}22` : 'rgba(239, 68, 68, 0.15)',
+                            color: isPending ? '#f59e0b' : isApproved ? staffColor : '#ef4444'
                           }}>
                             {req.status}
                           </span>

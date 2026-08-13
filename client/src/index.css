@@ -23,6 +23,10 @@
   --border2: rgba(255, 255, 255, 0.03);
   --border-glow: rgba(99, 102, 241, 0.15);
   --merge-outline: #ffffff;
+  --table-border: #ffffff;
+  --table-inner-border: rgba(255, 255, 255, 0.25);
+  --table-header-bg: #1c1c36;
+  --table-header-color: #ffffff;
 
   /* ── Text ── */
   --text: #eaeaf5;
@@ -64,6 +68,10 @@
   --border2: rgba(0, 0, 0, 0.04);
   --border-glow: rgba(99, 102, 241, 0.2);
   --merge-outline: #000000;
+  --table-border: #000000;
+  --table-inner-border: rgba(0, 0, 0, 0.35);
+  --table-header-bg: #e2e8f0;
+  --table-header-color: #0f172a;
 
   /* ── Text ── */
   --text: #09090b;

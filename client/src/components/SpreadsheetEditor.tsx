@@ -573,6 +573,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
 
     const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
     const sheet = updated.sheets[activeSheetIdx] as any;
+    if (!sheet.tables) sheet.tables = [];
     if (!sheet.merges) sheet.merges = [];
 
     let minRow = 0;
@@ -604,39 +605,31 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
       maxCol = 4;
     }
 
+    // Remove any previous merges inside this table range so body cells remain individual
+    sheet.merges = sheet.merges.filter((m: any) => {
+      return (maxRow < m.startRow || minRow > m.endRow || maxCol < m.startCol || minCol > m.endCol);
+    });
+
     // 1. Format Top Row (Header Row)
     for (let c = minCol; c <= maxCol; c++) {
       const cell = sheet.rows[minRow]?.cells[c];
       if (cell) {
         cell.bold = true;
         cell.align = 'center';
-        if (!cell.backgroundColor) cell.backgroundColor = '#f1f5f9';
+        if (cell.backgroundColor === '#f1f5f9') cell.backgroundColor = '';
         if (!cell.value || cell.value.trim() === '') {
           cell.value = `Header ${c - minCol + 1}`;
         }
       }
     }
 
-    // 2. Create Table Body Columns: Merge rows minRow+1 to maxRow for each column in table
-    if (maxRow > minRow) {
-      const bodyStartRow = minRow + 1;
-      
-      for (let c = minCol; c <= maxCol; c++) {
-        // Remove any overlapping merges in this column range
-        sheet.merges = sheet.merges.filter((m: any) => {
-          const isOverlapping = !(maxRow < m.startRow || bodyStartRow > m.endRow || c < m.startCol || c > m.endCol);
-          return !isOverlapping;
-        });
-
-        // Push column body merge
-        sheet.merges.push({
-          startRow: bodyStartRow,
-          startCol: c,
-          endRow: maxRow,
-          endCol: c
-        });
-      }
-    }
+    // 2. Add table metadata for border rendering
+    sheet.tables.push({
+      startRow: minRow,
+      startCol: minCol,
+      endRow: maxRow,
+      endCol: maxCol
+    });
 
     setActiveSpreadsheet(updated);
     setSelectedCell({ row: minRow, col: minCol });
@@ -748,12 +741,42 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
 
     let cleared = false;
     for (let r = minRow; r <= maxRow; r++) {
+      if (!sheet.rows[r]) continue;
       for (let c = minCol; c <= maxCol; c++) {
-        if (sheet.rows[r]?.cells[c] && sheet.rows[r].cells[c].value !== '') {
-          sheet.rows[r].cells[c].value = '';
-          cleared = true;
+        const cell = sheet.rows[r].cells[c];
+        if (cell) {
+          if (cell.value !== '' || cell.backgroundColor !== '' || cell.fontColor !== '' || cell.bold || cell.italic || cell.underline) {
+            cleared = true;
+          }
+          cell.value = '';
+          cell.backgroundColor = '';
+          cell.fontColor = '';
+          cell.bold = false;
+          cell.italic = false;
+          cell.underline = false;
+          cell.align = 'left';
         }
       }
+    }
+
+    // Remove any table definitions inside or overlapping the selected range
+    if ((sheet as any).tables) {
+      const initialTableCount = (sheet as any).tables.length;
+      (sheet as any).tables = (sheet as any).tables.filter((t: any) => {
+        const isIntersecting = !(maxRow < t.startRow || minRow > t.endRow || maxCol < t.startCol || minCol > t.endCol);
+        return !isIntersecting;
+      });
+      if ((sheet as any).tables.length !== initialTableCount) cleared = true;
+    }
+
+    // Remove any cell merges inside or overlapping the selected range
+    if ((sheet as any).merges) {
+      const initialMergeCount = (sheet as any).merges.length;
+      (sheet as any).merges = (sheet as any).merges.filter((m: any) => {
+        const isIntersecting = !(maxRow < m.startRow || minRow > m.endRow || maxCol < m.startCol || minCol > m.endCol);
+        return !isIntersecting;
+      });
+      if ((sheet as any).merges.length !== initialMergeCount) cleared = true;
     }
 
     if (cleared) {
@@ -802,7 +825,19 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
       case 'Backspace':
       case 'Delete':
         e.preventDefault();
-        clearSelectedCells();
+        {
+          const numCols = currentSheet.rows[0]?.cells.length || 15;
+          const isFullRowSelection = selectedRange && (
+            (Math.min(selectedRange.startCol, selectedRange.endCol) === 0 && Math.max(selectedRange.startCol, selectedRange.endCol) >= numCols - 1) ||
+            (Math.abs(selectedRange.endRow - selectedRange.startRow) > 0 && Math.abs(selectedRange.endCol - selectedRange.startCol) >= numCols - 1)
+          );
+
+          if (isFullRowSelection) {
+            deleteSelectedRows();
+          } else {
+            clearSelectedCells();
+          }
+        }
         break;
       case 'ArrowUp':
         if (nextRow > 0) {
@@ -1091,21 +1126,63 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     triggerAutosave(updated);
   };
 
-  const deleteRow = () => {
-    if (!selectedCell) return;
+  const deleteSelectedRows = () => {
+    if (!selectedCell && !selectedRange) return;
     saveHistoryState(); // Save undo checkpoint
-    const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
-    const sheet = updated.sheets[activeSheetIdx];
-    if (sheet.rows.length <= 1) return;
 
-    sheet.rows.splice(selectedCell.row, 1);
+    const minRow = selectedRange ? Math.min(selectedRange.startRow, selectedRange.endRow) : selectedCell!.row;
+    const maxRow = selectedRange ? Math.max(selectedRange.startRow, selectedRange.endRow) : selectedCell!.row;
+
+    const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
+    const sheet = updated.sheets[activeSheetIdx] as any;
+
+    const countToDelete = maxRow - minRow + 1;
+    if (sheet.rows.length <= countToDelete) return; // Keep at least 1 row
+
+    // Splice out all rows from minRow to maxRow
+    sheet.rows.splice(minRow, countToDelete);
+
+    // Update or filter any merges affected by the row deletion
+    if (sheet.merges) {
+      sheet.merges = sheet.merges.map((m: any) => {
+        if (m.endRow < minRow) return m; // Above deletion range
+        if (m.startRow > maxRow) {
+          // Below deletion range: shift up by countToDelete
+          return { ...m, startRow: m.startRow - countToDelete, endRow: m.endRow - countToDelete };
+        }
+        if (m.startRow < minRow && m.endRow > maxRow) {
+          return { ...m, endRow: m.endRow - countToDelete };
+        }
+        return null; // Entirely inside deleted rows
+      }).filter(Boolean);
+    }
+
+    // Update or filter any tables affected by the row deletion
+    if (sheet.tables) {
+      sheet.tables = sheet.tables.map((t: any) => {
+        if (t.endRow < minRow) return t;
+        if (t.startRow > maxRow) {
+          return { ...t, startRow: t.startRow - countToDelete, endRow: t.endRow - countToDelete };
+        }
+        if (t.startRow < minRow && t.endRow > maxRow) {
+          return { ...t, endRow: t.endRow - countToDelete };
+        }
+        return null;
+      }).filter(Boolean);
+    }
+
     setActiveSpreadsheet(updated);
     
-    const nextRowIdx = Math.min(selectedCell.row, sheet.rows.length - 1);
-    const next = { row: nextRowIdx, col: selectedCell.col };
+    const nextRowIdx = Math.min(minRow, sheet.rows.length - 1);
+    const targetCol = selectedCell ? selectedCell.col : 0;
+    const next = { row: nextRowIdx, col: targetCol };
     setSelectedCell(next);
     setSelectedRangeExpanded({ startRow: next.row, startCol: next.col, endRow: next.row, endCol: next.col });
     triggerAutosave(updated);
+  };
+
+  const deleteRow = () => {
+    deleteSelectedRows();
   };
 
   const insertColumn = (left = true) => {
@@ -1516,22 +1593,6 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
           <Table size={13} />
           Table
         </button>
-        {selectedRange && ((currentSheet as any).merges || []).some((m: any) => {
-          const minRow = Math.min(selectedRange.startRow, selectedRange.endRow);
-          const maxRow = Math.max(selectedRange.startRow, selectedRange.endRow);
-          const minCol = Math.min(selectedRange.startCol, selectedRange.endCol);
-          const maxCol = Math.max(selectedRange.startCol, selectedRange.endCol);
-          return !(maxRow < m.startRow || minRow > m.endRow || maxCol < m.startCol || minCol > m.endCol);
-        }) && (
-          <button
-            onClick={unmergeSelectedCells}
-            className="btn btn-sm btn-ghost"
-            style={{ fontSize: 11, gap: 4, color: 'var(--indigo)' }}
-            title="Clear Table Format / Unmerge"
-          >
-            Clear Table
-          </button>
-        )}
 
         <div style={{ height: 20, width: 1, background: 'var(--border)' }} />
 
@@ -1772,8 +1833,20 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                       }
                     }
 
-                    // Calculate perimeter borders across all merges (outer containers & sub-merges)
+                    // Calculate perimeter borders across all merges and tables
                     const mergesList = (currentSheet as any).merges || [];
+                    const tablesList = (currentSheet as any).tables || [];
+
+                    const cellTable = tablesList.find((t: any) => 
+                      rowIdx >= t.startRow && rowIdx <= t.endRow && colIdx >= t.startCol && colIdx <= t.endCol
+                    );
+
+                    const isLeftAdjacentToTable = tablesList.some((t: any) => 
+                      rowIdx >= t.startRow && rowIdx <= t.endRow && colIdx === t.startCol - 1
+                    );
+                    const isAboveAdjacentToTable = tablesList.some((t: any) => 
+                      colIdx >= t.startCol && colIdx <= t.endCol && rowIdx === t.startRow - 1
+                    );
 
                     const isTopEdgeOfAny = mergesList.some((m: any) => 
                       m.startRow === rowIdx && colIdx >= m.startCol && colIdx <= m.endCol
@@ -1800,6 +1873,25 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                     let borderLeft = isLeftEdgeOfAny ? '2px solid var(--merge-outline)' : '1px solid var(--border)';
                     let borderRight = (isRightEdgeOfAny || isBorderLeftOfNextCol) ? '2px solid var(--merge-outline)' : '1px solid var(--border)';
 
+                    if (isLeftAdjacentToTable) {
+                      borderRight = '2px solid var(--table-border)';
+                    }
+                    if (isAboveAdjacentToTable) {
+                      borderBottom = '2px solid var(--table-border)';
+                    }
+
+                    if (cellTable) {
+                      const isTop = rowIdx === cellTable.startRow;
+                      const isBottom = rowIdx === cellTable.endRow;
+                      const isLeft = colIdx === cellTable.startCol;
+                      const isRight = colIdx === cellTable.endCol;
+
+                      borderTop = isTop ? '2px solid var(--table-border)' : '1px solid var(--table-inner-border)';
+                      borderBottom = (isBottom || isTop) ? '2px solid var(--table-border)' : '1px solid var(--table-inner-border)';
+                      borderLeft = isLeft ? '2px solid var(--table-border)' : '1px solid var(--table-inner-border)';
+                      borderRight = isRight ? '2px solid var(--table-border)' : '1px solid var(--table-inner-border)';
+                    }
+
                     if (inSel && selectedRange) {
                       const minRow = Math.min(selectedRange.startRow, selectedRange.endRow);
                       const maxRow = Math.max(selectedRange.startRow, selectedRange.endRow);
@@ -1817,6 +1909,21 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                     const effectiveBgColor = (merge ? mRootCell.backgroundColor : cell.backgroundColor) || '';
                     const activeCellFormat = merge ? mRootCell : cell;
 
+                    const isTableHeaderRow = cellTable && rowIdx === cellTable.startRow;
+
+                    let computedBg = isSelected 
+                      ? 'rgba(99, 102, 241, 0.2)' 
+                      : (inSel ? 'rgba(99, 102, 241, 0.12)' : (effectiveBgColor || (isTableHeaderRow ? 'var(--table-header-bg)' : 'transparent')));
+
+                    if (isTableHeaderRow && (effectiveBgColor === '#f1f5f9' || !effectiveBgColor)) {
+                      computedBg = isSelected ? 'rgba(99, 102, 241, 0.2)' : (inSel ? 'rgba(99, 102, 241, 0.12)' : 'var(--table-header-bg)');
+                    }
+
+                    let computedColor = activeCellFormat.fontColor || (isTableHeaderRow ? 'var(--table-header-color)' : 'var(--text)');
+                    if (isTableHeaderRow && !activeCellFormat.fontColor) {
+                      computedColor = 'var(--table-header-color)';
+                    }
+
                     const cellStyle: React.CSSProperties = {
                       width: colWidth,
                       height: calculatedRowHeight,
@@ -1831,8 +1938,8 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                       fontWeight: activeCellFormat.bold ? 'bold' : 'normal',
                       fontStyle: activeCellFormat.italic ? 'italic' : 'normal',
                       textDecoration: activeCellFormat.underline ? 'underline' : 'none',
-                      backgroundColor: isSelected ? 'rgba(99, 102, 241, 0.2)' : (inSel ? 'rgba(99, 102, 241, 0.12)' : (effectiveBgColor || 'transparent')),
-                      color: activeCellFormat.fontColor || 'var(--text)',
+                      backgroundColor: computedBg,
+                      color: computedColor,
                       textAlign: activeCellFormat.align || 'left',
                       verticalAlign: 'middle',
                       outline: isSelected ? '2px solid var(--indigo)' : 'none',

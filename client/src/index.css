@@ -1773,11 +1773,18 @@ button {
 }
 
 /* ════════════════════ SPREADSHEET MERGE BOX OUTLINE ════════════════════ */
-[data-theme="light"] .spreadsheet-merge-box {
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.65) !important;
+[data-theme="light"] {
+  --merge-outline: #000000;
 }
 
-[data-theme="dark"] .spreadsheet-merge-box,
-:root:not([data-theme="light"]) .spreadsheet-merge-box {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.65) !important;
+[data-theme="dark"],
+:root:not([data-theme="light"]) {
+  --merge-outline: #ffffff;
+}
+
+.spreadsheet-merge-box,
+.spreadsheet-outer-merge-box,
+.spreadsheet-inner-merge-box {
+  outline: none !important;
+  box-shadow: inset 0 0 0 1px var(--merge-outline) !important;
 }

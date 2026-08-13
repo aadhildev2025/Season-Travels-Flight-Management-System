@@ -178,25 +178,53 @@ export function StaffCalendar({ currentUser }: StaffCalendarProps) {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [staffRes, eventsRes, holidaysRes] = await Promise.all([
+      const [staffResult, eventsResult, holidaysResult] = await Promise.allSettled([
         apiFetch('/api/staff-calendar/staff'),
         apiFetch('/api/staff-calendar/events'),
         apiFetch('/api/staff-calendar/holidays')
       ]);
 
-      const staffData: CalendarStaffMember[] = staffRes.staff || [];
+      const staffRes = staffResult.status === 'fulfilled' ? staffResult.value : {};
+      const eventsRes = eventsResult.status === 'fulfilled' ? eventsResult.value : {};
+      const holidaysRes = holidaysResult.status === 'fulfilled' ? holidaysResult.value : {};
+
+      let staffData: CalendarStaffMember[] = staffRes.staff || [];
       const eventsData: CalendarShiftEvent[] = eventsRes.events || [];
       const holidaysData: HolidayRequest[] = holidaysRes.holidays || [];
 
+      // If no calendar staff exist yet, auto-populate from system staff users (/api/staff)
+      if (staffData.length === 0) {
+        try {
+          const mainStaffRes = await apiFetch('/api/staff');
+          const mainUsers = mainStaffRes.users || [];
+          if (mainUsers.length > 0) {
+            const created = await Promise.all(
+              mainUsers.map((u: any, idx: number) => 
+                apiFetch('/api/staff-calendar/staff', {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    name: u.name || u.email,
+                    role: u.role || 'Staff',
+                    department: u.department || DEPARTMENTS[idx % DEPARTMENTS.length],
+                    color: PALETTE[idx % PALETTE.length]
+                  })
+                })
+              )
+            );
+            staffData = created.map(r => r.staff).filter(Boolean);
+          }
+        } catch (e) {
+          console.warn('Auto-sync staff users failed:', e);
+        }
+      }
+
       setStaffList(staffData);
-      setVisibleStaffIds(new Set(staffData.map(s => s.id || s._id || '')));
+      const validStaffIds = staffData.map(s => String(s.id || s._id || '')).filter(Boolean);
+      setVisibleStaffIds(new Set(validStaffIds));
       setEventsList(eventsData);
       setHolidaysList(holidaysData);
     } catch (err) {
       console.warn('Backend fetch failed:', err);
-      setStaffList([]);
-      setEventsList([]);
-      setHolidaysList([]);
     } finally {
       setLoading(false);
     }

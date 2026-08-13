@@ -169,60 +169,60 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
 
   // ════════════════════ MERGED CELLS ENGINE ════════════════════
 
-  // Check if a cell is part of any merge range
-  const getMergeCell = (row: number, col: number) => {
+  // Get top-level merges (merges that are not nested inside a larger merge)
+  const getTopLevelMerges = () => {
     const merges = (currentSheet as any).merges || [];
-    return merges.find((m: any) => 
+    return merges.filter((m: any) => {
+      return !merges.some((other: any) => 
+        other !== m &&
+        m.startRow >= other.startRow && m.endRow <= other.endRow &&
+        m.startCol >= other.startCol && m.endCol <= other.endCol
+      );
+    });
+  };
+
+  // Check if cell is part of any top-level merge
+  const getTopLevelMergeCell = (row: number, col: number) => {
+    const topMerges = getTopLevelMerges();
+    return topMerges.find((m: any) => 
       row >= m.startRow && row <= m.endRow && 
       col >= m.startCol && col <= m.endCol
     ) || null;
   };
 
-  // Skip rendering this cell if it's inside a merge block but NOT the top-left root cell
-  const shouldSkipCell = (row: number, col: number) => {
-    const merge = getMergeCell(row, col);
-    if (!merge) return false;
-    return !(row === merge.startRow && col === merge.startCol);
+  // Check if cell is part of an inner sub-merge within a top-level merge
+  const getInnerMergeCell = (row: number, col: number, outerMerge: any) => {
+    const merges = (currentSheet as any).merges || [];
+    return merges.find((m: any) => 
+      m !== outerMerge &&
+      m.startRow >= outerMerge.startRow && m.endRow <= outerMerge.endRow &&
+      m.startCol >= outerMerge.startCol && m.endCol <= outerMerge.endCol &&
+      row >= m.startRow && row <= m.endRow &&
+      col >= m.startCol && col <= m.endCol
+    ) || null;
   };
 
-  // Expand a selection range to completely wrap any merged cells it intersects with
-  const expandRangeWithMerges = (range: { startRow: number; startCol: number; endRow: number; endCol: number }) => {
-    let expanded = { ...range };
-    let changed = true;
+  // Check if a cell is part of any merge range (returns smallest inner merge or top merge)
+  const getMergeCell = (row: number, col: number) => {
     const merges = (currentSheet as any).merges || [];
+    const matches = merges.filter((m: any) => 
+      row >= m.startRow && row <= m.endRow && 
+      col >= m.startCol && col <= m.endCol
+    );
+    if (matches.length === 0) return null;
+    matches.sort((a: any, b: any) => {
+      const areaA = (a.endRow - a.startRow + 1) * (a.endCol - a.startCol + 1);
+      const areaB = (b.endRow - b.startRow + 1) * (b.endCol - b.startCol + 1);
+      return areaA - areaB;
+    });
+    return matches[0];
+  };
 
-    while (changed) {
-      changed = false;
-      const minRow = Math.min(expanded.startRow, expanded.endRow);
-      const maxRow = Math.max(expanded.startRow, expanded.endRow);
-      const minCol = Math.min(expanded.startCol, expanded.endCol);
-      const maxCol = Math.max(expanded.startCol, expanded.endCol);
-
-      for (const m of merges) {
-        const intersect = !(
-          maxRow < m.startRow || minRow > m.endRow ||
-          maxCol < m.startCol || minCol > m.endCol
-        );
-
-        if (intersect) {
-          const newMinRow = Math.min(minRow, m.startRow);
-          const newMaxRow = Math.max(maxRow, m.endRow);
-          const newMinCol = Math.min(minCol, m.startCol);
-          const newMaxCol = Math.max(maxCol, m.endCol);
-
-          if (newMinRow !== minRow || newMaxRow !== maxRow || newMinCol !== minCol || newMaxCol !== maxCol) {
-            expanded = {
-              startRow: newMinRow,
-              startCol: newMinCol,
-              endRow: newMaxRow,
-              endCol: newMaxCol
-            };
-            changed = true;
-          }
-        }
-      }
-    }
-    return expanded;
+  // Skip rendering this cell in main <tbody> if it's inside a top-level merge block but NOT the top-left root cell
+  const shouldSkipCell = (row: number, col: number) => {
+    const merge = getTopLevelMergeCell(row, col);
+    if (!merge) return false;
+    return !(row === merge.startRow && col === merge.startCol);
   };
 
   const setSelectedRangeExpanded = (range: { startRow: number; startCol: number; endRow: number; endCol: number } | null) => {
@@ -230,7 +230,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
       setSelectedRange(null);
       return;
     }
-    setSelectedRange(expandRangeWithMerges(range));
+    setSelectedRange(range);
   };
 
   // Check if cell falls inside the highlighted selection range
@@ -475,20 +475,23 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     if (!selectedCell) return;
     saveHistoryState(); // Save undo checkpoint
 
+    const targetRow = selectedCell.row;
+    const targetCol = selectedCell.col;
+
     const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
     const sheet = updated.sheets[activeSheetIdx];
 
-    if (!sheet.rows[selectedCell.row]) {
-      sheet.rows[selectedCell.row] = { cells: [], height: 30 };
+    if (!sheet.rows[targetRow]) {
+      sheet.rows[targetRow] = { cells: [], height: 30 };
     }
-    if (!sheet.rows[selectedCell.row].cells[selectedCell.col]) {
-      sheet.rows[selectedCell.row].cells[selectedCell.col] = {
+    if (!sheet.rows[targetRow].cells[targetCol]) {
+      sheet.rows[targetRow].cells[targetCol] = {
         value: '', bold: false, italic: false, underline: false,
         fontSize: 14, fontFamily: 'sans-serif', backgroundColor: '', fontColor: '', align: 'left'
       };
     }
 
-    sheet.rows[selectedCell.row].cells[selectedCell.col].value = editValue;
+    sheet.rows[targetRow].cells[targetCol].value = editValue;
 
     setActiveSpreadsheet(updated);
     setIsEditing(false);
@@ -592,6 +595,15 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     const sheet = updated.sheets[activeSheetIdx] as any;
     if (!sheet.merges) sheet.merges = [];
 
+    // Filter out any existing sub-merges contained within or identical to the new range, keeping outer container merges
+    sheet.merges = sheet.merges.filter((m: any) => {
+      const isIdentical = m.startRow === minRow && m.endRow === maxRow && m.startCol === minCol && m.endCol === maxCol;
+      const isSubContained = m.startRow >= minRow && m.endRow <= maxRow && m.startCol >= minCol && m.endCol <= maxCol;
+      const isOuterContainer = minRow >= m.startRow && maxRow <= m.endRow && minCol >= m.startCol && maxCol <= m.endCol && !isIdentical;
+      if (isOuterContainer) return true;
+      return !isSubContained && !isIdentical;
+    });
+
     // Clear values of non-top-left cells inside the merge range
     for (let r = minRow; r <= maxRow; r++) {
       for (let c = minCol; c <= maxCol; c++) {
@@ -610,6 +622,8 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     });
 
     setActiveSpreadsheet(updated);
+    setSelectedCell({ row: minRow, col: minCol });
+    setSelectedRangeExpanded({ startRow: minRow, startCol: minCol, endRow: maxRow, endCol: maxCol });
     triggerAutosave(updated);
   };
 
@@ -624,16 +638,35 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
 
     const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
     const sheet = updated.sheets[activeSheetIdx] as any;
-    if (!sheet.merges) return;
+    if (!sheet.merges || sheet.merges.length === 0) return;
 
-    // Filter out intersecting merges
-    sheet.merges = sheet.merges.filter((m: any) => {
+    // Find all merges intersecting with selection
+    const intersectingMerges = sheet.merges.filter((m: any) => {
       const intersect = !(
         maxRow < m.startRow || minRow > m.endRow ||
         maxCol < m.startCol || minCol > m.endCol
       );
-      return !intersect;
+      return intersect;
     });
+
+    if (intersectingMerges.length === 0) return;
+
+    // Separate inner sub-merges from outer container merges
+    const innerSubMerges = intersectingMerges.filter((m: any) => {
+      return sheet.merges.some((other: any) => 
+        other !== m &&
+        m.startRow >= other.startRow && m.endRow <= other.endRow &&
+        m.startCol >= other.startCol && m.endCol <= other.endCol
+      );
+    });
+
+    if (innerSubMerges.length > 0) {
+      // Unmerge inner sub-merges FIRST!
+      sheet.merges = sheet.merges.filter((m: any) => !innerSubMerges.includes(m));
+    } else {
+      // Otherwise unmerge top-level container merges ("then the others")
+      sheet.merges = sheet.merges.filter((m: any) => !intersectingMerges.includes(m));
+    }
 
     setActiveSpreadsheet(updated);
     triggerAutosave(updated);
@@ -710,19 +743,49 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
         clearSelectedCells();
         break;
       case 'ArrowUp':
-        if (nextRow > 0) nextRow--;
+        if (nextRow > 0) {
+          nextRow--;
+          const m = getMergeCell(nextRow, nextCol);
+          if (m) { nextRow = m.startRow; nextCol = m.startCol; }
+        }
         handled = true;
         break;
       case 'ArrowDown':
-        if (nextRow < currentSheet.rows.length - 1) nextRow++;
+        if (nextRow < currentSheet.rows.length - 1) {
+          const currentMerge = getMergeCell(selectedCell.row, selectedCell.col);
+          if (currentMerge && selectedCell.row === currentMerge.startRow) {
+            nextRow = currentMerge.endRow + 1;
+          } else {
+            nextRow++;
+          }
+          if (nextRow < currentSheet.rows.length) {
+            const m = getMergeCell(nextRow, nextCol);
+            if (m) { nextRow = m.startRow; nextCol = m.startCol; }
+          }
+        }
         handled = true;
         break;
       case 'ArrowLeft':
-        if (nextCol > 0) nextCol--;
+        if (nextCol > 0) {
+          nextCol--;
+          const m = getMergeCell(nextRow, nextCol);
+          if (m) { nextRow = m.startRow; nextCol = m.startCol; }
+        }
         handled = true;
         break;
       case 'ArrowRight':
-        if (nextCol < (currentSheet.rows[0]?.cells.length || 0) - 1) nextCol++;
+        if (nextCol < (currentSheet.rows[0]?.cells.length || 0) - 1) {
+          const currentMerge = getMergeCell(selectedCell.row, selectedCell.col);
+          if (currentMerge && selectedCell.col === currentMerge.startCol) {
+            nextCol = currentMerge.endCol + 1;
+          } else {
+            nextCol++;
+          }
+          if (nextCol < (currentSheet.rows[0]?.cells.length || 0)) {
+            const m = getMergeCell(nextRow, nextCol);
+            if (m) { nextRow = m.startRow; nextCol = m.startCol; }
+          }
+        }
         handled = true;
         break;
       case 'Tab':
@@ -1335,13 +1398,25 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
         {selectedRange && (
           <>
             <div style={{ height: 20, width: 1, background: 'var(--border)' }} />
+            <button
+              onClick={mergeSelectedCells}
+              disabled={
+                Math.min(selectedRange.startRow, selectedRange.endRow) === Math.max(selectedRange.startRow, selectedRange.endRow) &&
+                Math.min(selectedRange.startCol, selectedRange.endCol) === Math.max(selectedRange.startCol, selectedRange.endCol)
+              }
+              className="btn btn-sm btn-ghost"
+              style={{ fontSize: 11, gap: 4 }}
+              title="Merge selected cells (merge again to re-merge or expand)"
+            >
+              Merge
+            </button>
             {((currentSheet as any).merges || []).some((m: any) => {
               const minRow = Math.min(selectedRange.startRow, selectedRange.endRow);
               const maxRow = Math.max(selectedRange.startRow, selectedRange.endRow);
               const minCol = Math.min(selectedRange.startCol, selectedRange.endCol);
               const maxCol = Math.max(selectedRange.startCol, selectedRange.endCol);
               return !(maxRow < m.startRow || minRow > m.endRow || maxCol < m.startCol || minCol > m.endCol);
-            }) ? (
+            }) && (
               <button
                 onClick={unmergeSelectedCells}
                 className="btn btn-sm btn-ghost"
@@ -1349,19 +1424,6 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                 title="Unmerge selected cells"
               >
                 Unmerge
-              </button>
-            ) : (
-              <button
-                onClick={mergeSelectedCells}
-                disabled={
-                  Math.min(selectedRange.startRow, selectedRange.endRow) === Math.max(selectedRange.startRow, selectedRange.endRow) &&
-                  Math.min(selectedRange.startCol, selectedRange.endCol) === Math.max(selectedRange.startCol, selectedRange.endCol)
-                }
-                className="btn btn-sm btn-ghost"
-                style={{ fontSize: 11, gap: 4 }}
-                title="Merge selected cells"
-              >
-                Merge
               </button>
             )}
           </>
@@ -1592,15 +1654,15 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                     const isSelected = selectedCell?.row === rowIdx && selectedCell?.col === colIdx;
                     const inSel = isCellInSelection(rowIdx, colIdx);
                     
-                    const merge = getMergeCell(rowIdx, colIdx);
-                    const isMergeRoot = merge && rowIdx === merge.startRow && colIdx === merge.startCol;
-                    const rowSpan = isMergeRoot ? (merge.endRow - merge.startRow + 1) : undefined;
-                    const colSpan = isMergeRoot ? (merge.endCol - merge.startCol + 1) : undefined;
+                    const topMerge = getTopLevelMergeCell(rowIdx, colIdx);
+                    const isTopMergeRoot = topMerge && rowIdx === topMerge.startRow && colIdx === topMerge.startCol;
+                    const rowSpan = isTopMergeRoot ? (topMerge.endRow - topMerge.startRow + 1) : undefined;
+                    const colSpan = isTopMergeRoot ? (topMerge.endCol - topMerge.startCol + 1) : undefined;
 
                     // Calculate column widths in merged cell
                     let colWidth = 0;
-                    if (merge) {
-                      for (let c = merge.startCol; c <= merge.endCol; c++) {
+                    if (topMerge) {
+                      for (let c = topMerge.startCol; c <= topMerge.endCol; c++) {
                         colWidth += currentSheet.colWidths?.[c] || 120;
                       }
                     } else {
@@ -1609,19 +1671,13 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
 
                     // Calculate row heights in merged cell
                     let calculatedRowHeight = 0;
-                    if (merge) {
-                      for (let r = merge.startRow; r <= merge.endRow; r++) {
+                    if (topMerge) {
+                      for (let r = topMerge.startRow; r <= topMerge.endRow; r++) {
                         calculatedRowHeight += currentSheet.rows[r]?.height || 30;
                       }
                     } else {
                       calculatedRowHeight = rowHeight;
                     }
-
-                    // Setup bounds for border & outline calculations
-                    const cellStartRow = merge ? merge.startRow : rowIdx;
-                    const cellEndRow = merge ? merge.endRow : rowIdx;
-                    const cellStartCol = merge ? merge.startCol : colIdx;
-                    const cellEndCol = merge ? merge.endCol : colIdx;
 
                     // Setup borders for selection boundary outlining and merged cell outline
                     let borderTop = '1px solid var(--border)';
@@ -1635,10 +1691,10 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                       const minCol = Math.min(selectedRange.startCol, selectedRange.endCol);
                       const maxCol = Math.max(selectedRange.startCol, selectedRange.endCol);
 
-                      if (cellStartRow === minRow) borderTop = '1px solid var(--indigo)';
-                      if (cellEndRow === maxRow) borderBottom = '1px solid var(--indigo)';
-                      if (cellStartCol === minCol) borderLeft = '1px solid var(--indigo)';
-                      if (cellEndCol === maxCol) borderRight = '1px solid var(--indigo)';
+                      if (rowIdx === minRow) borderTop = '1px solid var(--indigo)';
+                      if (rowIdx === maxRow) borderBottom = '1px solid var(--indigo)';
+                      if (colIdx === minCol) borderLeft = '1px solid var(--indigo)';
+                      if (colIdx === maxCol) borderRight = '1px solid var(--indigo)';
                     }
 
                     const cellStyle: React.CSSProperties = {
@@ -1649,7 +1705,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                       borderLeft,
                       borderRight,
                       boxShadow: 'none',
-                      padding: '4px 8px',
+                      padding: topMerge ? 0 : '4px 8px',
                       fontSize: `${cell.fontSize || 14}px`,
                       fontFamily: cell.fontFamily || 'sans-serif',
                       fontWeight: cell.bold ? 'bold' : 'normal',
@@ -1659,134 +1715,104 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                       color: cell.fontColor || 'var(--text)',
                       textAlign: cell.align || 'left',
                       verticalAlign: 'middle',
-                      outline: isSelected ? '1px solid var(--indigo)' : 'none',
-                      outlineOffset: -1,
+                      outline: isSelected && !topMerge ? '2px solid var(--indigo)' : 'none',
+                      outlineOffset: -2,
                       cursor: 'cell',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
-                      position: isSelected || merge ? 'relative' : 'static',
-                      zIndex: isSelected ? 4 : (merge ? 3 : 'auto')
+                      position: 'relative',
+                      zIndex: isSelected ? 4 : (topMerge ? 3 : 1)
                     };
 
                     return (
                       <td 
                         key={colIdx} 
-                        className={merge ? 'spreadsheet-merge-box' : ''}
+                        className={topMerge ? 'spreadsheet-merge-box' : ''}
                         style={cellStyle}
                         rowSpan={rowSpan}
                         colSpan={colSpan}
-                        onMouseDown={(e) => handleCellMouseDown(rowIdx, colIdx, e)}
-                        onMouseEnter={(e) => handleCellMouseEnter(rowIdx, colIdx, e)}
-                        onDoubleClick={() => handleCellDoubleClick(rowIdx, colIdx)}
+                        onMouseDown={(e) => !topMerge && handleCellMouseDown(rowIdx, colIdx, e)}
+                        onMouseEnter={(e) => !topMerge && handleCellMouseEnter(rowIdx, colIdx, e)}
+                        onDoubleClick={() => !topMerge && handleCellDoubleClick(rowIdx, colIdx)}
                       >
-                        {/* Normal grid lines inside merged cells */}
-                        {merge && (rowSpan! > 1 || colSpan! > 1) && (
-                          <svg 
+                        {topMerge ? (
+                          /* Top-level Outer Merge Container */
+                          <div 
+                            className="spreadsheet-outer-merge-box"
                             style={{ 
                               position: 'absolute', inset: 0, width: '100%', height: '100%', 
-                              pointerEvents: 'none', zIndex: 1 
+                              boxShadow: 'inset 0 0 0 1px var(--merge-outline)', 
+                              pointerEvents: 'auto', zIndex: 3, boxSizing: 'border-box' 
                             }}
                           >
-                            {/* Vertical normal cell lines */}
-                            {(() => {
-                              let currentX = 0;
-                              const lines = [];
-                              for (let c = merge.startCol; c < merge.endCol; c++) {
-                                currentX += currentSheet.colWidths?.[c] || 120;
-                                lines.push(
-                                  <line 
-                                    key={`v-${c}`} 
-                                    x1={currentX} 
-                                    y1={0} 
-                                    x2={currentX} 
-                                    y2="100%" 
-                                    stroke="var(--border)" 
-                                    strokeWidth="1" 
-                                  />
-                                );
-                              }
-                              return lines;
-                            })()}
-
-                            {/* Horizontal normal cell lines */}
-                            {(() => {
-                              let currentY = 0;
-                              const lines = [];
-                              for (let r = merge.startRow; r < merge.endRow; r++) {
-                                currentY += currentSheet.rows[r]?.height || 30;
-                                lines.push(
-                                  <line 
-                                    key={`h-${r}`} 
-                                    x1={0} 
-                                    y1={currentY} 
-                                    x2="100%" 
-                                    y2={currentY} 
-                                    stroke="var(--border)" 
-                                    strokeWidth="1" 
-                                  />
-                                );
-                              }
-                              return lines;
-                            })()}
-                          </svg>
-                        )}
-
-                        {/* Interactive Sub-Cells rendering inside Merged Block */}
-                        {merge && (rowSpan! > 1 || colSpan! > 1) ? (
-                          <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'auto', zIndex: 2 }}>
                             {(() => {
                               const subCells = [];
                               let topOffset = 0;
-                              for (let r = merge.startRow; r <= merge.endRow; r++) {
+
+                              for (let r = topMerge.startRow; r <= topMerge.endRow; r++) {
                                 const rh = currentSheet.rows[r]?.height || 30;
                                 let leftOffset = 0;
-                                for (let c = merge.startCol; c <= merge.endCol; c++) {
+
+                                for (let c = topMerge.startCol; c <= topMerge.endCol; c++) {
                                   const cw = currentSheet.colWidths?.[c] || 120;
+                                  const innerMerge = getInnerMergeCell(r, c, topMerge);
+
+                                  if (innerMerge && r === innerMerge.startRow && c === innerMerge.startCol) {
+                                    let innerW = 0;
+                                    for (let ic = innerMerge.startCol; ic <= innerMerge.endCol; ic++) {
+                                      innerW += currentSheet.colWidths?.[ic] || 120;
+                                    }
+                                    let innerH = 0;
+                                    for (let ir = innerMerge.startRow; ir <= innerMerge.endRow; ir++) {
+                                      innerH += currentSheet.rows[ir]?.height || 30;
+                                    }
+
+                                    subCells.push(
+                                      <div
+                                        key={`inner-outline-${r}-${c}`}
+                                        className="spreadsheet-inner-merge-box"
+                                        style={{
+                                          position: 'absolute', left: leftOffset, top: topOffset,
+                                          width: innerW, height: innerH, boxSizing: 'border-box',
+                                          boxShadow: 'inset 0 0 0 1px var(--merge-outline)',
+                                          pointerEvents: 'none', zIndex: 4
+                                        }}
+                                      />
+                                    );
+                                  }
+
                                   const subCellData = currentSheet.rows[r]?.cells[c] || {
                                     value: '', bold: false, italic: false, underline: false,
                                     fontSize: 14, fontFamily: 'sans-serif', backgroundColor: '', fontColor: '', align: 'left'
                                   };
+
                                   const isSubSelected = selectedCell?.row === r && selectedCell?.col === c;
+                                  const inSubSel = isCellInSelection(r, c);
                                   const isSubEditing = isSubSelected && isEditing;
 
                                   subCells.push(
                                     <div
                                       key={`${r}-${c}`}
-                                      onMouseDown={(e) => {
-                                        e.stopPropagation();
-                                        handleCellMouseDown(r, c, e);
-                                      }}
-                                      onMouseEnter={() => handleCellMouseEnter(r, c)}
-                                      onDoubleClick={(e) => {
-                                        e.stopPropagation();
-                                        handleCellDoubleClick(r, c);
-                                      }}
+                                      onMouseDown={(e) => { e.stopPropagation(); handleCellMouseDown(r, c, e); }}
+                                      onMouseEnter={(e) => handleCellMouseEnter(r, c, e)}
+                                      onDoubleClick={(e) => { e.stopPropagation(); handleCellDoubleClick(r, c); }}
                                       style={{
-                                        position: 'absolute',
-                                        left: leftOffset,
-                                        top: topOffset,
-                                        width: cw,
-                                        height: rh,
-                                        boxSizing: 'border-box',
-                                        display: 'flex',
-                                        alignItems: 'center',
+                                        position: 'absolute', left: leftOffset, top: topOffset,
+                                        width: cw, height: rh, boxSizing: 'border-box',
+                                        display: 'flex', alignItems: 'center',
                                         justifyContent: subCellData.align === 'center' ? 'center' : (subCellData.align === 'right' ? 'flex-end' : 'flex-start'),
-                                        padding: '4px 8px',
-                                        fontSize: `${subCellData.fontSize || 14}px`,
+                                        padding: '4px 8px', fontSize: `${subCellData.fontSize || 14}px`,
                                         fontFamily: subCellData.fontFamily || 'sans-serif',
                                         fontWeight: subCellData.bold ? 'bold' : 'normal',
                                         fontStyle: subCellData.italic ? 'italic' : 'normal',
                                         textDecoration: subCellData.underline ? 'underline' : 'none',
                                         color: subCellData.fontColor || 'var(--text)',
-                                        backgroundColor: isSubSelected ? 'rgba(99, 102, 241, 0.15)' : (subCellData.backgroundColor || 'transparent'),
+                                        backgroundColor: isSubSelected ? 'rgba(99, 102, 241, 0.15)' : (inSubSel ? 'rgba(99, 102, 241, 0.12)' : (subCellData.backgroundColor || 'transparent')),
+                                        border: '1px solid var(--border)',
                                         outline: isSubSelected ? '2px solid var(--indigo)' : 'none',
-                                        outlineOffset: -2,
-                                        zIndex: isSubSelected ? 5 : 2,
-                                        cursor: 'cell',
-                                        overflow: 'hidden',
-                                        whiteSpace: 'nowrap',
-                                        textOverflow: 'ellipsis'
+                                        outlineOffset: -2, zIndex: isSubSelected ? 6 : 2, cursor: 'cell',
+                                        overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis'
                                       }}
                                     >
                                       {isSubEditing ? (
@@ -1797,11 +1823,8 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                                           onChange={(e) => setEditValue(e.target.value)}
                                           onBlur={saveCellEdit}
                                           onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
-                                              saveCellEdit();
-                                            } else if (e.key === 'Escape') {
-                                              setIsEditing(false);
-                                            }
+                                            if (e.key === 'Enter') saveCellEdit();
+                                            else if (e.key === 'Escape') setIsEditing(false);
                                           }}
                                           style={{
                                             position: 'absolute', inset: 0, width: '100%', height: '100%',
@@ -1810,7 +1833,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                                             fontFamily: subCellData.fontFamily || 'sans-serif',
                                             fontWeight: subCellData.bold ? 'bold' : 'normal',
                                             fontStyle: subCellData.italic ? 'italic' : 'normal',
-                                            zIndex: 10
+                                            boxSizing: 'border-box', zIndex: 10
                                           }}
                                         />
                                       ) : (
@@ -1825,29 +1848,37 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                               return subCells;
                             })()}
                           </div>
+                        ) : isSelected && isEditing ? (
+                          <input 
+                            ref={editInputRef}
+                            type="text"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onBlur={saveCellEdit}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                saveCellEdit();
+                              } else if (e.key === 'Escape') {
+                                const c = currentSheet.rows[rowIdx]?.cells[colIdx];
+                                setEditValue(c ? c.value : '');
+                                setIsEditing(false);
+                              }
+                            }}
+                            style={{ 
+                              position: 'absolute', inset: 0, width: '100%', height: '100%', 
+                              background: cell.backgroundColor || 'var(--bg)', color: cell.fontColor || 'var(--text)', 
+                              border: 'none', outline: '2px solid var(--indigo)', outlineOffset: -2,
+                              padding: '4px 8px', fontSize: `${cell.fontSize || 14}px`,
+                              fontFamily: cell.fontFamily || 'sans-serif',
+                              fontWeight: cell.bold ? 'bold' : 'normal',
+                              fontStyle: cell.italic ? 'italic' : 'normal',
+                              textAlign: cell.align || 'left',
+                              boxSizing: 'border-box',
+                              zIndex: 10
+                            }}
+                          />
                         ) : (
-                          <>
-                            {isSelected && isEditing ? (
-                              <input 
-                                ref={editInputRef}
-                                type="text"
-                                value={editValue}
-                                onChange={(e) => setEditValue(e.target.value)}
-                                onBlur={saveCellEdit}
-                                style={{ 
-                                  position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', 
-                                  background: 'var(--bg)', color: 'var(--text)', border: 'none', 
-                                  outline: 'none', padding: '4px 8px', fontSize: `${cell.fontSize || 14}px`,
-                                  fontFamily: cell.fontFamily || 'sans-serif',
-                                  fontWeight: cell.bold ? 'bold' : 'normal',
-                                  fontStyle: cell.italic ? 'italic' : 'normal',
-                                  zIndex: 10
-                                }}
-                              />
-                            ) : (
-                              <span style={{ position: 'relative', zIndex: 2 }}>{getDisplayValue(cell)}</span>
-                            )}
-                          </>
+                          <span style={{ position: 'relative', zIndex: 2 }}>{getDisplayValue(cell)}</span>
                         )}
                       </td>
                     );

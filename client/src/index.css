@@ -22,6 +22,7 @@
   --border: rgba(255, 255, 255, 0.06);
   --border2: rgba(255, 255, 255, 0.03);
   --border-glow: rgba(99, 102, 241, 0.15);
+  --merge-outline: #ffffff;
 
   /* ── Text ── */
   --text: #eaeaf5;
@@ -62,6 +63,7 @@
   --border: rgba(0, 0, 0, 0.08);
   --border2: rgba(0, 0, 0, 0.04);
   --border-glow: rgba(99, 102, 241, 0.2);
+  --merge-outline: #000000;
 
   /* ── Text ── */
   --text: #09090b;

@@ -25,45 +25,10 @@ import {
   XCircle,
   AlertCircle
 } from 'lucide-react';
-import { apiFetch } from '../store/flightStore';
+import { apiFetch, useFlightStore } from '../store/flightStore';
+import type { CalendarStaffMember, CalendarShiftEvent, HolidayRequest } from '../store/flightStore';
 
-export interface CalendarStaffMember {
-  id: string;
-  _id?: string;
-  name: string;
-  role: string;
-  department: string;
-  color: string;
-  active?: boolean;
-}
-
-export interface CalendarShiftEvent {
-  id: string;
-  _id?: string;
-  title: string;
-  staffId: string;
-  staffName: string;
-  date: string; // YYYY-MM-DD
-  startTime: string; // HH:mm
-  finishTime: string; // HH:mm
-  timezone?: 'CET' | 'SLT';
-  department: string;
-  color: string;
-  location?: string;
-  notes?: string;
-}
-
-export interface HolidayRequest {
-  id: string;
-  _id?: string;
-  staffId: string;
-  staffName: string;
-  startDate: string;
-  endDate: string;
-  reason?: string;
-  status: 'Pending' | 'Approved' | 'Rejected';
-  createdAt?: string;
-}
+export type { CalendarStaffMember, CalendarShiftEvent, HolidayRequest };
 
 type CalendarViewMode = 'month' | 'week' | 'day' | 'timeline';
 
@@ -136,12 +101,21 @@ export function StaffCalendar({ currentUser }: StaffCalendarProps) {
   // Timezone View (Locked: CET for Admin, SLT for Staff)
   const activeTz: 'CET' | 'SLT' = isAdmin ? 'CET' : 'SLT';
 
-  const [staffList, setStaffList] = useState<CalendarStaffMember[]>([]);
-  const [eventsList, setEventsList] = useState<CalendarShiftEvent[]>([]);
-  const [holidaysList, setHolidaysList] = useState<HolidayRequest[]>([]);
+  // Global Zustand Store
+  const {
+    calendarStaff: staffList,
+    calendarEvents: eventsList,
+    calendarHolidays: holidaysList,
+    calendarHasFetched,
+    fetchCalendarData,
+    fetchCalendarDataSilent,
+    setCalendarStaff: setStaffList,
+    setCalendarEvents: setEventsList,
+    setCalendarHolidays: setHolidaysList,
+  } = useFlightStore();
+
   const [visibleStaffIds, setVisibleStaffIds] = useState<Set<string>>(new Set());
 
-  const [loading, setLoading] = useState<boolean>(true);
   const [searchFilter, setSearchFilter] = useState<string>('');
   const [staffSearchQuery, setStaffSearchQuery] = useState<string>('');
 
@@ -174,73 +148,37 @@ export function StaffCalendar({ currentUser }: StaffCalendarProps) {
   const [formLocation, setFormLocation] = useState('');
   const [formNotes, setFormNotes] = useState('');
 
-  // Load Data
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const [staffResult, eventsResult, holidaysResult] = await Promise.allSettled([
-        apiFetch('/api/staff-calendar/staff'),
-        apiFetch('/api/staff-calendar/events'),
-        apiFetch('/api/staff-calendar/holidays')
-      ]);
-
-      const staffRes = staffResult.status === 'fulfilled' ? staffResult.value : {};
-      const eventsRes = eventsResult.status === 'fulfilled' ? eventsResult.value : {};
-      const holidaysRes = holidaysResult.status === 'fulfilled' ? holidaysResult.value : {};
-
-      let staffData: CalendarStaffMember[] = staffRes.staff || [];
-      const eventsData: CalendarShiftEvent[] = eventsRes.events || [];
-      const holidaysData: HolidayRequest[] = holidaysRes.holidays || [];
-
-      // If no calendar staff exist yet, auto-populate from system staff users (/api/staff)
-      if (staffData.length === 0) {
-        try {
-          const mainStaffRes = await apiFetch('/api/staff');
-          const mainUsers = mainStaffRes.users || [];
-          if (mainUsers.length > 0) {
-            const created = await Promise.all(
-              mainUsers.map((u: any, idx: number) => 
-                apiFetch('/api/staff-calendar/staff', {
-                  method: 'POST',
-                  body: JSON.stringify({
-                    name: u.name || u.email,
-                    role: u.role || 'Staff',
-                    department: u.department || DEPARTMENTS[idx % DEPARTMENTS.length],
-                    color: PALETTE[idx % PALETTE.length]
-                  })
-                })
-              )
-            );
-            staffData = created.map(r => r.staff).filter(Boolean);
-          }
-        } catch (e) {
-          console.warn('Auto-sync staff users failed:', e);
-        }
-      }
-
-      setStaffList(staffData);
-      const validStaffIds = staffData.map(s => String(s.id || s._id || '')).filter(Boolean);
-      setVisibleStaffIds(new Set(validStaffIds));
-      setEventsList(eventsData);
-      setHolidaysList(holidaysData);
-    } catch (err) {
-      console.warn('Backend fetch failed:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Sync visible staff IDs when staffList changes
   useEffect(() => {
-    loadData();
-  }, []);
+    if (staffList.length > 0) {
+      const validStaffIds = staffList.map(s => String(s.id || s._id || '')).filter(Boolean);
+      setVisibleStaffIds(prev => {
+        if (prev.size === 0) return new Set(validStaffIds);
+        // keep existing toggles, add any new staff IDs
+        const next = new Set(prev);
+        validStaffIds.forEach(id => next.add(id));
+        return next;
+      });
+    }
+  }, [staffList]);
+
+  // Initial Fetch & Background Refresh
+  useEffect(() => {
+    if (!calendarHasFetched) {
+      fetchCalendarData();
+    } else {
+      fetchCalendarDataSilent();
+    }
+  }, [calendarHasFetched]);
 
   useEffect(() => {
     const handleAppRefresh = () => {
-      loadData();
+      fetchCalendarDataSilent();
     };
     window.addEventListener('app:refresh', handleAppRefresh);
     return () => window.removeEventListener('app:refresh', handleAppRefresh);
   }, []);
+
 
   // Format Helper: YYYY-MM-DD
   const formatDateKey = (d: Date) => {

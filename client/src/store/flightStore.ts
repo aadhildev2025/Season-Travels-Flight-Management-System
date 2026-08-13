@@ -80,6 +80,44 @@ export interface AuditLog {
   createdAt: string;
 }
 
+export interface CalendarStaffMember {
+  id: string;
+  _id?: string;
+  name: string;
+  role: string;
+  department: string;
+  color: string;
+  active?: boolean;
+}
+
+export interface CalendarShiftEvent {
+  id: string;
+  _id?: string;
+  title: string;
+  staffId: string;
+  staffName: string;
+  date: string;
+  startTime: string;
+  finishTime: string;
+  timezone?: 'CET' | 'SLT';
+  department: string;
+  color: string;
+  location?: string;
+  notes?: string;
+}
+
+export interface HolidayRequest {
+  id: string;
+  _id?: string;
+  staffId: string;
+  staffName: string;
+  startDate: string;
+  endDate: string;
+  reason?: string;
+  status: 'Pending' | 'Approved' | 'Rejected';
+  createdAt?: string;
+}
+
 interface FlightState {
   currentUser:     User | null;
   isAuthenticated: boolean;
@@ -90,6 +128,13 @@ interface FlightState {
   expiringIds:     Set<string>;
   toast:           { message: string; type: 'success' | 'error' } | null;
   theme:           'dark' | 'light';
+
+  // Calendar State
+  calendarStaff:       CalendarStaffMember[];
+  calendarEvents:      CalendarShiftEvent[];
+  calendarHolidays:    HolidayRequest[];
+  calendarHasFetched:  boolean;
+  calendarLoading:     boolean;
 
   fetchSession:  () => Promise<void>;
   login:         (email: string, password: string) => Promise<boolean>;
@@ -112,6 +157,13 @@ interface FlightState {
   updateTicket:  (id: string, updates: Partial<Ticket>) => Promise<void>;
   deleteTicket: (id: string) => Promise<void>;
 
+  // Calendar Actions
+  fetchCalendarData:       () => Promise<void>;
+  fetchCalendarDataSilent: () => Promise<void>;
+  setCalendarStaff:        (staff: CalendarStaffMember[] | ((prev: CalendarStaffMember[]) => CalendarStaffMember[])) => void;
+  setCalendarEvents:       (events: CalendarShiftEvent[] | ((prev: CalendarShiftEvent[]) => CalendarShiftEvent[])) => void;
+  setCalendarHolidays:     (holidays: HolidayRequest[] | ((prev: HolidayRequest[]) => HolidayRequest[])) => void;
+
   fetchAnalytics: () => Promise<AnalyticsData>;
   fetchAuditLogs: (page?: number, search?: string) => Promise<{ logs: AuditLog[]; total: number; pages: number }>;
   fetchTicketByPnr: (pnr: string) => Promise<Ticket | null>;
@@ -128,6 +180,13 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
   expiringIds:     new Set<string>(),
   toast:           null,
   theme:           typeof window !== 'undefined' ? (localStorage.getItem('theme') as 'dark' | 'light') || 'dark' : 'dark',
+
+  // Calendar Initial State
+  calendarStaff:       [],
+  calendarEvents:      [],
+  calendarHolidays:    [],
+  calendarHasFetched:  false,
+  calendarLoading:     false,
 
   toggleTheme: () => {
     const next = get().theme === 'dark' ? 'light' : 'dark';
@@ -155,6 +214,7 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
       if (data.user) {
         set({ currentUser: data.user, isAuthenticated: true });
         await get().fetchTickets();
+        get().fetchCalendarDataSilent().catch(() => {});
       } else {
         set({ currentUser: null, isAuthenticated: false });
       }
@@ -171,6 +231,7 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
       }
       set({ currentUser: data.user, isAuthenticated: true });
       await get().fetchTickets();
+      get().fetchCalendarDataSilent().catch(() => {});
       return true;
     } catch { return false; }
   },
@@ -179,9 +240,10 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
     try { await apiFetch('/api/auth/logout', { method: 'POST' }); }
     finally {
       localStorage.removeItem('st_token');
-      set({ currentUser: null, isAuthenticated: false, tickets: [] });
+      set({ currentUser: null, isAuthenticated: false, tickets: [], calendarStaff: [], calendarEvents: [], calendarHolidays: [], calendarHasFetched: false });
     }
   },
+
 
   updateProfile: async (data) => {
     const res = await apiFetch('/api/auth/profile', { method: 'PUT', body: JSON.stringify(data) });
@@ -255,6 +317,75 @@ export const useFlightStore = create<FlightState>()((set, get) => ({
     await apiFetch(`/api/tickets/${id}`, { method: 'DELETE' });
     await get().fetchTickets();
   },
+
+  fetchCalendarData: async () => {
+    if (!get().calendarHasFetched) {
+      set({ calendarLoading: true });
+    }
+    try {
+      const data = await apiFetch('/api/staff-calendar/all');
+      set({
+        calendarStaff: data.staff || [],
+        calendarEvents: data.events || [],
+        calendarHolidays: data.holidays || [],
+        calendarHasFetched: true,
+        calendarLoading: false
+      });
+    } catch {
+      try {
+        const [sRes, eRes, hRes] = await Promise.allSettled([
+          apiFetch('/api/staff-calendar/staff'),
+          apiFetch('/api/staff-calendar/events'),
+          apiFetch('/api/staff-calendar/holidays')
+        ]);
+        const s = sRes.status === 'fulfilled' ? sRes.value?.staff : [];
+        const e = eRes.status === 'fulfilled' ? eRes.value?.events : [];
+        const h = hRes.status === 'fulfilled' ? hRes.value?.holidays : [];
+        set({
+          calendarStaff: s || [],
+          calendarEvents: e || [],
+          calendarHolidays: h || [],
+          calendarHasFetched: true,
+          calendarLoading: false
+        });
+      } catch {
+        set({ calendarLoading: false });
+      }
+    }
+  },
+
+  fetchCalendarDataSilent: async () => {
+    try {
+      const data = await apiFetch('/api/staff-calendar/all');
+      set({
+        calendarStaff: data.staff || [],
+        calendarEvents: data.events || [],
+        calendarHolidays: data.holidays || [],
+        calendarHasFetched: true
+      });
+    } catch {
+      // Silent catch
+    }
+  },
+
+  setCalendarStaff: (updater) => {
+    const current = get().calendarStaff;
+    const next = typeof updater === 'function' ? updater(current) : updater;
+    set({ calendarStaff: next });
+  },
+
+  setCalendarEvents: (updater) => {
+    const current = get().calendarEvents;
+    const next = typeof updater === 'function' ? updater(current) : updater;
+    set({ calendarEvents: next });
+  },
+
+  setCalendarHolidays: (updater) => {
+    const current = get().calendarHolidays;
+    const next = typeof updater === 'function' ? updater(current) : updater;
+    set({ calendarHolidays: next });
+  },
+
 
   expireOldTickets: async () => {
     const now = new Date();

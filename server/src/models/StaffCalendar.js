@@ -44,7 +44,7 @@ export const CalendarEvent = mongoose.models.CalendarEvent || mongoose.model('Ca
 export const HolidayRequest = mongoose.models.HolidayRequest || mongoose.model('HolidayRequest', holidayRequestSchema);
 
 export async function findAllCalendarStaff() {
-  const docs = await CalendarStaff.find().sort({ department: 1, name: 1 });
+  const docs = await CalendarStaff.find().sort({ department: 1, name: 1 }).lean();
   return docs.map(d => formatDoc(d));
 }
 
@@ -68,7 +68,7 @@ export async function deleteAllCalendarStaff() {
 }
 
 export async function findAllCalendarEvents() {
-  const docs = await CalendarEvent.find().sort({ date: 1, startTime: 1 });
+  const docs = await CalendarEvent.find().sort({ date: 1, startTime: 1 }).lean();
   return docs.map(d => formatDoc(d));
 }
 
@@ -120,7 +120,7 @@ export async function updateCalendarEvent(id, data) {
   if (data.location !== undefined) updateData.location = data.location;
   if (data.notes !== undefined) updateData.notes = data.notes;
 
-  const doc = await CalendarEvent.findByIdAndUpdate(id, updateData, { returnDocument: 'after' });
+  const doc = await CalendarEvent.findByIdAndUpdate(id, updateData, { returnDocument: 'after' }).lean();
   return doc ? formatDoc(doc) : null;
 }
 
@@ -134,7 +134,7 @@ export async function deleteAllCalendarEvents() {
 
 // Holiday Request Helpers
 export async function findAllHolidayRequests() {
-  const docs = await HolidayRequest.find().sort({ createdAt: -1 });
+  const docs = await HolidayRequest.find().sort({ createdAt: -1 }).lean();
   return docs.map(d => formatDoc(d));
 }
 
@@ -151,7 +151,7 @@ export async function createHolidayRequest(data) {
 }
 
 export async function updateHolidayRequestStatus(id, status) {
-  const doc = await HolidayRequest.findByIdAndUpdate(id, { status }, { returnDocument: 'after' });
+  const doc = await HolidayRequest.findByIdAndUpdate(id, { status }, { returnDocument: 'after' }).lean();
   return doc ? formatDoc(doc) : null;
 }
 
@@ -164,10 +164,13 @@ export async function deleteAllHolidayRequests() {
 }
 
 function formatDoc(doc) {
+  if (!doc) return null;
   const obj = doc.toObject ? doc.toObject() : doc;
+  const idStr = obj._id ? obj._id.toString() : String(obj.id || '');
   return {
     ...obj,
-    id: obj._id ? obj._id.toString() : obj.id,
-    _id: obj._id ? obj._id.toString() : obj.id,
+    id: idStr,
+    _id: idStr,
   };
 }
+

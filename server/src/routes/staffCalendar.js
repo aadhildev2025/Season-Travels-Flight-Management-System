@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  CalendarStaff,
   findAllCalendarStaff,
   createCalendarStaff,
   deleteCalendarStaff,
@@ -16,20 +17,81 @@ import {
   deleteHolidayRequest,
   deleteAllHolidayRequests,
 } from '../models/StaffCalendar.js';
+import { User } from '../models/User.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
 
+const DEPARTMENTS = [
+  'Ticketing & Sales',
+  'Flight Operations',
+  'Customer Support',
+  'Visa & Finance',
+  'Executive Ops'
+];
+
+const PALETTE = [
+  '#6366f1', '#a855f7', '#0284c7', '#06b6d4', '#10b981',
+  '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6', '#3b82f6',
+  '#14b8a6', '#84cc16'
+];
+
+async function ensureCalendarStaffSeeded(staffList) {
+  if (staffList && staffList.length > 0) return staffList;
+  try {
+    const mainUsers = await User.find().lean();
+    if (mainUsers && mainUsers.length > 0) {
+      const staffToCreate = mainUsers.map((u, idx) => ({
+        name: u.name || u.email,
+        role: u.role || 'Staff',
+        department: u.department || DEPARTMENTS[idx % DEPARTMENTS.length],
+        color: PALETTE[idx % PALETTE.length],
+        active: true
+      }));
+      const createdDocs = await CalendarStaff.insertMany(staffToCreate);
+      return createdDocs.map(d => {
+        const obj = d.toObject ? d.toObject() : d;
+        const idStr = obj._id ? obj._id.toString() : String(obj.id || '');
+        return { ...obj, id: idStr, _id: idStr };
+      });
+    }
+  } catch (err) {
+    console.warn('Auto-seed calendar staff failed:', err);
+  }
+  return staffList || [];
+}
+
+
+// GET /api/staff-calendar/all (Batch endpoint for instant 1-request loading)
+router.get('/all', requireAuth, async (_req, res) => {
+  try {
+    let [staff, events, holidays] = await Promise.all([
+      findAllCalendarStaff(),
+      findAllCalendarEvents(),
+      findAllHolidayRequests(),
+    ]);
+
+    staff = await ensureCalendarStaffSeeded(staff);
+
+    return res.json({ staff, events, holidays });
+  } catch (err) {
+    console.error('Get all staff calendar data error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /api/staff-calendar/staff
 router.get('/staff', requireAuth, async (_req, res) => {
   try {
-    const staff = await findAllCalendarStaff();
+    let staff = await findAllCalendarStaff();
+    staff = await ensureCalendarStaffSeeded(staff);
     return res.json({ staff });
   } catch (err) {
     console.error('Get calendar staff error:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
+
 
 // DELETE /api/staff-calendar/staff (Clear all staff)
 router.delete('/staff', requireAuth, async (_req, res) => {

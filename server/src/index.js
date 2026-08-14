@@ -45,8 +45,8 @@ app.use(cors({
   credentials: true,
 }));
 
-app.options('*', cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
 // Connect to MongoDB on demand for serverless, or on startup for local dev

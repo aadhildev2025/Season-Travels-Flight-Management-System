@@ -42,6 +42,13 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
   const [editingTabIdx, setEditingTabIdx] = useState<number | null>(null);
   const [editTabName, setEditTabName] = useState('');
 
+  // Table Hover & Extension State
+  const [hoveredTableIdx, setHoveredTableIdx] = useState<number | null>(null);
+  const [isExtendingTable, setIsExtendingTable] = useState<{
+    tableIdx: number;
+    direction: 'down' | 'right' | 'both';
+  } | null>(null);
+
   const gridContainerRef = useRef<HTMLDivElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const formulaInputRef = useRef<HTMLInputElement>(null);
@@ -70,6 +77,10 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
   useEffect(() => {
     const handleMouseUp = () => {
       setIsSelecting(false);
+      if (isExtendingTable) {
+        setIsExtendingTable(null);
+        triggerAutosave();
+      }
     };
     const handleMouseMove = (e: MouseEvent) => {
       setMousePos({ x: e.clientX, y: e.clientY });
@@ -80,7 +91,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
       window.removeEventListener('mouseup', handleMouseUp);
       window.removeEventListener('mousemove', handleMouseMove);
     };
-  }, []);
+  }, [isExtendingTable, activeSpreadsheet]);
 
   // Listen for global app:refresh event triggered by the header refresh button
   useEffect(() => {
@@ -441,6 +452,34 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
 
   // Cell Drag Selection mouse enter hover
   const handleCellMouseEnter = (rowIdx: number, colIdx: number, e?: React.MouseEvent) => {
+    if (isExtendingTable && activeSpreadsheet) {
+      const sheet = activeSpreadsheet.sheets[activeSheetIdx] as any;
+      const t = sheet.tables?.[isExtendingTable.tableIdx];
+      if (t) {
+        let targetEndRow = t.endRow;
+        let targetEndCol = t.endCol;
+
+        if (isExtendingTable.direction === 'down' || isExtendingTable.direction === 'both') {
+          targetEndRow = Math.max(t.startRow + 1, rowIdx);
+        }
+        if (isExtendingTable.direction === 'right' || isExtendingTable.direction === 'both') {
+          targetEndCol = Math.max(t.startCol, colIdx);
+        }
+        setTableEndBounds(isExtendingTable.tableIdx, targetEndRow, targetEndCol);
+      }
+      return;
+    }
+
+    const tablesList = (currentSheet as any).tables || [];
+    const cellTable = tablesList.find((t: any) =>
+      rowIdx >= t.startRow && rowIdx <= t.endRow && colIdx >= t.startCol && colIdx <= t.endCol
+    );
+    if (cellTable) {
+      setHoveredTableIdx(tablesList.indexOf(cellTable));
+    } else {
+      setHoveredTableIdx(null);
+    }
+
     if (!isSelecting || !selectedRange) return;
     if (e && e.buttons !== 1) {
       setIsSelecting(false);
@@ -651,6 +690,136 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     triggerAutosave(updated);
   };
 
+  // ════════════════════ TABLE EXTENSION ACTIONS ════════════════════
+
+  const extendTableDown = (tableIdx: number, addCount: number = 1) => {
+    if (!activeSpreadsheet) return;
+    saveHistoryState();
+
+    const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
+    const sheet = updated.sheets[activeSheetIdx] as any;
+    if (!sheet.tables || !sheet.tables[tableIdx]) return;
+
+    const t = sheet.tables[tableIdx];
+    const newEndRow = t.endRow + addCount;
+
+    while (sheet.rows.length <= newEndRow) {
+      const numCols = sheet.rows[0]?.cells.length || 15;
+      sheet.rows.push({
+        height: 30,
+        cells: Array.from({ length: numCols }, () => ({
+          value: '', bold: false, italic: false, underline: false,
+          fontSize: 14, fontFamily: 'sans-serif', backgroundColor: '', fontColor: '', align: 'left'
+        }))
+      });
+    }
+
+    t.endRow = newEndRow;
+    setActiveSpreadsheet(updated);
+    triggerAutosave(updated);
+  };
+
+  const extendTableRight = (tableIdx: number, addCount: number = 1) => {
+    if (!activeSpreadsheet) return;
+    saveHistoryState();
+
+    const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
+    const sheet = updated.sheets[activeSheetIdx] as any;
+    if (!sheet.tables || !sheet.tables[tableIdx]) return;
+
+    const t = sheet.tables[tableIdx];
+    const oldEndCol = t.endCol;
+    const newEndCol = t.endCol + addCount;
+
+    for (let r = 0; r < sheet.rows.length; r++) {
+      while (sheet.rows[r].cells.length <= newEndCol) {
+        const colIdx = sheet.rows[r].cells.length;
+        sheet.rows[r].cells.push({
+          value: '', bold: false, italic: false, underline: false,
+          fontSize: 14, fontFamily: 'sans-serif', backgroundColor: '', fontColor: '', align: 'left'
+        });
+        if (sheet.colWidths && sheet.colWidths.length <= colIdx) {
+          sheet.colWidths.push(120);
+        }
+      }
+    }
+
+    for (let c = oldEndCol + 1; c <= newEndCol; c++) {
+      const headerCell = sheet.rows[t.startRow]?.cells[c];
+      if (headerCell) {
+        headerCell.bold = true;
+        headerCell.align = 'center';
+        if (!headerCell.value || headerCell.value.trim() === '') {
+          headerCell.value = `Header ${c - t.startCol + 1}`;
+        }
+      }
+    }
+
+    t.endCol = newEndCol;
+    setActiveSpreadsheet(updated);
+    triggerAutosave(updated);
+  };
+
+  const setTableEndBounds = (tableIdx: number, targetEndRow: number, targetEndCol: number) => {
+    if (!activeSpreadsheet) return;
+
+    const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
+    const sheet = updated.sheets[activeSheetIdx] as any;
+    if (!sheet.tables || !sheet.tables[tableIdx]) return;
+
+    const t = sheet.tables[tableIdx];
+    const minRowLimit = t.startRow + 1;
+    const minColLimit = t.startCol;
+
+    const newEndRow = Math.max(minRowLimit, targetEndRow);
+    const newEndCol = Math.max(minColLimit, targetEndCol);
+
+    if (newEndRow === t.endRow && newEndCol === t.endCol) return;
+
+    while (sheet.rows.length <= newEndRow) {
+      const numCols = sheet.rows[0]?.cells.length || 15;
+      sheet.rows.push({
+        height: 30,
+        cells: Array.from({ length: numCols }, () => ({
+          value: '', bold: false, italic: false, underline: false,
+          fontSize: 14, fontFamily: 'sans-serif', backgroundColor: '', fontColor: '', align: 'left'
+        }))
+      });
+    }
+
+    for (let r = 0; r < sheet.rows.length; r++) {
+      while (sheet.rows[r].cells.length <= newEndCol) {
+        const colIdx = sheet.rows[r].cells.length;
+        sheet.rows[r].cells.push({
+          value: '', bold: false, italic: false, underline: false,
+          fontSize: 14, fontFamily: 'sans-serif', backgroundColor: '', fontColor: '', align: 'left'
+        });
+        if (sheet.colWidths && sheet.colWidths.length <= colIdx) {
+          sheet.colWidths.push(120);
+        }
+      }
+    }
+
+    if (newEndCol > t.endCol) {
+      for (let c = t.endCol + 1; c <= newEndCol; c++) {
+        const headerCell = sheet.rows[t.startRow]?.cells[c];
+        if (headerCell) {
+          headerCell.bold = true;
+          headerCell.align = 'center';
+          if (!headerCell.value || headerCell.value.trim() === '') {
+            headerCell.value = `Header ${c - t.startCol + 1}`;
+          }
+        }
+      }
+    }
+
+    t.endRow = newEndRow;
+    t.endCol = newEndCol;
+
+    setActiveSpreadsheet(updated);
+    triggerAutosave(updated);
+  };
+
   const mergeSelectedCells = () => {
     if (!selectedRange) return;
     saveHistoryState(); // Save undo checkpoint
@@ -754,6 +923,23 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     const sheet = updated.sheets[activeSheetIdx];
 
     let cleared = false;
+
+    // Delete table definitions that are fully enclosed by the selection range
+    if ((sheet as any).tables) {
+      const initialTableCount = (sheet as any).tables.length;
+      (sheet as any).tables = (sheet as any).tables.filter((t: any) => {
+        const isTableFullyCovered = (
+          t.startRow >= minRow &&
+          t.endRow <= maxRow &&
+          t.startCol >= minCol &&
+          t.endCol <= maxCol
+        );
+        return !isTableFullyCovered;
+      });
+      if ((sheet as any).tables.length !== initialTableCount) cleared = true;
+    }
+
+    const tablesList = (sheet as any).tables || [];
     for (let r = minRow; r <= maxRow; r++) {
       if (!sheet.rows[r]) continue;
       for (let c = minCol; c <= maxCol; c++) {
@@ -765,22 +951,19 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
           cell.value = '';
           cell.backgroundColor = '';
           cell.fontColor = '';
-          cell.bold = false;
-          cell.italic = false;
-          cell.underline = false;
-          cell.align = 'left';
+
+          const isHeaderOfTable = tablesList.some((t: any) => r === t.startRow && c >= t.startCol && c <= t.endCol);
+          if (isHeaderOfTable) {
+            cell.bold = true;
+            cell.align = 'center';
+          } else {
+            cell.bold = false;
+            cell.italic = false;
+            cell.underline = false;
+            cell.align = 'left';
+          }
         }
       }
-    }
-
-    // Remove any table definitions inside or overlapping the selected range
-    if ((sheet as any).tables) {
-      const initialTableCount = (sheet as any).tables.length;
-      (sheet as any).tables = (sheet as any).tables.filter((t: any) => {
-        const isIntersecting = !(maxRow < t.startRow || minRow > t.endRow || maxCol < t.startCol || minCol > t.endCol);
-        return !isIntersecting;
-      });
-      if ((sheet as any).tables.length !== initialTableCount) cleared = true;
     }
 
     // Remove any cell merges inside or overlapping the selected range
@@ -1959,14 +2142,18 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                       outline: isSelected ? '2px solid var(--indigo)' : 'none',
                       outlineOffset: -2,
                       cursor: 'cell',
-                      overflow: hasRootMerges ? 'visible' : 'hidden',
+                      overflow: (hasRootMerges || cellTable) ? 'visible' : 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
                       position: 'relative',
-                      zIndex: isSelected ? 18 : (isMergeRoot ? 15 : (merge ? 1 : 2))
+                      zIndex: isSelected ? 18 : (isMergeRoot ? 15 : (cellTable ? 12 : (merge ? 1 : 2)))
                     };
 
                     const isEditingCell = isSelected && isEditing;
+                    const isTableActiveOrHovered = cellTable && (
+                      hoveredTableIdx === tablesList.indexOf(cellTable) ||
+                      (selectedCell && selectedCell.row >= cellTable.startRow && selectedCell.row <= cellTable.endRow && selectedCell.col >= cellTable.startCol && selectedCell.col <= cellTable.endCol)
+                    );
 
                     return (
                       <td 
@@ -1976,6 +2163,93 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                         onMouseEnter={(e) => handleCellMouseEnter(rowIdx, colIdx, e)}
                         onDoubleClick={() => handleCellDoubleClick(rowIdx, colIdx)}
                       >
+                        {/* ─── TABLE RESIZE / EXTEND & REDUCE HANDLES ─── */}
+                        {isTableActiveOrHovered && (
+                          <>
+                            {/* 1. Bottom Border Drag Handle (Extend / Reduce Rows) */}
+                            {rowIdx === cellTable.endRow && colIdx >= cellTable.startCol && colIdx <= cellTable.endCol && (
+                              <div 
+                                title="Drag bottom border to extend or reduce table rows"
+                                onMouseDown={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  saveHistoryState();
+                                  setIsExtendingTable({ tableIdx: tablesList.indexOf(cellTable), direction: 'down' });
+                                }}
+                                style={{
+                                  position: 'absolute',
+                                  bottom: -4,
+                                  left: 0,
+                                  right: 0,
+                                  height: 8,
+                                  zIndex: 35,
+                                  cursor: 'row-resize',
+                                  pointerEvents: 'auto',
+                                  transition: 'background-color 0.15s ease'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.5)'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                              />
+                            )}
+
+                            {/* 2. Right Border Drag Handle (Extend / Reduce Columns) */}
+                            {colIdx === cellTable.endCol && rowIdx >= cellTable.startRow && rowIdx <= cellTable.endRow && (
+                              <div 
+                                title="Drag right border to extend or reduce table columns"
+                                onMouseDown={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  saveHistoryState();
+                                  setIsExtendingTable({ tableIdx: tablesList.indexOf(cellTable), direction: 'right' });
+                                }}
+                                style={{
+                                  position: 'absolute',
+                                  top: 0,
+                                  bottom: 0,
+                                  right: -4,
+                                  width: 8,
+                                  zIndex: 35,
+                                  cursor: 'col-resize',
+                                  pointerEvents: 'auto',
+                                  transition: 'background-color 0.15s ease'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.5)'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                              />
+                            )}
+
+                            {/* 3. Bottom-Right Corner Resize Drag Handle (Extend / Reduce Both) */}
+                            {rowIdx === cellTable.endRow && colIdx === cellTable.endCol && (
+                              <div 
+                                title="Drag corner to extend or reduce table size"
+                                onMouseDown={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  saveHistoryState();
+                                  setIsExtendingTable({ tableIdx: tablesList.indexOf(cellTable), direction: 'both' });
+                                }}
+                                style={{
+                                  position: 'absolute',
+                                  bottom: -5,
+                                  right: -5,
+                                  width: 10,
+                                  height: 10,
+                                  borderRadius: 2,
+                                  background: '#6366f1',
+                                  border: '1.5px solid #ffffff',
+                                  boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
+                                  zIndex: 40,
+                                  cursor: 'nwse-resize',
+                                  pointerEvents: 'auto',
+                                  transition: 'transform 0.15s ease'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.3)'}
+                                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                              />
+                            )}
+                          </>
+                        )}
+
                         {/* Full continuous outer border box and text overlay for all merges starting at this root cell */}
                         {rootMerges.map((m: any) => {
                           let rTotalW = 0;
@@ -2040,7 +2314,11 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                             }}
                           />
                         ) : (
-                          !merge && <span>{getDisplayValue(cell)}</span>
+                          !merge && (
+                            <span style={{ display: 'block', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {getDisplayValue(cell)}
+                            </span>
+                          )
                         )}
                       </td>
                     );

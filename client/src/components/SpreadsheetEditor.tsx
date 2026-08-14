@@ -494,13 +494,14 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
   // Cell Drag Selection mouse down
   const handleCellMouseDown = (rowIdx: number, colIdx: number, e: React.MouseEvent) => {
     if (e.button !== 0) return; // Only left clicks
-    if (isEditing) {
-      saveCellEdit();
-    }
-
+    
     const merge = getMergeCell(rowIdx, colIdx);
     const targetRow = merge ? merge.startRow : rowIdx;
     const targetCol = merge ? merge.startCol : colIdx;
+
+    if (isEditing && (selectedCell?.row !== targetRow || selectedCell?.col !== targetCol)) {
+      saveCellEdit();
+    }
 
     setIsSelecting(true);
     setSelectedCell({ row: targetRow, col: targetCol });
@@ -512,12 +513,6 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
 
     const cell = currentSheet.rows[targetRow]?.cells[targetCol];
     setEditValue(cell ? cell.value : '');
-    setIsEditing(true);
-    setTimeout(() => {
-      if (editInputRef.current) {
-        editInputRef.current.focus();
-      }
-    }, 20);
   };
 
   // Cell Drag Selection mouse enter hover
@@ -582,7 +577,12 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     const cell = currentSheet.rows[targetRow]?.cells[targetCol];
     setEditValue(cell ? cell.value : '');
     setIsEditing(true);
-    setTimeout(() => editInputRef.current?.focus(), 50);
+    setTimeout(() => {
+      if (editInputRef.current) {
+        editInputRef.current.focus();
+        editInputRef.current.select();
+      }
+    }, 20);
   };
 
   const saveCellEdit = () => {
@@ -905,6 +905,19 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     triggerAutosave(updated);
   };
 
+  const isSelectionMerged = () => {
+    if (!selectedRange && !selectedCell) return false;
+    const minRow = selectedRange ? Math.min(selectedRange.startRow, selectedRange.endRow) : selectedCell!.row;
+    const maxRow = selectedRange ? Math.max(selectedRange.startRow, selectedRange.endRow) : selectedCell!.row;
+    const minCol = selectedRange ? Math.min(selectedRange.startCol, selectedRange.endCol) : selectedCell!.col;
+    const maxCol = selectedRange ? Math.max(selectedRange.startCol, selectedRange.endCol) : selectedCell!.col;
+
+    const merges = (currentSheet as any).merges || [];
+    return merges.some((m: any) => 
+      !(maxRow < m.startRow || minRow > m.endRow || maxCol < m.startCol || minCol > m.endCol)
+    );
+  };
+
   const mergeSelectedCells = () => {
     if (!selectedRange) return;
     saveHistoryState(); // Save undo checkpoint
@@ -920,11 +933,61 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     const sheet = updated.sheets[activeSheetIdx] as any;
     if (!sheet.merges) sheet.merges = [];
 
+    // Collect non-empty values and first styled cell in the merge range
+    const nonEmptyValues: string[] = [];
+    let firstStyledCell: CellData | null = null;
+
+    for (let r = minRow; r <= maxRow; r++) {
+      for (let c = minCol; c <= maxCol; c++) {
+        const cell = sheet.rows[r]?.cells[c];
+        if (cell && cell.value && cell.value.trim() !== '') {
+          nonEmptyValues.push(cell.value);
+          if (!firstStyledCell) {
+            firstStyledCell = cell;
+          }
+        }
+      }
+    }
+
+    // Ensure root row and cell exist
+    const numCols = sheet.rows[0]?.cells.length || 15;
+    while (sheet.rows.length <= minRow) {
+      sheet.rows.push({
+        height: 30,
+        cells: Array.from({ length: numCols }, () => ({ ...emptyCell }))
+      });
+    }
+    while (sheet.rows[minRow].cells.length <= minCol) {
+      sheet.rows[minRow].cells.push({ ...emptyCell });
+    }
+
+    const rootCell = sheet.rows[minRow].cells[minCol];
+
+    // If root cell is empty or multiple cells have text, consolidate into root cell
+    if (nonEmptyValues.length > 0) {
+      // If root cell itself was empty, or if there are multiple non-empty values, combine them
+      if (!rootCell.value || rootCell.value.trim() === '' || nonEmptyValues.length > 1) {
+        rootCell.value = nonEmptyValues.join(' ');
+      }
+
+      if (firstStyledCell) {
+        if (firstStyledCell.bold !== undefined) rootCell.bold = firstStyledCell.bold;
+        if (firstStyledCell.italic !== undefined) rootCell.italic = firstStyledCell.italic;
+        if (firstStyledCell.underline !== undefined) rootCell.underline = firstStyledCell.underline;
+        if (firstStyledCell.fontSize) rootCell.fontSize = firstStyledCell.fontSize;
+        if (firstStyledCell.fontFamily) rootCell.fontFamily = firstStyledCell.fontFamily;
+        if (firstStyledCell.backgroundColor) rootCell.backgroundColor = firstStyledCell.backgroundColor;
+        if (firstStyledCell.fontColor) rootCell.fontColor = firstStyledCell.fontColor;
+        if (firstStyledCell.align) rootCell.align = firstStyledCell.align;
+      }
+    }
+
     // Filter existing merges when adding newMerge:
     sheet.merges = sheet.merges.filter((m: any) => {
       const isIdentical = m.startRow === minRow && m.endRow === maxRow && m.startCol === minCol && m.endCol === maxCol;
       const isChild = m.startRow >= minRow && m.endRow <= maxRow && m.startCol >= minCol && m.endCol <= maxCol;
-      return !isIdentical && !isChild;
+      const isIntersecting = !(maxRow < m.startRow || minRow > m.endRow || maxCol < m.startCol || minCol > m.endCol);
+      return !isIdentical && !isChild && !isIntersecting;
     });
 
     // Clear values of non-top-left cells inside the merge range
@@ -951,48 +1014,36 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
   };
 
   const unmergeSelectedCells = () => {
-    if (!selectedRange) return;
+    if (!selectedRange && !selectedCell) return;
     saveHistoryState(); // Save undo checkpoint
 
-    const minRow = Math.min(selectedRange.startRow, selectedRange.endRow);
-    const maxRow = Math.max(selectedRange.startRow, selectedRange.endRow);
-    const minCol = Math.min(selectedRange.startCol, selectedRange.endCol);
-    const maxCol = Math.max(selectedRange.startCol, selectedRange.endCol);
+    const minRow = selectedRange ? Math.min(selectedRange.startRow, selectedRange.endRow) : selectedCell!.row;
+    const maxRow = selectedRange ? Math.max(selectedRange.startRow, selectedRange.endRow) : selectedCell!.row;
+    const minCol = selectedRange ? Math.min(selectedRange.startCol, selectedRange.endCol) : selectedCell!.col;
+    const maxCol = selectedRange ? Math.max(selectedRange.startCol, selectedRange.endCol) : selectedCell!.col;
 
     const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
     const sheet = updated.sheets[activeSheetIdx] as any;
     if (!sheet.merges || sheet.merges.length === 0) return;
 
-    // Find all merges intersecting with selection
-    const intersectingMerges = sheet.merges.filter((m: any) => {
-      return !(
+    // Filter out any merges intersecting with selection
+    sheet.merges = sheet.merges.filter((m: any) => {
+      return (
         maxRow < m.startRow || minRow > m.endRow ||
         maxCol < m.startCol || minCol > m.endCol
       );
     });
 
-    if (intersectingMerges.length === 0) return;
-
-    // Check if any intersecting merge matches the exact selection
-    const exactMatch = intersectingMerges.find((m: any) => 
-      m.startRow === minRow && m.endRow === maxRow && m.startCol === minCol && m.endCol === maxCol
-    );
-
-    if (exactMatch) {
-      sheet.merges = sheet.merges.filter((m: any) => m !== exactMatch);
-    } else {
-      // Find smallest area intersecting merge (e.g. inner sub-merge)
-      intersectingMerges.sort((a: any, b: any) => {
-        const areaA = (a.endRow - a.startRow + 1) * (a.endCol - a.startCol + 1);
-        const areaB = (b.endRow - b.startRow + 1) * (b.endCol - b.startCol + 1);
-        return areaA - areaB;
-      });
-      const smallestMerge = intersectingMerges[0];
-      sheet.merges = sheet.merges.filter((m: any) => m !== smallestMerge);
-    }
-
     setActiveSpreadsheet(updated);
     triggerAutosave(updated);
+  };
+
+  const toggleMergeSelectedCells = () => {
+    if (isSelectionMerged()) {
+      unmergeSelectedCells();
+    } else {
+      mergeSelectedCells();
+    }
   };
 
   const clearSelectedCells = () => {
@@ -1548,78 +1599,128 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
       const { default: autoTable } = await import('jspdf-autotable');
       const { applySeasonTravelsWatermark } = await import('../utils/pdfWatermark');
 
-      const maxCols = currentSheet.rows[0]?.cells.length || 10;
+      const numCols = currentSheet.rows[0]?.cells.length || 15;
+      const numRows = renderedRows.length;
+      const merges = (currentSheet as any).merges || [];
 
-      const bodyRows = renderedRows.map((row) => {
-        return row.cells.map((cell) => {
-          const val = getDisplayValue(cell);
-          const cellObj: any = { content: val };
-          const cellStyles: any = {};
-          if (cell.align) cellStyles.halign = cell.align;
-          if (cell.bold && cell.italic) cellStyles.fontStyle = 'bolditalic';
-          else if (cell.bold) cellStyles.fontStyle = 'bold';
-          else if (cell.italic) cellStyles.fontStyle = 'italic';
-          if (cell.backgroundColor) cellStyles.fillColor = cell.backgroundColor;
-          if (cell.fontColor) cellStyles.textColor = cell.fontColor;
+      // Helper to find merge block covering cell (r, c)
+      const getMergeAt = (r: number, c: number) => {
+        return merges.find((m: any) => 
+          r >= m.startRow && r <= m.endRow && 
+          c >= m.startCol && c <= m.endCol
+        );
+      };
 
-          if (Object.keys(cellStyles).length > 0) {
-            cellObj.styles = cellStyles;
+      // 1. Determine active table row bounds (skip empty leading/trailing rows)
+      let minRow = 0;
+      while (minRow < numRows - 1 && !renderedRows[minRow].cells.some((cell, c) => {
+        const val = getDisplayValue(cell);
+        const hasMerge = !!getMergeAt(minRow, c);
+        return (val && val.trim() !== '') || hasMerge;
+      })) {
+        minRow++;
+      }
+
+      let maxRow = numRows - 1;
+      while (maxRow > minRow && !renderedRows[maxRow].cells.some((cell, c) => {
+        const val = getDisplayValue(cell);
+        const hasMerge = !!getMergeAt(maxRow, c);
+        return (val && val.trim() !== '') || hasMerge;
+      })) {
+        maxRow--;
+      }
+
+      // 2. Determine active column bounds (skip empty leading/trailing columns)
+      let minCol = 0;
+      while (minCol < numCols - 1 && !renderedRows.slice(minRow, maxRow + 1).some((row, relativeIdx) => {
+        const rIdx = minRow + relativeIdx;
+        const cell = row.cells[minCol];
+        const val = getDisplayValue(cell);
+        const hasMerge = !!getMergeAt(rIdx, minCol);
+        return (val && val.trim() !== '') || hasMerge;
+      })) {
+        minCol++;
+      }
+
+      let maxCol = numCols - 1;
+      while (maxCol > minCol && !renderedRows.slice(minRow, maxRow + 1).some((row, relativeIdx) => {
+        const rIdx = minRow + relativeIdx;
+        const cell = row.cells[maxCol];
+        const val = getDisplayValue(cell);
+        const hasMerge = !!getMergeAt(rIdx, maxCol);
+        return (val && val.trim() !== '') || hasMerge;
+      })) {
+        maxCol--;
+      }
+
+      // 3. Build autoTable rows array with proper colSpan & rowSpan
+      const tableRows: any[][] = [];
+
+      for (let r = minRow; r <= maxRow; r++) {
+        const rowCells: any[] = [];
+        const row = renderedRows[r];
+
+        for (let c = minCol; c <= maxCol; c++) {
+          const merge = getMergeAt(r, c);
+
+          if (merge) {
+            // Check if (r, c) is the root top-left cell of the merge block
+            const isRoot = r === merge.startRow && c === merge.startCol;
+            if (isRoot) {
+              const rootCell = currentSheet.rows[merge.startRow]?.cells[merge.startCol] || row.cells[c];
+              const val = getDisplayValue(rootCell);
+              
+              const colSpan = Math.min(merge.endCol, maxCol) - Math.max(merge.startCol, minCol) + 1;
+              const rowSpan = Math.min(merge.endRow, maxRow) - Math.max(merge.startRow, minRow) + 1;
+
+              const cellStyles: any = {};
+              if (rootCell.align) cellStyles.halign = rootCell.align;
+              if (rootCell.bold && rootCell.italic) cellStyles.fontStyle = 'bolditalic';
+              else if (rootCell.bold) cellStyles.fontStyle = 'bold';
+              else if (rootCell.italic) cellStyles.fontStyle = 'italic';
+              if (rootCell.backgroundColor) cellStyles.fillColor = rootCell.backgroundColor;
+              if (rootCell.fontColor) cellStyles.textColor = rootCell.fontColor;
+
+              const cellObj: any = {
+                content: val,
+                styles: cellStyles
+              };
+              if (colSpan > 1) cellObj.colSpan = colSpan;
+              if (rowSpan > 1) cellObj.rowSpan = rowSpan;
+
+              rowCells.push(cellObj);
+            }
+            // Secondary cells inside merge are omitted from autoTable row
+          } else {
+            const cell = row.cells[c];
+            const val = getDisplayValue(cell);
+
+            const cellStyles: any = {};
+            if (cell.align) cellStyles.halign = cell.align;
+            if (cell.bold && cell.italic) cellStyles.fontStyle = 'bolditalic';
+            else if (cell.bold) cellStyles.fontStyle = 'bold';
+            else if (cell.italic) cellStyles.fontStyle = 'italic';
+            if (cell.backgroundColor) cellStyles.fillColor = cell.backgroundColor;
+            if (cell.fontColor) cellStyles.textColor = cell.fontColor;
+
+            const cellObj: any = {
+              content: val,
+              styles: cellStyles
+            };
+            rowCells.push(cellObj);
           }
-          return cellObj;
-        });
-      });
-
-      // 1. Skip leading empty rows so top header row is guaranteed to be the actual table header
-      let firstNonEmptyRowIdx = 0;
-      while (firstNonEmptyRowIdx < bodyRows.length - 1 && bodyRows[firstNonEmptyRowIdx].every(c => {
-        const str = typeof c === 'object' ? c.content : c;
-        return !str || str.trim() === '';
-      })) {
-        firstNonEmptyRowIdx++;
+        }
+        tableRows.push(rowCells);
       }
 
-      // 2. Find last non-empty row index
-      let lastNonEmptyRowIdx = bodyRows.length - 1;
-      while (lastNonEmptyRowIdx >= firstNonEmptyRowIdx && bodyRows[lastNonEmptyRowIdx].every(c => {
-        const str = typeof c === 'object' ? c.content : c;
-        return !str || str.trim() === '';
-      })) {
-        lastNonEmptyRowIdx--;
-      }
+      const activeColCount = maxCol - minCol + 1;
+      const doc = new jsPDF({ orientation: activeColCount > 7 ? 'landscape' : 'portrait' });
 
-      const activeRows = bodyRows.slice(firstNonEmptyRowIdx, Math.max(lastNonEmptyRowIdx + 1, firstNonEmptyRowIdx + 1));
-
-      // 3. Find column bounds
-      let minNonEmptyCol = 0;
-      while (minNonEmptyCol < maxCols - 1 && activeRows.every(row => {
-        const cell = row[minNonEmptyCol];
-        const str = typeof cell === 'object' ? cell.content : cell;
-        return !str || str.trim() === '';
-      })) {
-        minNonEmptyCol++;
-      }
-
-      let maxNonEmptyCol = maxCols - 1;
-      while (maxNonEmptyCol > minNonEmptyCol && activeRows.every(row => {
-        const cell = row[maxNonEmptyCol];
-        const str = typeof cell === 'object' ? cell.content : cell;
-        return !str || str.trim() === '';
-      })) {
-        maxNonEmptyCol--;
-      }
-
-      const finalBody = activeRows.map(row => row.slice(minNonEmptyCol, maxNonEmptyCol + 1));
-      const headRow = finalBody.length > 0 ? finalBody[0] : [];
-      const tableBody = finalBody.length > 1 ? finalBody.slice(1) : [];
-
-      const colCount = maxNonEmptyCol - minNonEmptyCol + 1;
-      const doc = new jsPDF({ orientation: colCount > 7 ? 'landscape' : 'portrait' });
-
-      // Map exact spreadsheet column widths to PDF mm to match UI cell sizes
+      // Column width styles
       const columnStyles: Record<number, any> = {};
-      for (let i = 0; i < colCount; i++) {
-        const origColIdx = minNonEmptyCol + i;
-        const wPx = currentSheet.colWidths?.[origColIdx] || 110;
+      for (let i = 0; i < activeColCount; i++) {
+        const origColIdx = minCol + i;
+        const wPx = currentSheet.colWidths?.[origColIdx] || 120;
         const wMM = Math.max(16, Math.min(50, wPx * 0.22));
         columnStyles[i] = { cellWidth: wMM };
       }
@@ -1627,30 +1728,19 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
       autoTable(doc, {
         startY: 24,
         margin: { top: 24, bottom: 15, left: 14, right: 14 },
-        head: [headRow],
-        body: tableBody,
+        body: tableRows,
         theme: 'grid',
         tableWidth: 'wrap',
         columnStyles,
         styles: {
           fontSize: 7.5,
-          cellPadding: { top: 1, bottom: 1, left: 3, right: 3 },
+          cellPadding: { top: 1.5, bottom: 1.5, left: 3, right: 3 },
           minCellHeight: 4.8,
           textColor: [15, 23, 42],
           fillColor: [255, 255, 255],
           lineColor: [209, 213, 219],
           lineWidth: 0.08,
           valign: 'middle',
-        },
-        headStyles: {
-          fillColor: [255, 255, 255],
-          textColor: [15, 23, 42],
-          fontStyle: 'bold',
-          fontSize: 8,
-          halign: 'center',
-          lineColor: [209, 213, 219],
-          lineWidth: 0.08,
-          minCellHeight: 5.5,
         },
         alternateRowStyles: {
           fillColor: [255, 255, 255],
@@ -1928,7 +2018,39 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
           )}
         </div>
 
-        {/* Table Button in Toolbar */}
+        <div style={{ height: 20, width: 1, background: 'var(--border)' }} />
+
+        {/* Merge / Unmerge Button */}
+        <button
+          onClick={toggleMergeSelectedCells}
+          disabled={!isSelectionMerged() && (!selectedRange || (selectedRange.startRow === selectedRange.endRow && selectedRange.startCol === selectedRange.endCol))}
+          className="btn btn-sm"
+          style={{ 
+            fontSize: 11, gap: 5, display: 'flex', alignItems: 'center', fontWeight: 600,
+            padding: '4px 9px', height: 28,
+            background: isSelectionMerged() ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
+            color: isSelectionMerged() ? 'var(--indigo)' : 'var(--text)',
+            border: isSelectionMerged() ? '1px solid var(--indigo)' : '1px solid var(--border)'
+          }}
+          title={isSelectionMerged() ? "Unmerge Cells" : "Merge Selected Cells (Select multiple cells and click)"}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <path d="M8 12h8" />
+            {isSelectionMerged() ? (
+              <>
+                <path d="M9 9l-3 3 3 3" />
+                <path d="M15 9l3 3-3 3" />
+              </>
+            ) : (
+              <>
+                <path d="M12 9l-3 3 3 3" />
+                <path d="M12 9l3 3-3 3" />
+              </>
+            )}
+          </svg>
+          <span>{isSelectionMerged() ? 'Unmerge' : 'Merge'}</span>
+        </button>
         <div style={{ height: 20, width: 1, background: 'var(--border)' }} />
         <button
           onClick={createTableFromSelection}
@@ -2229,6 +2351,13 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                     let borderLeft = isLeftEdgeOfAny ? '2px solid var(--merge-outline)' : '1px solid var(--border)';
                     let borderRight = (isRightEdgeOfAny || isBorderLeftOfNextCol) ? '2px solid var(--merge-outline)' : '1px solid var(--border)';
 
+                    if (merge) {
+                      borderTop = (rowIdx === merge.startRow) ? (isTopEdgeOfAny ? '2px solid var(--merge-outline)' : '1px solid var(--border)') : 'none';
+                      borderBottom = (rowIdx === merge.endRow) ? (isBottomEdgeOfAny || isBorderAboveNextRow ? '2px solid var(--merge-outline)' : '1px solid var(--border)') : 'none';
+                      borderLeft = (colIdx === merge.startCol) ? (isLeftEdgeOfAny ? '2px solid var(--merge-outline)' : '1px solid var(--border)') : 'none';
+                      borderRight = (colIdx === merge.endCol) ? (isRightEdgeOfAny || isBorderLeftOfNextCol ? '2px solid var(--merge-outline)' : '1px solid var(--border)') : 'none';
+                    }
+
                     if (isLeftAdjacentToTable) {
                       borderRight = '2px solid var(--table-border)';
                     }
@@ -2454,6 +2583,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                             type="text"
                             value={editValue}
                             onChange={(e) => setEditValue(e.target.value)}
+                            onMouseDown={(e) => e.stopPropagation()}
                             onBlur={saveCellEdit}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {

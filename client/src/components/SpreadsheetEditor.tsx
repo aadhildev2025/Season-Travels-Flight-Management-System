@@ -512,7 +512,12 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
 
     const cell = currentSheet.rows[targetRow]?.cells[targetCol];
     setEditValue(cell ? cell.value : '');
-    setIsEditing(false);
+    setIsEditing(true);
+    setTimeout(() => {
+      if (editInputRef.current) {
+        editInputRef.current.focus();
+      }
+    }, 20);
   };
 
   // Cell Drag Selection mouse enter hover
@@ -550,6 +555,10 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
       setIsSelecting(false);
       return;
     }
+
+    // Cancel edit mode when dragging mouse across multiple cells
+    setIsEditing(false);
+
     const merge = getMergeCell(rowIdx, colIdx);
     const range = {
       ...selectedRange,
@@ -2441,13 +2450,47 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                         {isEditingCell ? (
                           <input 
                             ref={editInputRef}
+                            autoFocus
                             type="text"
                             value={editValue}
                             onChange={(e) => setEditValue(e.target.value)}
                             onBlur={saveCellEdit}
                             onKeyDown={(e) => {
-                              if (e.key === 'Enter') saveCellEdit();
-                              else if (e.key === 'Escape') setIsEditing(false);
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                saveCellEdit();
+                                if (selectedCell && selectedCell.row < currentSheet.rows.length - 1) {
+                                  const next = { row: selectedCell.row + 1, col: selectedCell.col };
+                                  setSelectedCell(next);
+                                  setSelectedRangeExpanded({ startRow: next.row, startCol: next.col, endRow: next.row, endCol: next.col });
+                                  const nextCell = currentSheet.rows[next.row]?.cells[next.col];
+                                  setEditValue(nextCell ? nextCell.value : '');
+                                  setIsEditing(true);
+                                  setTimeout(() => {
+                                    if (editInputRef.current) {
+                                      editInputRef.current.focus();
+                                    }
+                                  }, 20);
+                                }
+                              } else if (e.key === 'Tab') {
+                                e.preventDefault();
+                                saveCellEdit();
+                                if (selectedCell && selectedCell.col < (currentSheet.rows[0]?.cells.length || 0) - 1) {
+                                  const next = { row: selectedCell.row, col: selectedCell.col + 1 };
+                                  setSelectedCell(next);
+                                  setSelectedRangeExpanded({ startRow: next.row, startCol: next.col, endRow: next.row, endCol: next.col });
+                                  const nextCell = currentSheet.rows[next.row]?.cells[next.col];
+                                  setEditValue(nextCell ? nextCell.value : '');
+                                  setIsEditing(true);
+                                  setTimeout(() => {
+                                    if (editInputRef.current) {
+                                      editInputRef.current.focus();
+                                    }
+                                  }, 20);
+                                }
+                              } else if (e.key === 'Escape') {
+                                setIsEditing(false);
+                              }
                             }}
                             style={{
                               position: 'absolute', top: 0, left: 0,

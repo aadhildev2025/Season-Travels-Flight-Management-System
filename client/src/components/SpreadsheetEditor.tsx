@@ -1540,10 +1540,6 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
       const { applySeasonTravelsWatermark } = await import('../utils/pdfWatermark');
 
       const maxCols = currentSheet.rows[0]?.cells.length || 10;
-      const colHeaders: string[] = [];
-      for (let c = 0; c < maxCols; c++) {
-        colHeaders.push(indexToColLabel(c));
-      }
 
       const bodyRows = renderedRows.map((row) => {
         return row.cells.map((cell) => {
@@ -1564,54 +1560,94 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
         });
       });
 
+      // 1. Skip leading empty rows so top header row is guaranteed to be the actual table header
+      let firstNonEmptyRowIdx = 0;
+      while (firstNonEmptyRowIdx < bodyRows.length - 1 && bodyRows[firstNonEmptyRowIdx].every(c => {
+        const str = typeof c === 'object' ? c.content : c;
+        return !str || str.trim() === '';
+      })) {
+        firstNonEmptyRowIdx++;
+      }
+
+      // 2. Find last non-empty row index
       let lastNonEmptyRowIdx = bodyRows.length - 1;
-      while (lastNonEmptyRowIdx >= 0 && bodyRows[lastNonEmptyRowIdx].every(c => {
+      while (lastNonEmptyRowIdx >= firstNonEmptyRowIdx && bodyRows[lastNonEmptyRowIdx].every(c => {
         const str = typeof c === 'object' ? c.content : c;
         return !str || str.trim() === '';
       })) {
         lastNonEmptyRowIdx--;
       }
-      const trimmedBody = bodyRows.slice(0, Math.max(lastNonEmptyRowIdx + 1, 15));
 
-      let maxNonEmptyCol = colHeaders.length - 1;
-      while (maxNonEmptyCol >= 3 && trimmedBody.every(row => {
+      const activeRows = bodyRows.slice(firstNonEmptyRowIdx, Math.max(lastNonEmptyRowIdx + 1, firstNonEmptyRowIdx + 1));
+
+      // 3. Find column bounds
+      let minNonEmptyCol = 0;
+      while (minNonEmptyCol < maxCols - 1 && activeRows.every(row => {
+        const cell = row[minNonEmptyCol];
+        const str = typeof cell === 'object' ? cell.content : cell;
+        return !str || str.trim() === '';
+      })) {
+        minNonEmptyCol++;
+      }
+
+      let maxNonEmptyCol = maxCols - 1;
+      while (maxNonEmptyCol > minNonEmptyCol && activeRows.every(row => {
         const cell = row[maxNonEmptyCol];
         const str = typeof cell === 'object' ? cell.content : cell;
         return !str || str.trim() === '';
       })) {
         maxNonEmptyCol--;
       }
-      const finalHeaders = colHeaders.slice(0, maxNonEmptyCol + 1);
-      const finalBody = trimmedBody.map(row => row.slice(0, maxNonEmptyCol + 1));
 
-      const doc = new jsPDF({ orientation: finalHeaders.length > 7 ? 'landscape' : 'portrait' });
+      const finalBody = activeRows.map(row => row.slice(minNonEmptyCol, maxNonEmptyCol + 1));
+      const headRow = finalBody.length > 0 ? finalBody[0] : [];
+      const tableBody = finalBody.length > 1 ? finalBody.slice(1) : [];
+
+      const colCount = maxNonEmptyCol - minNonEmptyCol + 1;
+      const doc = new jsPDF({ orientation: colCount > 7 ? 'landscape' : 'portrait' });
+
+      // Map exact spreadsheet column widths to PDF mm to match UI cell sizes
+      const columnStyles: Record<number, any> = {};
+      for (let i = 0; i < colCount; i++) {
+        const origColIdx = minNonEmptyCol + i;
+        const wPx = currentSheet.colWidths?.[origColIdx] || 110;
+        const wMM = Math.max(16, Math.min(50, wPx * 0.22));
+        columnStyles[i] = { cellWidth: wMM };
+      }
 
       autoTable(doc, {
         startY: 24,
         margin: { top: 24, bottom: 15, left: 14, right: 14 },
-        head: [finalHeaders],
-        body: finalBody,
+        head: [headRow],
+        body: tableBody,
         theme: 'grid',
+        tableWidth: 'wrap',
+        columnStyles,
         styles: {
-          fontSize: 9,
-          cellPadding: 4,
-          textColor: [30, 41, 59],
+          fontSize: 7.5,
+          cellPadding: { top: 1, bottom: 1, left: 3, right: 3 },
+          minCellHeight: 4.8,
+          textColor: [15, 23, 42],
+          fillColor: [248, 250, 252],
           lineColor: [148, 163, 184],
-          lineWidth: 0.5,
+          lineWidth: 0.3,
+          valign: 'middle',
         },
         headStyles: {
-          fillColor: [15, 23, 42],
-          textColor: [255, 255, 255],
+          fillColor: [226, 232, 240],
+          textColor: [30, 41, 59],
           fontStyle: 'bold',
-          fontSize: 9.5,
-          lineColor: [30, 41, 59],
-          lineWidth: 0.5,
+          fontSize: 8,
+          halign: 'center',
+          lineColor: [100, 116, 139],
+          lineWidth: 0.35,
+          minCellHeight: 5.5,
         },
         alternateRowStyles: {
           fillColor: [248, 250, 252],
         },
         tableLineColor: [148, 163, 184],
-        tableLineWidth: 0.5,
+        tableLineWidth: 0.3,
       });
 
       applySeasonTravelsWatermark(doc, currentSheet.name);

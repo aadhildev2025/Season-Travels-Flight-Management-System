@@ -598,12 +598,51 @@ export const PasswordCredential: React.FC = () => {
       }
     };
 
+    const escapeHtml = (str: string) => {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    };
+
+    const handlePasteEvent = (e: ClipboardEvent) => {
+      e.preventDefault();
+      const plainText = e.clipboardData?.getData('text/plain') || '';
+      if (plainText) {
+        document.execCommand('insertText', false, plainText);
+        handleInput();
+      }
+    };
+
+    const handleCopyEvent = (e: ClipboardEvent) => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed) return;
+
+      const selectedText = selection.toString();
+      if (selectedText) {
+        e.preventDefault();
+        if (e.clipboardData) {
+          e.clipboardData.clearData();
+          e.clipboardData.setData('text/plain', selectedText);
+          const cleanLines = selectedText
+            .split('\n')
+            .map(line => line ? `<div>${escapeHtml(line)}</div>` : '<div><br></div>')
+            .join('');
+          e.clipboardData.setData('text/html', cleanLines);
+        }
+      }
+    };
+
     editor.addEventListener('click', handleClick);
     editor.addEventListener('mouseup', handleSelectionOrClick);
     editor.addEventListener('keyup', handleSelectionOrClick);
     editor.addEventListener('keydown', handleKeyDown);
     editor.addEventListener('beforeinput', handleBeforeInput);
     editor.addEventListener('input', handleInputEvent);
+    editor.addEventListener('paste', handlePasteEvent);
+    editor.addEventListener('copy', handleCopyEvent);
 
     return () => {
       editor.removeEventListener('click', handleClick);
@@ -612,6 +651,8 @@ export const PasswordCredential: React.FC = () => {
       editor.removeEventListener('keydown', handleKeyDown);
       editor.removeEventListener('beforeinput', handleBeforeInput);
       editor.removeEventListener('input', handleInputEvent);
+      editor.removeEventListener('paste', handlePasteEvent);
+      editor.removeEventListener('copy', handleCopyEvent);
     };
   }, [isAdmin, showToast, handleInput]);
 
@@ -1452,8 +1493,10 @@ export const PasswordCredential: React.FC = () => {
         [data-theme="light"] .apple-notes-editor [style*="color:#ffffff"],
         [data-theme="light"] .apple-notes-editor [style*="color: #ffffff"],
         [data-theme="light"] .apple-notes-editor [style*="color:#fff"],
-        [data-theme="light"] .apple-notes-editor [style*="color: #fff"] {
-          color: var(--text, #0f172a) !important;
+        /* Prevent pasted dark background boxes & force clean text background */
+        .apple-notes-editor *:not(.password-box-widget):not(.pass-box-input):not(.pass-box-btn):not(.pass-verify-btn):not(.pass-copy-btn):not(.pass-remove-btn) {
+          background-color: transparent !important;
+          background: transparent !important;
         }
 
         /* Password Box Widget Light Mode Adjustments */

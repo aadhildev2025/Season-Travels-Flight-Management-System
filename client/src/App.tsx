@@ -609,16 +609,21 @@ export default function App() {
         <div className="toast-pop" style={{
           position: 'fixed', top: 70, right: 28, zIndex: 9999,
           display: 'flex', alignItems: 'center', gap: 10,
-          background: toast.type === 'success'
-            ? 'transparent'
-            : 'linear-gradient(135deg, #dc2626, #ef4444)',
-          color: '#fff',
-          border: toast.type === 'success' ? '2px solid #10b981' : 'none', borderRadius: 12, padding: '12px 20px',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
-          fontSize: 13, fontWeight: 700, maxWidth: 260,
+          background: toast.type === 'success' 
+            ? 'linear-gradient(135deg, #059669, #10b981)' 
+            : (toast.type === 'error' ? 'linear-gradient(135deg, #dc2626, #ef4444)' : 'linear-gradient(135deg, #4f46e5, #6366f1)'),
+          color: '#ffffff',
+          border: toast.type === 'success' ? '1px solid #34d399' : (toast.type === 'error' ? '1px solid #f87171' : '1px solid #a5b4fc'),
+          borderRadius: 12, padding: '12px 20px',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.4), 0 0 15px rgba(16,185,129,0.25)',
+          fontSize: 13, fontWeight: 700, maxWidth: 320,
         }}>
-          <CheckCircle size={18} style={{ flexShrink: 0 }} />
-          <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+          {toast.type === 'success' ? (
+            <CheckCircle size={18} style={{ flexShrink: 0, color: '#ffffff' }} />
+          ) : (
+            <CheckCircle size={18} style={{ flexShrink: 0, color: '#ffffff' }} />
+          )}
+          <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', color: '#ffffff' }}>
             {toast.message}
           </span>
         </div>

@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSpreadsheetStore, SpreadsheetData, SheetData, CellData, RowData } from '../store/spreadsheetStore';
+import { useFlightStore } from '../store/flightStore';
 import { 
   ArrowLeft, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, 
-  Plus, Trash2, Download, RefreshCw, Type, Save, Grid, Undo, Redo, FileText, Sigma, Calculator, ChevronDown, Table
+  Plus, Trash2, Download, RefreshCw, Type, Save, Grid, Undo, Redo, FileText, Sigma, Calculator, ChevronDown, Table,
+  Copy, Clipboard, Scissors
 } from 'lucide-react';
 
 interface SpreadsheetEditorProps {
@@ -129,8 +131,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     return () => window.removeEventListener('app:refresh', handleAppRefresh);
   }, [activeSpreadsheet, fetchSpreadsheetById, fetchSpreadsheets]);
 
-  // Register Ctrl+Z (Undo) and Ctrl+Y (Redo) keyboard shortcuts
-  // Register Ctrl+Z (Undo), Ctrl+Y (Redo), and Backspace/Delete cell clearing
+  // Register Ctrl+Z (Undo), Ctrl+Y (Redo), Ctrl+C (Copy), Ctrl+X (Cut), Ctrl+V (Paste), and Backspace/Delete cell clearing
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       // Avoid keyboard shortcut conflicts when editing inside cell inputs
@@ -145,6 +146,15 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
         e.preventDefault();
         handleRedo();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        handleCopy();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x') {
+        e.preventDefault();
+        handleCut();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+        e.preventDefault();
+        handlePaste();
       } else if (e.key === 'Backspace' || e.key === 'Delete') {
         e.preventDefault();
         clearSelectedCells();
@@ -154,8 +164,25 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
         }
       }
     };
+
+    const handlePasteEvent = (e: ClipboardEvent) => {
+      if (isEditing) return;
+      const activeTag = document.activeElement?.tagName?.toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') return;
+
+      const text = e.clipboardData?.getData('text/plain');
+      if (text !== undefined) {
+        e.preventDefault();
+        handlePaste(text);
+      }
+    };
+
+    window.addEventListener('paste', handlePasteEvent);
     window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener('paste', handlePasteEvent);
+      window.removeEventListener('keydown', handleGlobalKeyDown);
+    };
   }, [history, redoStack, activeSpreadsheet, isEditing, selectedCell, selectedRange, activeSheetIdx]);
 
   if (!activeSpreadsheet) {
@@ -1046,6 +1073,224 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     }
   };
 
+  // ════════════════════ SMART THEME CONTRAST & CLIPBOARD HELPERS ════════════════════
+  const copiedCellsRef = useRef<CellData[][] | null>(null);
+
+  const isLightColor = (hexOrRgb: string): boolean => {
+    if (!hexOrRgb || hexOrRgb === 'transparent') return false;
+    let hex = hexOrRgb.replace('#', '').trim();
+    if (hex.length === 3) {
+      hex = hex.split('').map(c => c + c).join('');
+    }
+    if (hex.length === 6) {
+      const r = parseInt(hex.substring(0, 2), 16);
+      const g = parseInt(hex.substring(2, 4), 16);
+      const b = parseInt(hex.substring(4, 6), 16);
+      if (!isNaN(r) && !isNaN(g) && !isNaN(b)) {
+        const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+        return brightness > 140;
+      }
+    }
+    const lightColors = ['white', '#ffffff', '#f8fafc', '#fee2e2', '#ffedd5', '#fef9c3', '#dcfce7', '#ccfbf1', '#e0f2fe', '#e0e7ff', '#f3e8ff', '#fce7f3'];
+    return lightColors.includes(hexOrRgb.toLowerCase());
+  };
+
+  const getSmartCellColors = (
+    effectiveBgColor: string, 
+    fontColor: string, 
+    isTableHeaderRow: boolean,
+    isDarkTheme: boolean
+  ) => {
+    let computedBg = effectiveBgColor || (isTableHeaderRow ? 'var(--table-header-bg)' : 'transparent');
+    let computedColor = fontColor;
+
+    if (isTableHeaderRow && (effectiveBgColor === '#f1f5f9' || !effectiveBgColor)) {
+      computedBg = 'var(--table-header-bg)';
+    }
+
+    if (!computedColor) {
+      if (isTableHeaderRow) {
+        computedColor = 'var(--table-header-color)';
+      } else if (effectiveBgColor && effectiveBgColor !== 'transparent') {
+        if (isLightColor(effectiveBgColor)) {
+          computedColor = '#0f172a'; // Readable dark text on light cell fill
+        } else {
+          computedColor = '#f8fafc'; // Light text on dark cell fill
+        }
+      } else {
+        computedColor = 'var(--text)'; // Default theme font color
+      }
+    } else {
+      if (effectiveBgColor && effectiveBgColor !== 'transparent') {
+        const bgIsLight = isLightColor(effectiveBgColor);
+        const fontIsLight = isLightColor(computedColor);
+        if (bgIsLight && fontIsLight) {
+          computedColor = '#0f172a'; // Force dark font for light background
+        } else if (!bgIsLight && !fontIsLight && computedColor !== 'var(--text)') {
+          computedColor = '#ffffff'; // Force white font for dark background
+        }
+      } else if (isDarkTheme) {
+        const fontIsLight = isLightColor(computedColor);
+        if (!fontIsLight && computedColor !== 'var(--text)') {
+          if (!effectiveBgColor) {
+            computedBg = 'rgba(248, 250, 252, 0.95)';
+          }
+        }
+      }
+    }
+
+    return { computedBg, computedColor };
+  };
+
+  const handleCopy = () => {
+    if (!selectedCell && !selectedRange) return;
+
+    const minRow = selectedRange ? Math.min(selectedRange.startRow, selectedRange.endRow) : selectedCell!.row;
+    const maxRow = selectedRange ? Math.max(selectedRange.startRow, selectedRange.endRow) : selectedCell!.row;
+    const minCol = selectedRange ? Math.min(selectedRange.startCol, selectedRange.endCol) : selectedCell!.col;
+    const maxCol = selectedRange ? Math.max(selectedRange.startCol, selectedRange.endCol) : selectedCell!.col;
+
+    const textRows: string[] = [];
+    const richMatrix: CellData[][] = [];
+
+    for (let r = minRow; r <= maxRow; r++) {
+      const rowCells = currentSheet.rows?.[r]?.cells || [];
+      const textCols: string[] = [];
+      const richCols: CellData[] = [];
+      for (let c = minCol; c <= maxCol; c++) {
+        const cell = rowCells[c] || { ...emptyCell };
+        textCols.push(cell.value || '');
+        richCols.push({ ...cell });
+      }
+      textRows.push(textCols.join('\t'));
+      richMatrix.push(richCols);
+    }
+
+    copiedCellsRef.current = richMatrix;
+    const tsvText = textRows.join('\n');
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(tsvText).catch(() => {});
+    }
+
+    useFlightStore.getState().showToast('Copied to clipboard', 'success');
+  };
+
+  const handleCut = () => {
+    if (!selectedCell && !selectedRange) return;
+    handleCopy();
+    clearSelectedCells();
+    useFlightStore.getState().showToast('Cut selected cells', 'success');
+  };
+
+  const handlePaste = async (pastedTextOverride?: string) => {
+    let text = pastedTextOverride;
+    if (text === undefined) {
+      try {
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          text = await navigator.clipboard.readText();
+        }
+      } catch (err) {
+        // Fallback to internal copiedCellsRef
+      }
+    }
+
+    const startRow = selectedCell?.row ?? (selectedRange ? Math.min(selectedRange.startRow, selectedRange.endRow) : 0);
+    const startCol = selectedCell?.col ?? (selectedRange ? Math.min(selectedRange.startCol, selectedRange.endCol) : 0);
+
+    saveHistoryState();
+    const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
+    const sheet = updated.sheets[activeSheetIdx];
+
+    if (text) {
+      const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+      if (lines.length > 1 && lines[lines.length - 1] === '') {
+        lines.pop();
+      }
+
+      const rowsCount = lines.length;
+      let maxColsCount = 1;
+
+      lines.forEach((line, rOffset) => {
+        const colValues = line.includes('\t') ? line.split('\t') : (line.includes(',') ? line.split(',') : [line]);
+        maxColsCount = Math.max(maxColsCount, colValues.length);
+
+        const r = startRow + rOffset;
+        while (sheet.rows.length <= r) {
+          sheet.rows.push({
+            height: 30,
+            cells: Array.from({ length: defaultNumCols }, () => ({ ...emptyCell }))
+          });
+        }
+        const row = sheet.rows[r];
+        if (row) {
+          colValues.forEach((val, cOffset) => {
+            const c = startCol + cOffset;
+            while (row.cells.length <= c) {
+              row.cells.push({ ...emptyCell });
+            }
+
+            const existingCell = row.cells[c] || { ...emptyCell };
+            const richCell = copiedCellsRef.current?.[rOffset]?.[cOffset];
+
+            if (richCell) {
+              row.cells[c] = {
+                ...richCell,
+                value: val.trim()
+              };
+            } else {
+              row.cells[c] = {
+                ...existingCell,
+                value: val.trim()
+              };
+            }
+          });
+        }
+      });
+
+      const endRow = startRow + rowsCount - 1;
+      const endCol = startCol + maxColsCount - 1;
+      setSelectedRangeExpanded({ startRow, startCol, endRow, endCol });
+
+      setActiveSpreadsheet(updated);
+      triggerAutosave(updated);
+      useFlightStore.getState().showToast('Pasted into spreadsheet', 'success');
+    } else if (copiedCellsRef.current && copiedCellsRef.current.length > 0) {
+      const richMatrix = copiedCellsRef.current;
+      const rowsCount = richMatrix.length;
+      let maxColsCount = 1;
+
+      richMatrix.forEach((rowCells, rOffset) => {
+        maxColsCount = Math.max(maxColsCount, rowCells.length);
+        const r = startRow + rOffset;
+        while (sheet.rows.length <= r) {
+          sheet.rows.push({
+            height: 30,
+            cells: Array.from({ length: defaultNumCols }, () => ({ ...emptyCell }))
+          });
+        }
+        const row = sheet.rows[r];
+        if (row) {
+          rowCells.forEach((richCell, cOffset) => {
+            const c = startCol + cOffset;
+            while (row.cells.length <= c) {
+              row.cells.push({ ...emptyCell });
+            }
+            row.cells[c] = { ...richCell };
+          });
+        }
+      });
+
+      const endRow = startRow + rowsCount - 1;
+      const endCol = startCol + maxColsCount - 1;
+      setSelectedRangeExpanded({ startRow, startCol, endRow, endCol });
+
+      setActiveSpreadsheet(updated);
+      triggerAutosave(updated);
+      useFlightStore.getState().showToast('Pasted into spreadsheet', 'success');
+    }
+  };
+
   const clearSelectedCells = () => {
     if (!selectedCell) return;
     saveHistoryState(); // Save undo checkpoint
@@ -1792,6 +2037,36 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
           >
             <Redo size={14} />
           </button>
+
+          <div style={{ height: 16, width: 1, background: 'var(--border)', margin: '0 2px' }} />
+
+          <button 
+            onClick={handleCopy} 
+            disabled={!selectedCell && !selectedRange}
+            className="btn btn-ghost btn-sm" 
+            style={{ padding: 4, minWidth: 24, height: 24 }}
+            title="Copy Selected Cells (Ctrl+C)"
+          >
+            <Copy size={14} />
+          </button>
+          <button 
+            onClick={handleCut} 
+            disabled={!selectedCell && !selectedRange}
+            className="btn btn-ghost btn-sm" 
+            style={{ padding: 4, minWidth: 24, height: 24 }}
+            title="Cut Selected Cells (Ctrl+X)"
+          >
+            <Scissors size={14} />
+          </button>
+          <button 
+            onClick={() => handlePaste()} 
+            disabled={!selectedCell && !selectedRange}
+            className="btn btn-ghost btn-sm" 
+            style={{ padding: 4, minWidth: 24, height: 24 }}
+            title="Paste Cells (Ctrl+V)"
+          >
+            <Clipboard size={14} />
+          </button>
         </div>
 
         <div style={{ height: 20, width: 1, background: 'var(--border)' }} />
@@ -1981,19 +2256,19 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                   </button>
                 )) : [
                   { color: '', label: 'Default' },
-                  { color: '#0f172a', label: 'Black' },
-                  { color: '#475569', label: 'Slate Grey' },
                   { color: '#ffffff', label: 'White' },
+                  { color: '#0f172a', label: 'Black' },
+                  { color: '#38bdf8', label: 'Sky Blue' },
+                  { color: '#4ade80', label: 'Mint Green' },
+                  { color: '#facc15', label: 'Yellow Accent' },
+                  { color: '#f43f5e', label: 'Rose Accent' },
+                  { color: '#c084fc', label: 'Purple Accent' },
                   { color: '#991b1b', label: 'Deep Red' },
                   { color: '#92400e', label: 'Deep Amber' },
                   { color: '#166534', label: 'Deep Green' },
                   { color: '#115e59', label: 'Deep Teal' },
                   { color: '#1e40af', label: 'Deep Blue' },
                   { color: '#3730a3', label: 'Deep Indigo' },
-                  { color: '#581c87', label: 'Deep Purple' },
-                  { color: '#831843', label: 'Deep Pink' },
-                  { color: '#d97706', label: 'Amber Accent' },
-                  { color: '#059669', label: 'Emerald Accent' },
                 ].map(({ color, label }) => (
                   <button
                     key={color || 'default'}
@@ -2395,19 +2670,19 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                     const activeCellFormat = merge ? safeMRootCell : cell;
 
                     const isTableHeaderRow = cellTable && rowIdx === cellTable.startRow;
+                    const isDarkTheme = document.documentElement.getAttribute('data-theme') !== 'light';
+                    const { computedBg: smartBg, computedColor: smartColor } = getSmartCellColors(
+                      effectiveBgColor,
+                      activeCellFormat.fontColor || '',
+                      !!isTableHeaderRow,
+                      isDarkTheme
+                    );
 
                     let computedBg = isSelected 
                       ? 'rgba(99, 102, 241, 0.2)' 
-                      : (inSel ? 'rgba(99, 102, 241, 0.12)' : (effectiveBgColor || (isTableHeaderRow ? 'var(--table-header-bg)' : 'transparent')));
+                      : (inSel ? 'rgba(99, 102, 241, 0.12)' : smartBg);
 
-                    if (isTableHeaderRow && (effectiveBgColor === '#f1f5f9' || !effectiveBgColor)) {
-                      computedBg = isSelected ? 'rgba(99, 102, 241, 0.2)' : (inSel ? 'rgba(99, 102, 241, 0.12)' : 'var(--table-header-bg)');
-                    }
-
-                    let computedColor = activeCellFormat.fontColor || (isTableHeaderRow ? 'var(--table-header-color)' : 'var(--text)');
-                    if (isTableHeaderRow && !activeCellFormat.fontColor) {
-                      computedColor = 'var(--table-header-color)';
-                    }
+                    let computedColor = smartColor;
 
                     const cellStyle: React.CSSProperties = {
                       width: colWidth,
@@ -2565,7 +2840,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                                     fontWeight: rootCellObj.bold ? 'bold' : 'normal',
                                     fontStyle: rootCellObj.italic ? 'italic' : 'normal',
                                     textDecoration: rootCellObj.underline ? 'underline' : 'none',
-                                    color: rootCellObj.fontColor || 'var(--text)',
+                                    color: getSmartCellColors(rootCellObj.backgroundColor || '', rootCellObj.fontColor || '', false, document.documentElement.getAttribute('data-theme') !== 'light').computedColor,
                                     overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis'
                                   }}
                                 >
@@ -2626,7 +2901,8 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                               position: 'absolute', top: 0, left: 0,
                               width: (isMergeRoot && merge) ? mTotalW : '100%',
                               height: (isMergeRoot && merge) ? mTotalH : '100%',
-                              background: 'var(--bg)', color: activeCellFormat.fontColor || 'var(--text)',
+                              background: computedBg !== 'transparent' ? computedBg : 'var(--bg)', 
+                              color: computedColor,
                               border: 'none', outline: 'none', padding: '4px 8px',
                               fontSize: `${activeCellFormat.fontSize || 14}px`,
                               fontFamily: activeCellFormat.fontFamily || 'sans-serif',

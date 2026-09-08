@@ -71,17 +71,86 @@ const getInitialActiveSpreadsheet = (): SpreadsheetData | null => {
   return null;
 };
 
+let cacheTimeout: ReturnType<typeof setTimeout> | null = null;
 const cacheActiveSpreadsheet = (spreadsheet: SpreadsheetData | null) => {
-  try {
-    if (spreadsheet) {
-      localStorage.setItem('st_cached_spreadsheet_v1', JSON.stringify(spreadsheet));
-    } else {
-      localStorage.removeItem('st_cached_spreadsheet_v1');
+  if (cacheTimeout) clearTimeout(cacheTimeout);
+  cacheTimeout = setTimeout(() => {
+    try {
+      if (spreadsheet) {
+        localStorage.setItem('st_cached_spreadsheet_v1', JSON.stringify(spreadsheet));
+      } else {
+        localStorage.removeItem('st_cached_spreadsheet_v1');
+      }
+    } catch (e) {
+      // Ignore storage quota error
     }
-  } catch (e) {
-    // Ignore storage quota error
-  }
+  }, 300);
 };
+
+export function compactSheetsForSave(sheets: SheetData[]): SheetData[] {
+  if (!sheets || !Array.isArray(sheets)) return [];
+  return sheets.map(sheet => {
+    const merges = sheet.merges || [];
+    const tables = sheet.tables || [];
+    
+    let lastActiveRowIdx = -1;
+
+    for (const m of merges) {
+      lastActiveRowIdx = Math.max(lastActiveRowIdx, m.endRow);
+    }
+    for (const t of tables) {
+      lastActiveRowIdx = Math.max(lastActiveRowIdx, t.endRow);
+    }
+
+    (sheet.rows || []).forEach((row, rIdx) => {
+      const hasCustomHeight = !!row.height && row.height !== 30;
+      const hasAnyCellContent = (row.cells || []).some(c => 
+        (c.value && c.value.trim() !== '') ||
+        c.bold || c.italic || c.underline ||
+        (c.backgroundColor && c.backgroundColor !== '') ||
+        (c.fontColor && c.fontColor !== '')
+      );
+      if (hasCustomHeight || hasAnyCellContent) {
+        lastActiveRowIdx = Math.max(lastActiveRowIdx, rIdx);
+      }
+    });
+
+    const activeRows = (sheet.rows || []).slice(0, lastActiveRowIdx + 1).map(row => {
+      let lastActiveCol = -1;
+      (row.cells || []).forEach((c, cIdx) => {
+        if ((c.value && c.value.trim() !== '') || c.bold || c.italic || c.underline || c.backgroundColor || c.fontColor) {
+          lastActiveCol = Math.max(lastActiveCol, cIdx);
+        }
+      });
+
+      const cells = (row.cells || []).slice(0, Math.max(0, lastActiveCol + 1)).map(c => {
+        const cleaned: CellData = { value: c.value || '' };
+        if (c.bold) cleaned.bold = true;
+        if (c.italic) cleaned.italic = true;
+        if (c.underline) cleaned.underline = true;
+        if (c.fontSize && c.fontSize !== 14) cleaned.fontSize = c.fontSize;
+        if (c.fontFamily && c.fontFamily !== 'sans-serif') cleaned.fontFamily = c.fontFamily;
+        if (c.backgroundColor) cleaned.backgroundColor = c.backgroundColor;
+        if (c.fontColor) cleaned.fontColor = c.fontColor;
+        if (c.align && c.align !== 'left') cleaned.align = c.align;
+        return cleaned;
+      });
+
+      return {
+        height: row.height || 30,
+        cells,
+      };
+    });
+
+    return {
+      name: sheet.name || 'Sheet 1',
+      rows: activeRows,
+      colWidths: sheet.colWidths,
+      merges: sheet.merges,
+      tables: sheet.tables,
+    };
+  });
+}
 
 export const useSpreadsheetStore = create<SpreadsheetState>((set, get) => ({
   spreadsheets: [],
@@ -159,18 +228,22 @@ export const useSpreadsheetStore = create<SpreadsheetState>((set, get) => ({
   },
 
   updateSpreadsheet: async (id: string, data: { title?: string; sheets?: SheetData[] }) => {
+    if (!id) return;
     set({ isSaving: true, saveStatus: 'Saving...' });
-    // Cache local active spreadsheet state immediately for 0ms latency
     cacheActiveSpreadsheet(get().activeSpreadsheet);
     try {
+      const payload: any = {};
+      if (data.title !== undefined) payload.title = data.title;
+      if (data.sheets !== undefined) payload.sheets = compactSheetsForSave(data.sheets);
+
       const result = await apiFetch(`/api/spreadsheets/${id}`, {
         method: 'PUT',
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
       if (result.success) {
         set((state) => ({
           spreadsheets: state.spreadsheets.map((s) =>
-            s.id === id ? { ...s, updatedAt: result.spreadsheet?.updatedAt ?? s.updatedAt } : s
+            s.id === id || s._id === id ? { ...s, updatedAt: result.spreadsheet?.updatedAt ?? s.updatedAt } : s
           ),
           saveStatus: 'All changes saved',
           isSaving: false,

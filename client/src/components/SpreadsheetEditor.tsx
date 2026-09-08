@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useSpreadsheetStore, SpreadsheetData, SheetData, CellData, RowData } from '../store/spreadsheetStore';
 import { useFlightStore } from '../store/flightStore';
 import { 
@@ -58,18 +58,26 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
   const editInputRef = useRef<HTMLInputElement>(null);
   const formulaInputRef = useRef<HTMLInputElement>(null);
   
-  // Debounce saving
+  // Debounce saving & deduplicate unchanged payload saves
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSavedPayloadRef = useRef<string>('');
 
   const triggerAutosave = (updatedSpreadsheet = activeSpreadsheet) => {
     if (!updatedSpreadsheet) return;
+    const targetId = updatedSpreadsheet.id || (updatedSpreadsheet as any)._id;
+    if (!targetId) return;
+
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
-      updateSpreadsheet(updatedSpreadsheet.id, {
-        title: updatedSpreadsheet.title,
-        sheets: updatedSpreadsheet.sheets,
+      const current = useSpreadsheetStore.getState().activeSpreadsheet || updatedSpreadsheet;
+      const currentId = current.id || (current as any)._id;
+      if (!currentId) return;
+
+      updateSpreadsheet(currentId, {
+        title: current.title,
+        sheets: current.sheets,
       });
-    }, 300);
+    }, 800);
   };
 
   useEffect(() => {
@@ -199,36 +207,52 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
   const currentSheet = activeSpreadsheet.sheets[activeSheetIdx] || activeSpreadsheet.sheets[0];
   if (!currentSheet) return null;
 
-  const displayRowCount = Math.max(400, currentSheet.rows?.length || 0);
-  const defaultNumCols = currentSheet.rows?.[0]?.cells?.length || 15;
-  const emptyCell: CellData = {
+  const defaultNumCols = useMemo(() => {
+    if (!currentSheet) return 15;
+    return Math.max(
+      15,
+      currentSheet.colWidths?.length || 0,
+      ...(currentSheet.rows || []).map(r => r.cells?.length || 0)
+    );
+  }, [currentSheet]);
+
+  const displayRowCount = useMemo(() => {
+    if (!currentSheet) return 400;
+    return Math.max(400, currentSheet.rows?.length || 0);
+  }, [currentSheet]);
+
+  const emptyCell: CellData = useMemo(() => ({
     value: '', bold: false, italic: false, underline: false,
     fontSize: 14, fontFamily: 'sans-serif', backgroundColor: '', fontColor: '', align: 'left'
-  };
+  }), []);
 
-  const renderedRows: RowData[] = [];
-  for (let r = 0; r < displayRowCount; r++) {
-    const existingRow = currentSheet.rows?.[r];
-    if (existingRow && existingRow.cells) {
-      const cells: CellData[] = [];
-      for (let c = 0; c < defaultNumCols; c++) {
-        cells.push(existingRow.cells[c] || { ...emptyCell });
+  const renderedRows: RowData[] = useMemo(() => {
+    if (!currentSheet) return [];
+    const rows: RowData[] = [];
+    for (let r = 0; r < displayRowCount; r++) {
+      const existingRow = currentSheet.rows?.[r];
+      if (existingRow && existingRow.cells) {
+        const cells: CellData[] = [];
+        for (let c = 0; c < defaultNumCols; c++) {
+          cells.push(existingRow.cells[c] || emptyCell);
+        }
+        rows.push({
+          height: existingRow.height || 30,
+          cells,
+        });
+      } else {
+        rows.push({
+          height: 30,
+          cells: Array.from({ length: defaultNumCols }, () => emptyCell)
+        });
       }
-      renderedRows.push({
-        height: existingRow.height || 30,
-        cells,
-      });
-    } else {
-      renderedRows.push({
-        height: 30,
-        cells: Array.from({ length: defaultNumCols }, () => ({ ...emptyCell }))
-      });
     }
-  }
+    return rows;
+  }, [currentSheet, displayRowCount, defaultNumCols, emptyCell]);
 
   // Windowing bounds computation for 120+ FPS smooth performance
   const defaultRowH = 30;
-  const bufferRows = 10;
+  const bufferRows = 12;
   const visibleStartRow = Math.max(0, Math.floor(scrollTop / defaultRowH) - bufferRows);
   const visibleEndRow = Math.min(displayRowCount, Math.ceil((scrollTop + containerHeight) / defaultRowH) + bufferRows);
 
@@ -244,9 +268,13 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
 
   // ════════════════════ UNDO / REDO CONTROLS ════════════════════
 
-  // Push current sheet layouts to history stack before changes are made
+  // Push current sheet layouts to history stack before changes are made (max 30 snapshots)
   const saveHistoryState = () => {
-    setHistory(prev => [...prev, JSON.parse(JSON.stringify(activeSpreadsheet.sheets))]);
+    setHistory(prev => {
+      const next = [...prev, activeSpreadsheet.sheets];
+      if (next.length > 30) return next.slice(next.length - 30);
+      return next;
+    });
     setRedoStack([]); // Clear redo stack on new action
   };
 
@@ -254,7 +282,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     if (history.length === 0) return;
     
     const prevSheets = history[history.length - 1];
-    const currentSheets = JSON.parse(JSON.stringify(activeSpreadsheet.sheets));
+    const currentSheets = activeSpreadsheet.sheets;
     
     setRedoStack(prev => [...prev, currentSheets]);
     setHistory(prev => prev.slice(0, -1));
@@ -271,7 +299,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     if (redoStack.length === 0) return;
     
     const nextSheets = redoStack[redoStack.length - 1];
-    const currentSheets = JSON.parse(JSON.stringify(activeSpreadsheet.sheets));
+    const currentSheets = activeSpreadsheet.sheets;
     
     setHistory(prev => [...prev, currentSheets]);
     setRedoStack(prev => prev.slice(0, -1));
@@ -284,28 +312,59 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     triggerAutosave(updated);
   };
 
-  // ════════════════════ MERGED CELLS ENGINE ════════════════════
+  // ════════════════════ MERGED CELLS & TABLES FAST LOOKUP ════════════════════
+
+  const { mergeMap, rootMergesMap, tableMap } = useMemo(() => {
+    const merges = (currentSheet as any)?.merges || [];
+    const tables = (currentSheet as any)?.tables || [];
+
+    const mergeMap = new Map<string, any>();
+    const rootMergesMap = new Map<string, any[]>();
+    const tableMap = new Map<string, any>();
+
+    for (const m of merges) {
+      const rootKey = `${m.startRow},${m.startCol}`;
+      if (!rootMergesMap.has(rootKey)) {
+        rootMergesMap.set(rootKey, []);
+      }
+      rootMergesMap.get(rootKey)!.push(m);
+
+      for (let r = m.startRow; r <= m.endRow; r++) {
+        for (let c = m.startCol; c <= m.endCol; c++) {
+          const key = `${r},${c}`;
+          const existing = mergeMap.get(key);
+          if (!existing) {
+            mergeMap.set(key, m);
+          } else {
+            const areaA = (m.endRow - m.startRow + 1) * (m.endCol - m.startCol + 1);
+            const areaB = (existing.endRow - existing.startRow + 1) * (existing.endCol - existing.startCol + 1);
+            if (areaA < areaB) {
+              mergeMap.set(key, m);
+            }
+          }
+        }
+      }
+    }
+
+    for (const t of tables) {
+      for (let r = t.startRow; r <= t.endRow; r++) {
+        for (let c = t.startCol; c <= t.endCol; c++) {
+          tableMap.set(`${r},${c}`, t);
+        }
+      }
+    }
+
+    return { mergeMap, rootMergesMap, tableMap };
+  }, [currentSheet]);
 
   // Check if a cell is part of any merge range (returns smallest merge containing cell)
   const getMergeCell = (row: number, col: number) => {
-    const merges = (currentSheet as any).merges || [];
-    const matches = merges.filter((m: any) => 
-      row >= m.startRow && row <= m.endRow && 
-      col >= m.startCol && col <= m.endCol
-    );
-    if (matches.length === 0) return null;
-    matches.sort((a: any, b: any) => {
-      const areaA = (a.endRow - a.startRow + 1) * (a.endCol - a.startCol + 1);
-      const areaB = (b.endRow - b.startRow + 1) * (b.endCol - b.startCol + 1);
-      return areaA - areaB;
-    });
-    return matches[0];
+    return mergeMap.get(`${row},${col}`) || null;
   };
 
   // Get all merges starting at (row, col) as root
   const getRootMerges = (row: number, col: number) => {
-    const merges = (currentSheet as any).merges || [];
-    return merges.filter((m: any) => m.startRow === row && m.startCol === col);
+    return rootMergesMap.get(`${row},${col}`) || [];
   };
 
   // Skip rendering non-top-left cells in a merged block
@@ -614,33 +673,54 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
 
   const saveCellEdit = () => {
     if (!selectedCell) return;
-    saveHistoryState(); // Save undo checkpoint
 
     const targetRow = selectedCell.row;
     const targetCol = selectedCell.col;
+    const currentVal = currentSheet.rows?.[targetRow]?.cells?.[targetCol]?.value || '';
 
-    const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
-    const sheet = updated.sheets[activeSheetIdx];
+    if (currentVal === editValue) {
+      setIsEditing(false);
+      return;
+    }
 
-    const numCols = sheet.rows[0]?.cells.length || 15;
+    saveHistoryState(); // Save undo checkpoint
+
+    const numCols = defaultNumCols;
+    const newRows = [...(currentSheet.rows || [])];
 
     for (let r = 0; r <= targetRow; r++) {
-      if (!sheet.rows[r]) {
-        sheet.rows[r] = {
+      if (!newRows[r]) {
+        newRows[r] = {
           height: 30,
           cells: Array.from({ length: numCols }, () => ({ ...emptyCell }))
         };
       }
-      while (sheet.rows[r].cells.length <= targetCol) {
-        sheet.rows[r].cells.push({ ...emptyCell });
-      }
     }
 
-    if (!sheet.rows[targetRow].cells[targetCol]) {
-      sheet.rows[targetRow].cells[targetCol] = { ...emptyCell };
+    const targetRowObj = {
+      ...newRows[targetRow],
+      cells: [...(newRows[targetRow].cells || [])]
+    };
+    while (targetRowObj.cells.length <= targetCol) {
+      targetRowObj.cells.push({ ...emptyCell });
     }
 
-    sheet.rows[targetRow].cells[targetCol].value = editValue;
+    targetRowObj.cells[targetCol] = {
+      ...(targetRowObj.cells[targetCol] || emptyCell),
+      value: editValue
+    };
+    newRows[targetRow] = targetRowObj;
+
+    const newSheets = [...activeSpreadsheet.sheets];
+    newSheets[activeSheetIdx] = {
+      ...currentSheet,
+      rows: newRows
+    };
+
+    const updated: SpreadsheetData = {
+      ...activeSpreadsheet,
+      sheets: newSheets
+    };
 
     setActiveSpreadsheet(updated);
     setIsEditing(false);
@@ -652,29 +732,46 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
     if (!selectedRange) return;
     saveHistoryState(); // Save undo checkpoint
 
-    const updated: SpreadsheetData = JSON.parse(JSON.stringify(activeSpreadsheet));
-    const sheet = updated.sheets[activeSheetIdx];
-
     const minRow = Math.min(selectedRange.startRow, selectedRange.endRow);
     const maxRow = Math.max(selectedRange.startRow, selectedRange.endRow);
     const minCol = Math.min(selectedRange.startCol, selectedRange.endCol);
     const maxCol = Math.max(selectedRange.startCol, selectedRange.endCol);
 
-    for (let r = minRow; r <= maxRow; r++) {
-      while (sheet.rows.length <= r) {
-        sheet.rows.push({
+    const newRows = [...(currentSheet.rows || [])];
+    for (let r = 0; r <= maxRow; r++) {
+      if (!newRows[r]) {
+        newRows[r] = {
           height: 30,
           cells: Array.from({ length: defaultNumCols }, () => ({ ...emptyCell }))
-        });
-      }
-      const row = sheet.rows[r];
-      if (row) {
-        for (let c = minCol; c <= maxCol; c++) {
-          const cell = row.cells[c] || { ...emptyCell };
-          row.cells[c] = formatter(cell);
-        }
+        };
       }
     }
+
+    for (let r = minRow; r <= maxRow; r++) {
+      const row = newRows[r];
+      if (row) {
+        const newCells = [...(row.cells || [])];
+        while (newCells.length <= maxCol) {
+          newCells.push({ ...emptyCell });
+        }
+        for (let c = minCol; c <= maxCol; c++) {
+          const cell = newCells[c] || { ...emptyCell };
+          newCells[c] = formatter(cell);
+        }
+        newRows[r] = { ...row, cells: newCells };
+      }
+    }
+
+    const newSheets = [...activeSpreadsheet.sheets];
+    newSheets[activeSheetIdx] = {
+      ...currentSheet,
+      rows: newRows
+    };
+
+    const updated: SpreadsheetData = {
+      ...activeSpreadsheet,
+      sheets: newSheets
+    };
 
     setActiveSpreadsheet(updated);
     triggerAutosave(updated);
@@ -2461,19 +2558,30 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
       >
         <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', width: 'max-content' }}>
           
+          {/* Column definitions to strictly lock column widths across virtualization & scrolling */}
+          <colgroup>
+            <col style={{ width: 45, minWidth: 45, maxWidth: 45 }} />
+            {Array.from({ length: defaultNumCols }).map((_, cIdx) => {
+              const cw = currentSheet.colWidths?.[cIdx] || 120;
+              return <col key={cIdx} style={{ width: cw, minWidth: cw, maxWidth: cw }} />;
+            })}
+          </colgroup>
+
           {/* Header Row (Column Labels) */}
           <thead>
             <tr>
               {/* Top-Left Corner intersection */}
               <th style={{ 
-                width: 45, height: 26, background: 'var(--surface)', borderRight: '1px solid var(--border)', 
-                borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, left: 0, zIndex: 10,
-                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                width: 45, minWidth: 45, maxWidth: 45, height: 26, background: 'var(--surface)', borderRight: '1px solid var(--border)', 
+                borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, left: 0, zIndex: 25,
+                padding: 0, verticalAlign: 'middle', textAlign: 'center', boxSizing: 'border-box'
               }}>
-                <Grid size={12} style={{ color: 'var(--text3)' }} />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
+                  <Grid size={12} style={{ color: 'var(--text3)' }} />
+                </div>
               </th>
               
-              {renderedRows[0]?.cells.map((_, colIdx) => {
+              {Array.from({ length: defaultNumCols }).map((_, colIdx) => {
                 const colWidth = currentSheet.colWidths?.[colIdx] || 120;
                 const isColActive = selectedCell?.col === colIdx;
                 
@@ -2483,10 +2591,12 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                     onMouseDown={(e) => handleColHeaderMouseDown(colIdx, e)}
                     onMouseEnter={() => handleColHeaderMouseEnter(colIdx)}
                     style={{ 
-                      width: colWidth, height: 26, background: isColActive ? 'rgba(99, 102, 241, 0.08)' : 'var(--surface)', 
+                      width: colWidth, minWidth: colWidth, maxWidth: colWidth, height: 26,
+                      background: isColActive ? 'rgba(99, 102, 241, 0.08)' : 'var(--surface)', 
                       color: isColActive ? 'var(--indigo)' : 'var(--text)', fontWeight: isColActive ? 800 : 600, fontSize: 11,
                       borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)',
-                      position: 'sticky', top: 0, zIndex: 5, userSelect: 'none', cursor: 'col-resize'
+                      position: 'sticky', top: 0, zIndex: 10, userSelect: 'none', cursor: 'col-resize',
+                      padding: 0, boxSizing: 'border-box'
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', position: 'relative' }}>
@@ -2499,7 +2609,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                           position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize',
                           background: resizingColIdx === colIdx ? 'var(--indigo)' : 'transparent',
                           transition: 'background-color 0.15s',
-                          zIndex: 6
+                          zIndex: 11
                         }}
                         onMouseEnter={(e) => e.currentTarget.style.background = 'var(--indigo)'}
                         onMouseLeave={(e) => {
@@ -2534,10 +2644,13 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                     onMouseDown={(e) => handleRowHeaderMouseDown(rowIdx, e)}
                     onMouseEnter={() => handleRowHeaderMouseEnter(rowIdx)}
                     style={{ 
-                      width: 45, height: rowHeight, background: isRowActive ? 'rgba(99, 102, 241, 0.08)' : 'var(--surface)', 
+                      width: 45, minWidth: 45, maxWidth: 45, height: rowHeight,
+                      background: isRowActive ? 'rgba(99, 102, 241, 0.08)' : 'var(--surface)', 
                       color: isRowActive ? 'var(--indigo)' : 'var(--text)', fontWeight: isRowActive ? 800 : 600, fontSize: 11,
                       borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)',
-                      position: 'sticky', left: 0, zIndex: 5, userSelect: 'none', display: 'table-cell', verticalAlign: 'middle', textAlign: 'center', cursor: 'row-resize'
+                      position: 'sticky', left: 0, zIndex: 9, userSelect: 'none',
+                      padding: 0, verticalAlign: 'middle', textAlign: 'center', cursor: 'row-resize',
+                      boxSizing: 'border-box'
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', position: 'relative' }}>
@@ -2586,40 +2699,20 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                       }
                     }
 
-                    // Calculate perimeter borders across all merges and tables
-                    const mergesList = (currentSheet as any).merges || [];
-                    const tablesList = (currentSheet as any).tables || [];
+                    // Fast perimeter border checks using indexed lookup
+                    const cellTable = tableMap.get(`${rowIdx},${colIdx}`);
+                    const isLeftAdjacentToTable = tableMap.has(`${rowIdx},${colIdx + 1}`);
+                    const isAboveAdjacentToTable = tableMap.has(`${rowIdx + 1},${colIdx}`);
 
-                    const cellTable = tablesList.find((t: any) => 
-                      rowIdx >= t.startRow && rowIdx <= t.endRow && colIdx >= t.startCol && colIdx <= t.endCol
-                    );
+                    const isTopEdgeOfAny = !!merge && rowIdx === merge.startRow;
+                    const isBottomEdgeOfAny = !!merge && rowIdx === merge.endRow;
+                    const isLeftEdgeOfAny = !!merge && colIdx === merge.startCol;
+                    const isRightEdgeOfAny = !!merge && colIdx === merge.endCol;
 
-                    const isLeftAdjacentToTable = tablesList.some((t: any) => 
-                      rowIdx >= t.startRow && rowIdx <= t.endRow && colIdx === t.startCol - 1
-                    );
-                    const isAboveAdjacentToTable = tablesList.some((t: any) => 
-                      colIdx >= t.startCol && colIdx <= t.endCol && rowIdx === t.startRow - 1
-                    );
-
-                    const isTopEdgeOfAny = mergesList.some((m: any) => 
-                      m.startRow === rowIdx && colIdx >= m.startCol && colIdx <= m.endCol
-                    );
-                    const isBottomEdgeOfAny = mergesList.some((m: any) => 
-                      m.endRow === rowIdx && colIdx >= m.startCol && colIdx <= m.endCol
-                    );
-                    const isLeftEdgeOfAny = mergesList.some((m: any) => 
-                      m.startCol === colIdx && rowIdx >= m.startRow && rowIdx <= m.endRow
-                    );
-                    const isRightEdgeOfAny = mergesList.some((m: any) => 
-                      m.endCol === colIdx && rowIdx >= m.startRow && rowIdx <= m.endRow
-                    );
-
-                    const isBorderAboveNextRow = mergesList.some((m: any) => 
-                      m.startRow === rowIdx + 1 && colIdx >= m.startCol && colIdx <= m.endCol
-                    );
-                    const isBorderLeftOfNextCol = mergesList.some((m: any) => 
-                      m.startCol === colIdx + 1 && rowIdx >= m.startRow && rowIdx <= m.endRow
-                    );
+                    const mergeBelow = getMergeCell(rowIdx + 1, colIdx);
+                    const isBorderAboveNextRow = !!mergeBelow && mergeBelow.startRow === rowIdx + 1;
+                    const mergeRight = getMergeCell(rowIdx, colIdx + 1);
+                    const isBorderLeftOfNextCol = !!mergeRight && mergeRight.startCol === colIdx + 1;
 
                     let borderTop = isTopEdgeOfAny ? '2px solid var(--merge-outline)' : '1px solid var(--border)';
                     let borderBottom = (isBottomEdgeOfAny || isBorderAboveNextRow) ? '2px solid var(--merge-outline)' : '1px solid var(--border)';
@@ -2686,7 +2779,10 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
 
                     const cellStyle: React.CSSProperties = {
                       width: colWidth,
+                      minWidth: colWidth,
+                      maxWidth: colWidth,
                       height: calculatedRowHeight,
+                      boxSizing: 'border-box',
                       borderTop,
                       borderBottom,
                       borderLeft,
@@ -2705,13 +2801,14 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
                       outline: isSelected ? '2px solid var(--indigo)' : 'none',
                       outlineOffset: -2,
                       cursor: 'cell',
-                      overflow: (hasRootMerges || cellTable) ? 'visible' : 'hidden',
+                      overflow: hasRootMerges ? 'visible' : 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
                       position: 'relative',
                       zIndex: isSelected ? 18 : (isMergeRoot ? 15 : (cellTable ? 12 : (merge ? 1 : 2)))
                     };
 
+                    const tablesList = (currentSheet as any).tables || [];
                     const isEditingCell = isSelected && isEditing;
                     const isTableActiveOrHovered = cellTable && (
                       hoveredTableIdx === tablesList.indexOf(cellTable) ||

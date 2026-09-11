@@ -44,11 +44,24 @@ spreadsheetSchema.index({ createdAt: -1 });
 export const Spreadsheet = mongoose.models.Spreadsheet || mongoose.model('Spreadsheet', spreadsheetSchema);
 
 function formatCell(doc) {
+  if (!doc) {
+    return {
+      value: '',
+      bold: false,
+      italic: false,
+      underline: false,
+      fontSize: 14,
+      fontFamily: 'sans-serif',
+      backgroundColor: '',
+      fontColor: '',
+      align: 'left',
+    };
+  }
   return {
     value: doc.value || '',
-    bold: doc.bold || false,
-    italic: doc.italic || false,
-    underline: doc.underline || false,
+    bold: !!doc.bold,
+    italic: !!doc.italic,
+    underline: !!doc.underline,
     fontSize: doc.fontSize || 14,
     fontFamily: doc.fontFamily || 'sans-serif',
     backgroundColor: doc.backgroundColor || '',
@@ -58,6 +71,7 @@ function formatCell(doc) {
 }
 
 function formatRow(doc) {
+  if (!doc) return { cells: [], height: 30 };
   return {
     cells: (doc.cells || []).map(formatCell),
     height: doc.height || 30,
@@ -65,17 +79,18 @@ function formatRow(doc) {
 }
 
 function formatSheet(doc) {
+  if (!doc) return { name: 'Sheet 1', rows: [], colWidths: [], merges: [], tables: [] };
   return {
     name: doc.name || 'Sheet 1',
     rows: (doc.rows || []).map(formatRow),
     colWidths: doc.colWidths || [],
-    merges: (doc.merges || []).map(m => ({
+    merges: (doc.merges || []).filter(Boolean).map(m => ({
       startRow: m.startRow,
       startCol: m.startCol,
       endRow: m.endRow,
       endCol: m.endCol,
     })),
-    tables: (doc.tables || []).map(t => ({
+    tables: (doc.tables || []).filter(Boolean).map(t => ({
       startRow: t.startRow,
       startCol: t.startCol,
       endRow: t.endRow,
@@ -85,6 +100,7 @@ function formatSheet(doc) {
 }
 
 function formatSpreadsheet(doc) {
+  if (!doc) return null;
   const obj = doc.toObject ? doc.toObject() : doc;
   const idStr = obj._id ? obj._id.toString() : (obj.id ? String(obj.id) : '');
   return {
@@ -126,7 +142,7 @@ export async function updateSpreadsheet(id, data) {
   if (data.title !== undefined) updateData.title = data.title;
   if (data.sheets !== undefined) updateData.sheets = data.sheets;
 
-  const doc = await Spreadsheet.findByIdAndUpdate(id, updateData, { returnDocument: 'after' });
+  const doc = await Spreadsheet.findByIdAndUpdate(id, updateData, { new: true });
   return doc ? formatSpreadsheet(doc) : null;
 }
 

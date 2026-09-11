@@ -23,18 +23,14 @@ export function SpreadsheetConsole() {
         const list: SpreadsheetData[] = data.spreadsheets || [];
         useSpreadsheetStore.setState({ spreadsheets: list });
 
-        const currentActive = useSpreadsheetStore.getState().activeSpreadsheet;
-
         if (list.length > 0) {
-          const targetId = currentActive?.id || list[0].id;
-          const foundInList = list.find(s => s.id === targetId);
+          const currentActive = useSpreadsheetStore.getState().activeSpreadsheet;
+          // Prefer active if validly present in list, otherwise select the primary canonical spreadsheet
+          const target = (currentActive && list.find(s => s.id === currentActive.id || s._id === currentActive.id || s.id === currentActive._id)) || list[0];
+          const targetId = target.id || target._id;
 
-          // If spreadsheet already has populated sheet data from list response, use directly (0 extra network calls!)
-          if (foundInList && foundInList.sheets && foundInList.sheets.length > 0) {
-            useSpreadsheetStore.getState().setActiveSpreadsheet(foundInList);
-          } else {
-            await fetchSpreadsheetById(targetId);
-          }
+          // Always fetch full spreadsheet to get latest edits made by other users/admins
+          await fetchSpreadsheetById(targetId);
         } else {
           // If no spreadsheets exist at all, auto-create "BOOKING" and open directly
           await createSpreadsheet('BOOKING');
@@ -48,7 +44,7 @@ export function SpreadsheetConsole() {
 
     init();
     return () => { isMounted = false; };
-  }, []);
+  }, [fetchSpreadsheetById, createSpreadsheet]);
 
   useEffect(() => {
     const handleAppRefresh = async () => {
@@ -56,11 +52,16 @@ export function SpreadsheetConsole() {
         const data = await apiFetch('/api/spreadsheets');
         const list: SpreadsheetData[] = data.spreadsheets || [];
         useSpreadsheetStore.setState({ spreadsheets: list });
+        const currentActive = useSpreadsheetStore.getState().activeSpreadsheet;
+        const targetId = currentActive?.id || currentActive?._id || list[0]?.id;
+        if (targetId) {
+          await fetchSpreadsheetById(targetId);
+        }
       } catch {}
     };
     window.addEventListener('app:refresh', handleAppRefresh);
     return () => window.removeEventListener('app:refresh', handleAppRefresh);
-  }, []);
+  }, [fetchSpreadsheetById]);
 
   // Show loading spinner ONLY if there is no active/cached spreadsheet yet
   if (initializing && !activeSpreadsheet) {

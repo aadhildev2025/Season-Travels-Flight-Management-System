@@ -48,10 +48,12 @@ interface SpreadsheetState {
   activeSpreadsheet: SpreadsheetData | null;
   loading: boolean;
   isSaving: boolean;
+  isSyncing: boolean;
   saveStatus: string;
   
   fetchSpreadsheets: () => Promise<void>;
   fetchSpreadsheetById: (id: string) => Promise<SpreadsheetData | null>;
+  syncSpreadsheet: (id?: string) => Promise<boolean>;
   createSpreadsheet: (title: string) => Promise<SpreadsheetData | null>;
   updateSpreadsheet: (id: string, data: { title?: string; sheets?: SheetData[] }) => Promise<void>;
   deleteSpreadsheet: (id: string) => Promise<void>;
@@ -90,8 +92,31 @@ const cacheActiveSpreadsheet = (spreadsheet: SpreadsheetData | null) => {
 export function compactSheetsForSave(sheets: SheetData[]): SheetData[] {
   if (!sheets || !Array.isArray(sheets)) return [];
   return sheets.map(sheet => {
-    const merges = sheet.merges || [];
-    const tables = sheet.tables || [];
+    if (!sheet) return { name: 'Sheet 1', rows: [] };
+
+    const merges = (sheet.merges || []).filter(m =>
+      typeof m?.startRow === 'number' && !isNaN(m.startRow) &&
+      typeof m?.startCol === 'number' && !isNaN(m.startCol) &&
+      typeof m?.endRow === 'number' && !isNaN(m.endRow) &&
+      typeof m?.endCol === 'number' && !isNaN(m.endCol)
+    ).map(m => ({
+      startRow: Math.round(m.startRow),
+      startCol: Math.round(m.startCol),
+      endRow: Math.round(m.endRow),
+      endCol: Math.round(m.endCol),
+    }));
+
+    const tables = (sheet.tables || []).filter(t =>
+      typeof t?.startRow === 'number' && !isNaN(t.startRow) &&
+      typeof t?.startCol === 'number' && !isNaN(t.startCol) &&
+      typeof t?.endRow === 'number' && !isNaN(t.endRow) &&
+      typeof t?.endCol === 'number' && !isNaN(t.endCol)
+    ).map(t => ({
+      startRow: Math.round(t.startRow),
+      startCol: Math.round(t.startCol),
+      endRow: Math.round(t.endRow),
+      endCol: Math.round(t.endCol),
+    }));
     
     let lastActiveRowIdx = -1;
 
@@ -103,12 +128,16 @@ export function compactSheetsForSave(sheets: SheetData[]): SheetData[] {
     }
 
     (sheet.rows || []).forEach((row, rIdx) => {
+      if (!row) return;
       const hasCustomHeight = !!row.height && row.height !== 30;
       const hasAnyCellContent = (row.cells || []).some(c => 
-        (c.value && c.value.trim() !== '') ||
+        c && ((c.value && c.value.trim() !== '') ||
         c.bold || c.italic || c.underline ||
         (c.backgroundColor && c.backgroundColor !== '') ||
-        (c.fontColor && c.fontColor !== '')
+        (c.fontColor && c.fontColor !== '') ||
+        (c.align && c.align !== 'left') ||
+        (c.fontSize && c.fontSize !== 14) ||
+        (c.fontFamily && c.fontFamily !== 'sans-serif'))
       );
       if (hasCustomHeight || hasAnyCellContent) {
         lastActiveRowIdx = Math.max(lastActiveRowIdx, rIdx);
@@ -116,14 +145,25 @@ export function compactSheetsForSave(sheets: SheetData[]): SheetData[] {
     });
 
     const activeRows = (sheet.rows || []).slice(0, lastActiveRowIdx + 1).map(row => {
+      if (!row) return { height: 30, cells: [] };
+
       let lastActiveCol = -1;
       (row.cells || []).forEach((c, cIdx) => {
-        if ((c.value && c.value.trim() !== '') || c.bold || c.italic || c.underline || c.backgroundColor || c.fontColor) {
+        if (c && (
+          (c.value && c.value.trim() !== '') ||
+          c.bold || c.italic || c.underline ||
+          (c.backgroundColor && c.backgroundColor !== '') ||
+          (c.fontColor && c.fontColor !== '') ||
+          (c.align && c.align !== 'left') ||
+          (c.fontSize && c.fontSize !== 14) ||
+          (c.fontFamily && c.fontFamily !== 'sans-serif')
+        )) {
           lastActiveCol = Math.max(lastActiveCol, cIdx);
         }
       });
 
       const cells = (row.cells || []).slice(0, Math.max(0, lastActiveCol + 1)).map(c => {
+        if (!c) return { value: '' };
         const cleaned: CellData = { value: c.value || '' };
         if (c.bold) cleaned.bold = true;
         if (c.italic) cleaned.italic = true;
@@ -146,8 +186,8 @@ export function compactSheetsForSave(sheets: SheetData[]): SheetData[] {
       name: sheet.name || 'Sheet 1',
       rows: activeRows,
       colWidths: sheet.colWidths,
-      merges: sheet.merges,
-      tables: sheet.tables,
+      merges,
+      tables,
     };
   });
 }
@@ -157,6 +197,7 @@ export const useSpreadsheetStore = create<SpreadsheetState>((set, get) => ({
   activeSpreadsheet: getInitialActiveSpreadsheet(),
   loading: false,
   isSaving: false,
+  isSyncing: false,
   saveStatus: 'All changes saved',
 
   fetchSpreadsheets: async () => {
@@ -173,12 +214,46 @@ export const useSpreadsheetStore = create<SpreadsheetState>((set, get) => ({
     try {
       const data = await apiFetch(`/api/spreadsheets/${id}`);
       const spreadsheet = data.spreadsheet || null;
-      set({ activeSpreadsheet: spreadsheet });
-      cacheActiveSpreadsheet(spreadsheet);
+      if (spreadsheet) {
+        set({ activeSpreadsheet: spreadsheet });
+        cacheActiveSpreadsheet(spreadsheet);
+      }
       return spreadsheet;
     } catch (err) {
       console.error(`Failed to fetch spreadsheet ${id}:`, err);
       return null;
+    }
+  },
+
+  syncSpreadsheet: async (id?: string) => {
+    const state = get();
+    if (state.isSaving) return false;
+
+    const targetId = id || state.activeSpreadsheet?.id || state.activeSpreadsheet?._id;
+    if (!targetId) return false;
+
+    try {
+      set({ isSyncing: true });
+      const data = await apiFetch(`/api/spreadsheets/${targetId}`);
+      const remote = data.spreadsheet;
+      if (!remote) return false;
+
+      const current = get().activeSpreadsheet;
+      const remoteUpdatedAt = remote.updatedAt ? new Date(remote.updatedAt).getTime() : 0;
+      const currentUpdatedAt = current?.updatedAt ? new Date(current.updatedAt).getTime() : 0;
+
+      // Update if remote is newer or content changed
+      if (!current || remoteUpdatedAt > currentUpdatedAt || JSON.stringify(remote.sheets) !== JSON.stringify(current.sheets)) {
+        set({ activeSpreadsheet: remote, saveStatus: 'All changes saved' });
+        cacheActiveSpreadsheet(remote);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Spreadsheet sync error:', err);
+      return false;
+    } finally {
+      set({ isSyncing: false });
     }
   },
 
@@ -240,14 +315,25 @@ export const useSpreadsheetStore = create<SpreadsheetState>((set, get) => ({
         method: 'PUT',
         body: JSON.stringify(payload),
       });
-      if (result.success) {
-        set((state) => ({
-          spreadsheets: state.spreadsheets.map((s) =>
-            s.id === id || s._id === id ? { ...s, updatedAt: result.spreadsheet?.updatedAt ?? s.updatedAt } : s
-          ),
-          saveStatus: 'All changes saved',
-          isSaving: false,
-        }));
+
+      if (result.success && result.spreadsheet) {
+        const updatedDoc = result.spreadsheet;
+        const newId = updatedDoc.id || updatedDoc._id;
+        set((state) => {
+          const currentActive = state.activeSpreadsheet;
+          const updatedActive = currentActive ? { ...currentActive, id: newId, _id: newId, updatedAt: updatedDoc.updatedAt } : currentActive;
+          return {
+            spreadsheets: state.spreadsheets.some(s => s.id === newId || s._id === newId)
+              ? state.spreadsheets.map((s) => (s.id === newId || s._id === newId ? { ...s, updatedAt: updatedDoc.updatedAt } : s))
+              : [updatedDoc, ...state.spreadsheets],
+            activeSpreadsheet: updatedActive,
+            saveStatus: 'All changes saved',
+            isSaving: false,
+          };
+        });
+        cacheActiveSpreadsheet(get().activeSpreadsheet);
+      } else if (result.success) {
+        set({ saveStatus: 'All changes saved', isSaving: false });
       } else {
         set({ saveStatus: 'Error saving', isSaving: false });
       }

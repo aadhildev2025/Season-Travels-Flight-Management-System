@@ -12,7 +12,10 @@ interface SpreadsheetEditorProps {
 }
 
 export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
-  const { activeSpreadsheet, updateSpreadsheet, setActiveSpreadsheet, saveStatus, fetchSpreadsheetById, fetchSpreadsheets } = useSpreadsheetStore();
+  const { 
+    activeSpreadsheet, updateSpreadsheet, setActiveSpreadsheet, 
+    saveStatus, fetchSpreadsheetById, fetchSpreadsheets, syncSpreadsheet, isSyncing 
+  } = useSpreadsheetStore();
   
   const [activeSheetIdx, setActiveSheetIdx] = useState(0);
   const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null);
@@ -69,6 +72,7 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
 
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
+      saveTimeoutRef.current = null;
       const current = useSpreadsheetStore.getState().activeSpreadsheet || updatedSpreadsheet;
       const currentId = current.id || (current as any)._id;
       if (!currentId) return;
@@ -77,16 +81,63 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
         title: current.title,
         sheets: current.sheets,
       });
-    }, 800);
+    }, 600);
   };
 
+  // Flush any pending unsaved edit immediately on unmount or tab switch
   useEffect(() => {
     return () => {
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+        const current = useSpreadsheetStore.getState().activeSpreadsheet;
+        const currentId = current?.id || (current as any)?._id;
+        if (currentId && current) {
+          updateSpreadsheet(currentId, {
+            title: current.title,
+            sheets: current.sheets,
+          });
+        }
+      }
     };
-  }, []);
+  }, [updateSpreadsheet]);
 
+  // Live background polling every 4 seconds to sync remote changes between Admin and Staff in real-time
+  useEffect(() => {
+    let isMounted = true;
+    const interval = setInterval(async () => {
+      // Don't sync if user is currently actively editing a cell, selecting, resizing, or saving
+      if (isEditing || isSelecting || resizingColIdx !== null || resizingRowIdx !== null || saveTimeoutRef.current) {
+        return;
+      }
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
+      if (isMounted) {
+        await syncSpreadsheet();
+      }
+    }, 4000);
 
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [isEditing, isSelecting, resizingColIdx, resizingRowIdx, syncSpreadsheet]);
+
+  // Sync immediately when tab regains focus or visibility
+  useEffect(() => {
+    const handleFocus = () => {
+      if (!isEditing && !saveTimeoutRef.current) {
+        syncSpreadsheet();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
+    };
+  }, [isEditing, syncSpreadsheet]);
 
   useEffect(() => {
     const updateHeight = () => {
@@ -2489,7 +2540,19 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
           </button>
         </div>
 
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Live Sync Action */}
+          <button
+            onClick={() => syncSpreadsheet()}
+            disabled={isSyncing}
+            className="btn btn-ghost btn-sm"
+            style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', fontSize: 11, color: 'var(--indigo2)' }}
+            title="Sync latest edits made by Admin & Staff in real-time"
+          >
+            <RefreshCw size={11} className={isSyncing ? 'spin' : ''} style={{ color: 'var(--indigo)' }} />
+            <span>{isSyncing ? 'Syncing...' : 'Sync'}</span>
+          </button>
+
           {/* Export CSV & PDF */}
           <button onClick={handleExportCSV} className="btn btn-ghost btn-sm" style={{ gap: 4 }}>
             <Download size={13} /> Export CSV
@@ -2499,13 +2562,31 @@ export function SpreadsheetEditor({ onBack }: SpreadsheetEditorProps) {
           </button>
 
           {/* Save Status indicator */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text)', fontWeight: 600 }}>
+          <div 
+            onClick={() => {
+              if (saveStatus.includes('Failed') || saveStatus.includes('Error')) {
+                triggerAutosave();
+              }
+            }}
+            style={{ 
+              display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600,
+              cursor: saveStatus.includes('Failed') || saveStatus.includes('Error') ? 'pointer' : 'default',
+              padding: '3px 8px', borderRadius: 6,
+              background: saveStatus.includes('Failed') || saveStatus.includes('Error') ? 'rgba(244, 63, 94, 0.15)' : 'transparent',
+              border: saveStatus.includes('Failed') || saveStatus.includes('Error') ? '1px solid rgba(244, 63, 94, 0.3)' : '1px solid transparent',
+            }}
+            title={saveStatus.includes('Failed') || saveStatus.includes('Error') ? 'Click to retry saving' : undefined}
+          >
             {saveStatus === 'Saving...' ? (
               <RefreshCw size={11} className="spin" style={{ color: 'var(--indigo)' }} />
+            ) : saveStatus.includes('Failed') || saveStatus.includes('Error') ? (
+              <RefreshCw size={11} style={{ color: 'var(--red)' }} />
             ) : (
               <Save size={11} style={{ color: 'var(--green)' }} />
             )}
-            <span>{saveStatus}</span>
+            <span style={{ color: saveStatus.includes('Failed') || saveStatus.includes('Error') ? 'var(--red)' : 'var(--text)' }}>
+              {saveStatus} {saveStatus.includes('Failed') || saveStatus.includes('Error') ? '(Click to retry)' : ''}
+            </span>
           </div>
         </div>
 
